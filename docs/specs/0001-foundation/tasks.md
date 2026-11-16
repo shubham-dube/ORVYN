@@ -15,6 +15,6 @@
 - [x] web: PWA (manifest, service worker, push)
 - [x] web: Playwright e2e
 - [x] mobile: Flutter foundation (theme, sign-in, shell, devices, notifications, sync client, FCM)
-- [ ] desktop: Tauri tray companion
+- [x] desktop: Tauri tray companion
 - [x] extension: MV3 shell
 - [x] infra: compose, backups + restore test, monitoring, deploy script

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "No windows load remote content; the tray app needs no webview permissions.",
+  "windows": [],
+  "permissions": []
+}

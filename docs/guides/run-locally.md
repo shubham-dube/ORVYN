@@ -91,7 +91,18 @@ Chrome → `chrome://extensions` → Developer mode → **Load unpacked** → `a
 ORVYN icon → **Connect to ORVYN** → approve. (If your `.env` predates this, add
 `EXTENSION_IDS=hapijaoahockgcidibcnbghpajpnnanh` and restart `pnpm dev`.)
 
-## 7. Everyday commands
+## 7. Windows tray app
+
+Needs Rust (`winget install Rustlang.Rustup`). With `pnpm dev` running:
+
+```powershell
+pnpm --filter @orvyn/desktop desktop:dev
+```
+
+The ORVYN orb appears in the tray → _Connect to ORVYN…_ → approve in the browser. Toasts arrive with Open / Dismiss.
+Installer: `pnpm --filter @orvyn/desktop desktop:build` (or download **orvyn-windows** from a CI run).
+
+## 8. Everyday commands
 
 | Command                        | What                                                                  |
 | ------------------------------ | --------------------------------------------------------------------- |

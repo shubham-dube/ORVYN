@@ -1,0 +1,14 @@
+{
+  "name": "@orvyn/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "desktop:dev": "cross-env ORVYN_API_URL=http://localhost:4000 ORVYN_WEB_URL=http://localhost:3000 tauri dev",
+    "desktop:build": "tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.5",
+    "cross-env": "^10.1.0"
+  }
+}

@@ -125,6 +125,70 @@ jobs:
       - name: Production stack smoke test (build, boot, route, real IP, backup + restore)
         run: sh infra/test/stack-smoke.sh
 
+  desktop:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env: { POSTGRES_USER: orvyn, POSTGRES_PASSWORD: orvyn, POSTGRES_DB: orvyn_test }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U orvyn" --health-interval 5s --health-timeout 5s --health-retries 10
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux libraries for Tauri
+        run: sudo apt-get update -q && sudo apt-get install -y -q libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: 'rustfmt, clippy' }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: apps/desktop/src-tauri }
+      - run: cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+        working-directory: apps/desktop/src-tauri
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile && pnpm --filter @orvyn/api... build
+      - name: Live API test (connect → live notification → remote sign-out)
+        run: |
+          export JWT_SECRET=$(openssl rand -base64 36) TOKEN_PEPPER=$(openssl rand -base64 36)
+          (cd apps/web && node e2e/start-api.mjs > /tmp/api.log 2>&1 &)
+          for i in $(seq 1 60); do curl -sf localhost:4100/health && break; sleep 1; done
+          cd apps/desktop/src-tauri && cargo test --test live_api
+        env:
+          ORVYN_LIVE_API: http://localhost:4100
+          DATABASE_URL: postgres://orvyn:orvyn@localhost:5432/orvyn_test
+          REDIS_URL: redis://localhost:6379/14
+          NODE_ENV: development
+          PORT: '4100'
+          OWNER_EMAIL: owner@example.test
+          AUTH_CODE_LIMIT: '50'
+          LOG_LEVEL: warn
+
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: apps/desktop/src-tauri }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --filter @orvyn/desktop
+      - run: cargo clippy --all-targets -- -D warnings
+        working-directory: apps/desktop/src-tauri
+      - run: pnpm --filter @orvyn/desktop desktop:build
+      - uses: actions/upload-artifact@v4
+        with:
+          {
+            name: orvyn-windows,
+            path: apps/desktop/src-tauri/target/release/bundle/nsis/*.exe,
+            retention-days: 14,
+          }
+
   secrets-scan:
     runs-on: ubuntu-latest
     steps:
