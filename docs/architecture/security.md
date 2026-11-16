@@ -1,29 +1,32 @@
 # Security & privacy
 
 ## Threat model (what we defend against)
-| Threat | Defence |
-|---|---|
-| Stolen phone / laptop | device sessions revocable; app lock (biometric/PIN) optional per app, required for Vault; vault keys only in OS keystore |
-| Stolen password / phishing | passkeys preferred; no SMS codes; new-device sign-in notifies all other devices |
-| Server or database breach | Vault and chat are end-to-end encrypted (attacker gets ciphertext). Other data encrypted at rest (disk + per-file keys for objects); secrets in env, not in DB |
-| Malicious backup access | backups encrypted with a key that is not stored on the server |
-| A friend reading another friend's data | every query scoped by `owner_id`; tests per module; sharing only through explicit share objects |
-| A friend using hidden features | entitlements checked on the server for every request and websocket topic |
-| Prompt injection via documents/web pages | content is passed to the AI as data; the AI cannot act without the person's confirmation on anything consequential; vault is never in AI context |
-| Over-collection | Money's SMS parsing runs on the phone; only parsed transactions are uploaded unless the person opts in |
+
+| Threat                                   | Defence                                                                                                                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stolen phone / laptop                    | device sessions revocable; app lock (biometric/PIN) optional per app, required for Vault; vault keys only in OS keystore                                       |
+| Stolen password / phishing               | passkeys preferred; no SMS codes; new-device sign-in notifies all other devices                                                                                |
+| Server or database breach                | Vault and chat are end-to-end encrypted (attacker gets ciphertext). Other data encrypted at rest (disk + per-file keys for objects); secrets in env, not in DB |
+| Malicious backup access                  | backups encrypted with a key that is not stored on the server                                                                                                  |
+| A friend reading another friend's data   | every query scoped by `owner_id`; tests per module; sharing only through explicit share objects                                                                |
+| A friend using hidden features           | entitlements checked on the server for every request and websocket topic                                                                                       |
+| Prompt injection via documents/web pages | content is passed to the AI as data; the AI cannot act without the person's confirmation on anything consequential; vault is never in AI context               |
+| Over-collection                          | Money's SMS parsing runs on the phone; only parsed transactions are uploaded unless the person opts in                                                         |
 
 ## Sign-in (ADR-0003)
+
 - **Passkeys (WebAuthn)** on web, Android and Windows; **Google sign-in**; **email one-time code** as fallback.
 - Short-lived access token (15 min, in memory) + rotating refresh token (httpOnly cookie on web; OS secure
   storage on mobile/desktop). Refresh-token reuse ⇒ the whole session family is revoked.
 - Devices list with last seen, remote sign-out. Admin can disable an account.
 
 ## Vault — zero-knowledge (ADR-0004)
+
 - Library: **libsodium** (via `libsodium-wrappers-sumo` on web/extension/desktop, `sodium_libs` in Flutter).
   No custom primitives.
 - **Vault passphrase** (separate from the account login) → **Argon2id** (moderate profile, tuned per device)
   → key-encryption key (KEK). A random 256-bit **vault key** encrypts items with **XChaCha20-Poly1305**; the
-  vault key is stored on the server only *wrapped* by the KEK and, separately, by the **recovery key** (shown
+  vault key is stored on the server only _wrapped_ by the KEK and, separately, by the **recovery key** (shown
   once as a printable kit).
 - Each item: random nonce, authenticated encryption, item type and minimal metadata also encrypted. The server
   sees: item ids, sizes, timestamps — nothing else.
@@ -34,14 +37,17 @@
 - Lost passphrase **and** lost recovery kit ⇒ data is unrecoverable. This is stated plainly at setup.
 
 ## Library & everything else
+
 - Encrypted at rest: database volume encrypted; every uploaded object encrypted with its own data key
   (envelope encryption, master key from the server's env/KMS, not stored in the DB). AI-readable by decision D4.
 
 ## Chat — end-to-end
+
 - Established double-ratchet / group protocol implementation only (choice in the Chat spec; licences differ).
   Server stores ciphertext and delivery state only. Keys per device; safety numbers to verify contacts.
 
 ## Operational
+
 - TLS everywhere (Cloudflare in front, strict mode to origin). Security headers, CSP on web.
 - Rate limits on auth and AI endpoints. Audit log for admin actions, sign-ins, vault unlocks (event only).
 - Dependency and secret scanning in CI (gitleaks, `pnpm audit`, Dependabot).

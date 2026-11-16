@@ -5,6 +5,9 @@
 - Related: <specs, decisions>
 
 ## Context
+
 ## Options
+
 ## Decision
+
 ## Consequences

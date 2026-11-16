@@ -3,10 +3,12 @@
 Status: Draft · Phase 2 · Module: `today` · Accent: sky
 
 ## Problem
+
 Tasks and calendar live in different apps, entering them is slow, and reminders are dumb. "Today" is one
 timeline of everything with time in it, filled by talking or typing naturally, that tells you what matters now.
 
 ## User stories
+
 - I type or say "dentist fri 11 for 45m" or "pay rent every 1st" and it is created correctly without forms.
 - I open the app and see the Time River: now, next, and free time; I drag a task into free time to block it.
 - I get reminded on the device I am using, with actions (done, snooze 10 m, later today, tomorrow morning).
@@ -15,6 +17,7 @@ timeline of everything with time in it, filled by talking or typing naturally, t
 - I capture from anywhere: the Orb, a home-screen widget, the share sheet, Windows hotkey, the extension.
 
 ## Scope
+
 **In:** tasks (title, notes, checklist, due, scheduled time block, duration, priority, project/list, tags,
 recurrence RRULE, reminders), events (own + Google Calendar), natural-language parser (rules first, small
 model fallback, Indian date conventions), Time River view, week/month views, inbox (unscheduled), projects,
@@ -23,6 +26,7 @@ quick capture on all surfaces, offline.
 **Out (later):** sharing tasks with friends (after Chat), location reminders, time tracking.
 
 ## Acceptance criteria (draft)
+
 - [ ] AC1 Parser: 200-case test set (English + common Hinglish phrasing, relative dates, recurrence, durations,
       time zones) ≥ 97% exact.
 - [ ] AC2 Reminder fires on time (±30 s) with working actions on Android, web/PWA and Windows; done/snooze on
@@ -34,6 +38,7 @@ quick capture on all surfaces, offline.
 - [ ] AC6 Auto-plan never moves fixed events, respects working hours and buffers; explains each placement.
 
 ## Open questions
+
 - Google Calendar: one account or several? Which calendars to show by default?
 - Working hours / focus hours for auto-plan.
 - Default reminder lead times.

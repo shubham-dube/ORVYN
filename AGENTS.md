@@ -3,6 +3,7 @@
 `CLAUDE.md` imports this file.
 
 ## Source of truth
+
 - **Docs before code.** Every feature starts from a spec in `docs/specs/NNNN-slug/` (`spec.md`, then `plan.md`
   and `tasks.md` when work starts). Code and spec must not diverge: fix one or the other in the same change.
 - **Decisions live in ADRs** (`docs/adr/`) and the founder's choices in `docs/DECISIONS.md`. Do not re-propose
@@ -11,6 +12,7 @@
   before starting the next. No half-built modules on `main`.
 
 ## Non-negotiable rules
+
 1. **The vault is zero-knowledge.** Vault contents and vault keys never reach the server, logs, analytics, the
    AI, crash reports or backups in readable form. No "temporary" exceptions. (ADR-0004)
 2. **Feature access is enforced on the server.** A hidden button is not access control; every module checks
@@ -24,6 +26,7 @@
    fixtures.
 
 ## Engineering conventions
+
 - TypeScript everywhere outside the Flutter app; `pnpm` workspaces + Turborepo. Strict `tsc`, `eslint`,
   `prettier`. Flutter: `flutter analyze` clean, `dart format`.
 - Nest.js: one folder per module under `apps/api/src/modules/<name>/`; a module owns its tables, its API, its
@@ -37,5 +40,6 @@
 - LLM calls go only through the `ai` module (routing, budgets, tracing). No direct SDK calls elsewhere.
 
 ## When you are unsure
+
 Write the question into the spec's "Open questions" or `docs/DECISIONS.md` and ask, rather than guessing at
 product behaviour.

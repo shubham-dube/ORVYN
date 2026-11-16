@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "test fixtures and examples"
+paths = ['''\.env\.example$''', '''apps/.*/test/fixtures/.*''']

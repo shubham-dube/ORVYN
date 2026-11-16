@@ -6,6 +6,7 @@ money, documents, secrets, people — on phone, web, browser and desktop.
 > Status: **planning / foundation.** Start with [`docs/README.md`](docs/README.md).
 
 ## What it is
+
 - **One app, many surfaces:** Android (Flutter), web + installable PWA (Next.js, also the iPhone app for now),
   Chrome extension, Windows tray companion.
 - **One backend:** Nest.js modular monolith on PostgreSQL. Every feature is a module you can switch on or off
@@ -15,6 +16,7 @@ money, documents, secrets, people — on phone, web, browser and desktop.
 - **Private by design:** everything encrypted; secrets live in a vault that even the server cannot read.
 
 ## Repository layout (target)
+
 ```
 apps/
   api/          Nest.js backend (modules = features)
@@ -31,5 +33,6 @@ infra/          docker compose, deploy scripts, backups
 ```
 
 ## Related
+
 - [JobOS](https://github.com/shubham-dube/jobos) — the job-search autopilot. Separate system; ORVYN shows its
   jobs, reviews and notifications through its API.
