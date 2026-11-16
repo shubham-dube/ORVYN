@@ -208,6 +208,9 @@ importers:
       '@orvyn/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@orvyn/sync-client':
+        specifier: workspace:*
+        version: link:../../packages/sync-client
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0

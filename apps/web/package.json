@@ -8,11 +8,13 @@
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app components lib",
-    "e2e": "pnpm --filter @orvyn/extension exec vite build --mode e2e && NEXT_PUBLIC_API_URL=http://localhost:4100 next build && playwright test --trace off"
+    "e2e": "pnpm --filter @orvyn/api... build && pnpm --filter @orvyn/extension exec vite build --mode e2e && NEXT_PUBLIC_API_URL=http://localhost:4100 next build && playwright test --trace off",
+    "test": "vitest run test"
   },
   "dependencies": {
     "@orvyn/contracts": "workspace:*",
     "@orvyn/design-tokens": "workspace:*",
+    "@orvyn/sync-client": "workspace:*",
     "@simplewebauthn/browser": "^13.3.0",
     "geist": "^1.9.2",
     "lucide-react": "^0.460.0",

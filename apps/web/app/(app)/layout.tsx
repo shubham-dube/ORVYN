@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, Home, Settings, Shield } from 'lucide-react';
+import { Bell, CheckCircle2, Home, Settings, Shield } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -54,6 +54,9 @@ function Shell({ children }: { children: ReactNode }) {
 
   const nav = [
     { href: '/', label: 'Home', icon: Home },
+    ...(me?.role === 'owner' || me?.entitlements.includes('today')
+      ? [{ href: '/today', label: 'Today', icon: CheckCircle2 }]
+      : []),
     { href: '/settings', label: 'Settings', icon: Settings },
     ...(me?.role === 'owner' ? [{ href: '/admin', label: 'People', icon: Shield }] : []),
   ];
@@ -113,11 +116,22 @@ function Shell({ children }: { children: ReactNode }) {
       {/* phone dock: one-hand reach, the Orb in the middle */}
       <nav
         aria-label="Main"
-        className="glass-float fixed inset-x-3 bottom-3 z-40 grid h-16 grid-cols-3 items-center lg:hidden"
+        className="glass-float fixed inset-x-3 bottom-3 z-40 grid h-16 grid-cols-5 items-center lg:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <DockLink href="/" label="Home" active={pathname === '/'} icon={<Home size={20} />} />
-        <span />
+        {nav.some((i) => i.href === '/today') ? (
+          <DockLink
+            href="/today"
+            label="Today"
+            active={pathname === '/today'}
+            icon={<CheckCircle2 size={20} />}
+          />
+        ) : (
+          <span />
+        )}
+        <span aria-hidden />
+        <span aria-hidden />
         <DockLink
           href="/settings"
           label="Settings"
