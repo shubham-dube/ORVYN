@@ -12,7 +12,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "setup:local": "node scripts/setup-local.mjs",
+    "db:up": "docker compose -f infra/compose.dev.yml up -d",
+    "db:down": "docker compose -f infra/compose.dev.yml down"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

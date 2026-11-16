@@ -36,3 +36,8 @@ infra/          docker compose, deploy scripts, backups
 
 - [JobOS](https://github.com/shubham-dube/jobos) — the job-search autopilot. Separate system; ORVYN shows its
   jobs, reviews and notifications through its API.
+
+## Run it on your PC
+
+See [docs/guides/run-locally.md](docs/guides/run-locally.md): `pnpm install`, `pnpm setup:local you@email`,
+`pnpm db:up`, `pnpm build`, `pnpm dev`.

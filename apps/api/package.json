@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput & node --watch --enable-source-maps dist/main.js",
+    "dev": "node dev.mjs",
     "start": "node --enable-source-maps dist/main.js",
     "migrate": "node dist/db/migrate.js",
     "db:generate": "drizzle-kit generate",
