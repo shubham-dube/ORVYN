@@ -9,6 +9,7 @@ WORKDIR /repo
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/design-tokens/package.json packages/design-tokens/
+COPY packages/sync-client/package.json packages/sync-client/
 COPY apps/web/package.json apps/web/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --filter @orvyn/web...
 COPY tsconfig.base.json ./

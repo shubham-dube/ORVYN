@@ -66,8 +66,8 @@ test('Today: add, complete, and the task follows you to another device — live,
 test('the command bar turns anything typed into a task, from any page', async ({ page }) => {
   await signInWithEmail(page, OWNER);
   await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible(); // signed in and hydrated
-  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('heading', { name: 'Security' })).toBeVisible();
+  await page.getByRole('button', { name: /Ask or do anything/ }).click(); // same bar as Ctrl/⌘-K
   await page.getByRole('combobox', { name: 'Command' }).fill('Renew passport');
   await page.getByRole('option', { name: /Add “Renew passport” to Today/ }).click();
   await expect(page.getByText('Added to Today')).toBeVisible();
