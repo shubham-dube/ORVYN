@@ -6,3 +6,5 @@ apps/mobile
 apps/desktop/src-tauri/target
 packages/design-tokens/dist
 **/drizzle/meta
+test-results
+playwright-report

@@ -10,10 +10,10 @@
 - [x] api: sync engine (+ tests with a test entity)
 - [x] api: notify pipeline (ws, web push, FCM, email), quiet hours, dismiss-everywhere
 - [ ] sync-client (TS)
-- [ ] web: design system + gallery, theme engine
-- [ ] web: sign-in, onboarding, shell, devices, notifications, settings, admin
-- [ ] web: PWA (manifest, service worker, push)
-- [ ] web: Playwright e2e
+- [x] web: design system + gallery, theme engine
+- [x] web: sign-in, onboarding, shell, devices, notifications, settings, admin
+- [x] web: PWA (manifest, service worker, push)
+- [x] web: Playwright e2e
 - [ ] mobile: Flutter foundation (theme, sign-in, shell, devices, notifications, sync client, FCM)
 - [ ] desktop: Tauri tray companion
 - [ ] extension: MV3 shell

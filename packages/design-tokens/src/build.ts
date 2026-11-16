@@ -74,6 +74,7 @@ for (const [mod, a] of Object.entries<Record<string, string>>(T.modules)) {
       `  --orv-accent: ${a[p.mode]};`,
       `  --orv-accent-from: ${a.from};`,
       `  --orv-accent-to: ${a.to};`,
+      '  --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));',
       '}',
     );
   }
