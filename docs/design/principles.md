@@ -1,5 +1,8 @@
 # Design language — "Aurora Glass" (working name)
 
+Interactive design direction (phone Today, Drop, Vault, Money, web app, language sheet):
+https://claude.ai/artifact/CQxQcvSKWjeM5HQws4JdGA (private to the founder).
+
 ORVYN should feel like a calm, luminous instrument: layers of frosted glass floating over living light.
 Beautiful enough that opening it is a small pleasure; disciplined enough that it never gets in the way.
 

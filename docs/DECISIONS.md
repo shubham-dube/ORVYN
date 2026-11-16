@@ -22,7 +22,7 @@ The founder's choices (newest first). Technical consequences are recorded as ADR
 | O2 | Domain: e.g. `orvyn.dubey.app` (+ `api.`) on the existing `dubey.app` | Foundation deploy | Use subdomains of dubey.app |
 | O3 | Google Play developer account ($25 one-time) | First Android release (internal testing track) | Create when the Tasks + Calendar MVP is ready |
 | O4 | Sign-in methods | Foundation spec | Google + passkeys + email code |
-| O5 | Pick a design direction from the concepts | Foundation (design system) | — |
+| O5 | Approve the "Aurora Glass" direction (or ask for changes) — see design/principles.md | Foundation (design system) | — |
 | O6 | AI provider/key for ORVYN (OpenRouter like JobOS, budget per day) | Drop / Assistant | Reuse OpenRouter, separate key and budget |
 | O7 | Banks and UPI apps used | Money | — |
 | O8 | Chat encryption library (licences differ) | Chat | decide in Chat spec |
