@@ -82,8 +82,11 @@ entitlement changes, device revocations.
 ## apps/mobile (Flutter 3, Android first)
 
 Riverpod, go_router, drift (SQLite) for the local store, `flutter_secure_storage`, `dio`, web_socket_channel,
-`firebase_messaging` (+ local notifications with actions), `local_auth`, `credential_manager`/passkeys plugin.
-Theme from generated Dart tokens. Screens: sign-in, home shell, devices, notifications, settings, gallery.
+`firebase_messaging` (+ local notifications with actions), `local_auth`; passkeys plugin once the release key
+exists (spec O9). Theme from generated Dart tokens (`packages/design-tokens` writes `lib/design/tokens.g.dart`).
+Screens: sign-in/join, home shell with the Orb dock, notifications sheet, command sheet, settings (devices, light,
+quiet hours, app lock), gallery. Tests: unit + whole-app widget tests over a fake API/socket, and live tests of the
+Dart client against the real API in CI. See `apps/mobile/README.md`.
 
 ## apps/desktop (Tauri 2)
 

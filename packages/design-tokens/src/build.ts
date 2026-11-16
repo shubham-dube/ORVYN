@@ -3,7 +3,7 @@
  *   dist/tokens.css  — CSS variables; palettes switch with [data-phase], accents with [data-module]
  *   dist/theme.css   — Tailwind v4 @theme mapping (bg-orv-glass, text-orv-muted, rounded-orv-lg, …)
  *   dist/tokens.js + tokens.d.ts — typed tokens + helpers for TS apps
- *   dist/orvyn_tokens.dart — the same tokens for Flutter (copied into apps/mobile by its build)
+ *   dist/orvyn_tokens.dart — the same tokens for Flutter (also written to apps/mobile/lib/design/tokens.g.dart)
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -229,6 +229,17 @@ for (const [k, a] of Object.entries<Record<string, string>>(T.modules)) {
   );
 }
 dart.push('  };');
+dart.push(
+  '  /// Minutes after midnight at which each phase begins (clock fallback when sunrise is unknown).',
+);
+dart.push(
+  `  static const Map<OrvPhase, int> phaseStarts = {${Object.entries<{ starts: string }>(T.phases)
+    .map(([k, v]) => {
+      const [h, m] = v.starts.split(':').map(Number);
+      return `OrvPhase.${k}: ${h! * 60 + m!}`;
+    })
+    .join(', ')}};`,
+);
 for (const [k, v] of Object.entries(T.radius))
   dart.push(`  static const double radius${k[0]!.toUpperCase()}${k.slice(1)} = ${v};`);
 for (const [k, v] of Object.entries<Record<string, number>>(T.glass))
@@ -250,6 +261,10 @@ for (const [k, v] of Object.entries<TypeToken>(T.type)) {
 }
 dart.push('}', '');
 writeFileSync(join(out, 'orvyn_tokens.dart'), dart.join('\n'));
+// The Flutter app builds without Node, so it gets a committed copy; CI fails if the copy drifts.
+const mobile = join(root, '..', '..', 'apps', 'mobile', 'lib', 'design');
+mkdirSync(mobile, { recursive: true });
+writeFileSync(join(mobile, 'tokens.g.dart'), dart.join('\n'));
 console.warn(
   `design-tokens: wrote ${['tokens.css', 'theme.css', 'tokens.js', 'tokens.d.ts', 'orvyn_tokens.dart'].join(', ')}`,
 );

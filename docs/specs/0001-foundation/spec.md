@@ -37,5 +37,12 @@ test, monitoring.
 
 ## Open questions
 
-- O4 sign-in methods (recommended: passkeys + Google + email code)
-- O5 design direction
+- ~~O4 sign-in methods~~ — decided: passkeys + Google + email code (DECISIONS.md).
+- ~~O5 design direction~~ — decided: Aurora Glass (DECISIONS.md).
+- O9 Android passkeys and Google sign-in need the release signing key (Digital Asset Links) and an OAuth
+  client; until then the Android app signs in with the email code. Web has all three.
+- O10 FCM is moving from registration tokens to installation-ID direct send (`getToken` is deprecated in
+  firebase_messaging 17). The API sends with HTTP v1 `message.token`; migrate both together before the old path
+  is removed.
+- O11 Notification action buttons on Android open the app and mark the notification read; running an action in
+  the background (e.g. "Done" without opening) needs a background-isolate API session — decide with spec 0002.

@@ -18,3 +18,4 @@ apps/mobile/android/local.properties
 data/
 .private/
 dump.rdb
+*.tsbuildinfo

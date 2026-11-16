@@ -37,6 +37,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm format:check
+      - name: Flutter tokens are in sync with tokens.json
+        run: git diff --exit-code apps/mobile/lib/design/tokens.g.dart
       - name: Web e2e (real API + production build)
         run: |
           pnpm --filter @orvyn/web exec playwright install --with-deps chromium
@@ -46,6 +48,69 @@ jobs:
       - if: failure()
         uses: actions/upload-artifact@v4
         with: { name: playwright-report, path: apps/web/test-results, retention-days: 7 }
+
+  mobile:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: orvyn
+          POSTGRES_PASSWORD: orvyn
+          POSTGRES_DB: orvyn_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U orvyn" --health-interval 5s --health-timeout 5s --health-retries 10
+      valkey:
+        image: valkey/valkey:8-alpine
+        ports: ['6379:6379']
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.50.0', channel: stable, cache: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - run: flutter pub get
+      - name: Generated code is current
+        run: dart run build_runner build && git diff --exit-code lib
+      - run: dart format --output=none --set-exit-if-changed $(git ls-files 'lib/*.dart' 'test/*.dart' | grep -v '\.g\.dart$')
+      - run: flutter analyze
+      - run: flutter test
+      # the Dart client against the real API
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile && pnpm --filter @orvyn/api... build
+        working-directory: .
+      - name: Live API tests
+        run: |
+          export JWT_SECRET=$(openssl rand -base64 36) TOKEN_PEPPER=$(openssl rand -base64 36)
+          (cd ../web && node e2e/start-api.mjs > /tmp/api.log 2>&1 &)
+          for i in $(seq 1 60); do curl -sf localhost:4100/health && break; sleep 1; done
+          flutter test --tags live
+        env:
+          ORVYN_LIVE_API: http://localhost:4100
+          DATABASE_URL: postgres://orvyn:orvyn@localhost:5432/orvyn_test
+          REDIS_URL: redis://localhost:6379/14
+          NODE_ENV: development
+          PORT: '4100'
+          OWNER_EMAIL: owner@example.test
+          AUTH_CODE_LIMIT: '50'
+          LOG_LEVEL: warn
+      - if: failure()
+        run: cat /tmp/api.log || true
+      - name: Android APK (debug-signed release build)
+        run: flutter build apk --release --dart-define=ORVYN_API_URL=https://api.orvyn.dubey.app --dart-define=ORVYN_WEB_URL=https://orvyn.dubey.app
+      - uses: actions/upload-artifact@v4
+        with:
+          {
+            name: orvyn-android,
+            path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk,
+            retention-days: 14,
+          }
 
   secrets-scan:
     runs-on: ubuntu-latest
