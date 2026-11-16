@@ -2,6 +2,15 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-16 (second round)
+| # | Topic | Decision |
+|---|---|---|
+| D10 | Design | **Aurora Glass approved** (design/principles.md and the linked canvas). |
+| D11 | Domain | `orvyn.dubey.app` (web) and `api.orvyn.dubey.app` (API). |
+| D12 | Sign-in | Passkeys + Google + email one-time code (ADR-0003 accepted). |
+| D13 | AI | Separate OpenRouter key and daily budget for ORVYN; Fable for Drop, Assistant and IPO analyst. |
+| D14 | Hosting | Hetzner + Cloudflare + R2 accepted in principle; the account and keys come **after the foundation is built**. Until then everything runs and is tested locally/in CI; deploy scripts are ready. |
+
 ## Decided — 2026-11-16
 | # | Topic | Decision |
 |---|---|---|
@@ -18,11 +27,6 @@ The founder's choices (newest first). Technical consequences are recorded as ADR
 ## Open — needed before the step that uses them
 | # | Question | Needed for | Recommendation |
 |---|---|---|---|
-| O1 | Approve hosting: Hetzner VPS (~€7–9/month) + Cloudflare R2 + Cloudflare (free) | Foundation deploy | Yes (alternative: Oracle free tier, $0 but can be reclaimed) |
-| O2 | Domain: e.g. `orvyn.dubey.app` (+ `api.`) on the existing `dubey.app` | Foundation deploy | Use subdomains of dubey.app |
 | O3 | Google Play developer account ($25 one-time) | First Android release (internal testing track) | Create when the Tasks + Calendar MVP is ready |
-| O4 | Sign-in methods | Foundation spec | Google + passkeys + email code |
-| O5 | Approve the "Aurora Glass" direction (or ask for changes) — see design/principles.md | Foundation (design system) | — |
-| O6 | AI provider/key for ORVYN (OpenRouter like JobOS, budget per day) | Drop / Assistant | Reuse OpenRouter, separate key and budget |
 | O7 | Banks and UPI apps used | Money | — |
 | O8 | Chat encryption library (licences differ) | Chat | decide in Chat spec |

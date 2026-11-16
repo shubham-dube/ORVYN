@@ -1,6 +1,6 @@
 # ADR-0003: Authentication
 
-- Status: Proposed (confirm sign-in methods: DECISIONS O4) · Date: 2026-11-16
+- Status: Accepted (D12) · Date: 2026-11-16
 
 ## Decision
 Passkeys (WebAuthn, `@simplewebauthn/server`), Google OAuth, email one-time codes. Own auth module in Nest
