@@ -4,6 +4,7 @@ import { type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { type DeviceInfo, type SessionResponse } from '@orvyn/contracts';
 import Redis from 'ioredis';
+import { randomBytes } from 'node:crypto';
 import postgres from 'postgres';
 import { AppModule } from '../src/app.module';
 import { configureApp, fastifyAdapter } from '../src/bootstrap';
@@ -12,6 +13,9 @@ import { runMigrations } from '../src/db/migrate';
 import { GoogleVerifier } from '../src/modules/auth/google.service';
 
 export const OWNER = 'owner@example.test';
+// generated per run: nothing secret-shaped is committed
+const TEST_JWT = randomBytes(32).toString('base64url');
+const TEST_PEPPER = randomBytes(32).toString('base64url');
 
 export function testEnv(over: Record<string, string> = {}): Env {
   return loadEnv({
@@ -19,8 +23,8 @@ export function testEnv(over: Record<string, string> = {}): Env {
     DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://orvyn:orvyn@localhost:5432/orvyn_test',
     REDIS_URL: (process.env.REDIS_URL ?? 'redis://localhost:6379') + '/15',
     OWNER_EMAIL: OWNER,
-    JWT_SECRET: 'test-jwt-secret-0123456789abcdef0123456789',
-    TOKEN_PEPPER: 'test-pepper-0123456789abcdef0123456789abcd',
+    JWT_SECRET: TEST_JWT,
+    TOKEN_PEPPER: TEST_PEPPER,
     WEB_URL: 'http://localhost:3000',
     API_URL: 'http://localhost:4000',
     WEBAUTHN_RP_ID: 'localhost',
