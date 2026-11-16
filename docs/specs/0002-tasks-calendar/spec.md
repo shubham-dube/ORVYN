@@ -1,6 +1,6 @@
 # Spec 0002: Today — tasks + calendar
 
-Status: Draft · Phase 2 · Module: `today` · Accent: sky
+Status: Approved scope (D5) · plan.md written · Phase 2 · Module: `today` · Accent: sky
 
 ## Problem
 
@@ -37,8 +37,11 @@ quick capture on all surfaces, offline.
 - [ ] AC5 Time River renders 60 fps on a mid-range Android; reduced-motion variant.
 - [ ] AC6 Auto-plan never moves fixed events, respects working hours and buffers; explains each placement.
 
-## Open questions
+## Open questions (proposed defaults — founder to confirm; the code makes each one a setting)
 
-- Google Calendar: one account or several? Which calendars to show by default?
-- Working hours / focus hours for auto-plan.
-- Default reminder lead times.
+- **Q1 Google Calendar accounts:** start with one Google account per person (multi-account later, same model);
+  show every calendar you own or have write access to; subscribed/read-only calendars off by default.
+- **Q2 Working hours for auto-plan:** Mon–Fri 10:00–19:00 (Asia/Kolkata), 15-minute buffers, nothing planned
+  after 22:00; editable per person.
+- **Q3 Default reminders:** timed tasks and events 10 minutes before; tasks with only a date get a 09:00
+  morning digest instead of one ping each; overdue tasks roll into the next digest.
