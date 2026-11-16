@@ -265,6 +265,25 @@ importers:
         specifier: ^4.23.15
         version: 4.23.15
 
+  packages/sync-client:
+    dependencies:
+      '@orvyn/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      dexie:
+        specifier: ^4.4.7
+        version: 4.4.7
+    devDependencies:
+      fake-indexeddb:
+        specifier: ^6.2.8
+        version: 6.2.8
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.16.22)(jiti@2.7.0)(postcss@8.5.33)(tsx@4.23.15)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)
+
 packages:
 
   '@alloc/quick-lru@5.3.0':
@@ -2389,6 +2408,9 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
+  dexie@4.4.7:
+    resolution: {integrity: sha512-wemFiCl3DTCnfzyqepUTX1ugbYbkTrw3aEZOG7YjAOUoEQB5g5PrEywPzk5JpbX/SxqQ9IvjUpxCDIEjoOWEfA==}
+
   drizzle-kit@0.31.11:
     resolution: {integrity: sha512-YCYqxTLIB2OCqf6w9/Vef13baBVbwQIPcbT4Y56AfO6B9ajZhDhD8Jkveg/hJvT/iuMloKD/IYYkyMMNhr7Kqg==}
     hasBin: true
@@ -2587,6 +2609,10 @@ packages:
 
   extend@3.0.2:
     resolution: {integrity: sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==}
+
+  fake-indexeddb@6.2.8:
+    resolution: {integrity: sha512-mpVW/HLUqwKXJ6F/s0hMgdK1eQfM4ncTHDioNGHWL0WKV3VcZCoZq1NKgboBbAge07aRCO7L48yziKssL59XEQ==}
+    engines: {node: '>=18'}
 
   fast-copy@4.3.1:
     resolution: {integrity: sha512-CRzQaTFOFUs6PuhsAq7lk9Zqr995soJBcFNZlfJS/5keTSl1awREV9dZW4xS2nX4pWbhIIR0xp4h+J8PQxCkvg==}
@@ -5417,6 +5443,8 @@ snapshots:
 
   detect-libc@2.1.2: {}
 
+  dexie@4.4.7: {}
+
   drizzle-kit@0.31.11:
     dependencies:
       '@drizzle-team/brocli': 0.10.2
@@ -5641,6 +5669,8 @@ snapshots:
   expect-type@1.4.0: {}
 
   extend@3.0.2: {}
+
+  fake-indexeddb@6.2.8: {}
 
   fast-copy@4.3.1: {}
 
