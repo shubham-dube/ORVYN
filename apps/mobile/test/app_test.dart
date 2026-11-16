@@ -88,7 +88,13 @@ void main() {
 
   testWidgets('dismissed on another device: it disappears here too', (tester) async {
     final h = AppHarness()..signedInAs(userJson());
-    h.server.on('GET /notifications', (_) => [notificationJson('n2', 'Pay rent')]);
+    h.server.on(
+      'GET /notifications',
+      (_) => {
+        'items': [notificationJson('n2', 'Pay rent')],
+        'unread': 1,
+      },
+    );
     await h.pump(tester);
     expect(find.text('Pay rent'), findsOneWidget);
     h.sockets.push({'type': 'notify.dismissed', 'id': 'n2'});

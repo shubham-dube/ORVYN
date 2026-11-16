@@ -86,6 +86,10 @@ void main() {
     final n = got.firstWhere((m) => m['type'] == 'notify.new')['notification'] as Map<String, dynamic>;
     expect(n['title'], 'Hello from ORVYN');
 
+    // the list endpoint the app loads on start has the same notification (shape: {items, unread})
+    final list = await api.get<Map<String, dynamic>>('/notifications');
+    expect((list['items'] as List).any((x) => (x as Map)['id'] == n['id']), isTrue);
+
     await other.post<dynamic>('/notifications/${n['id']}/dismiss');
     await _until(() => got.any((m) => m['type'] == 'notify.dismissed' && m['id'] == n['id']));
     await sub.cancel();

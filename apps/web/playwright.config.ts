@@ -37,6 +37,7 @@ export default defineConfig({
         WEBAUTHN_RP_ID: 'localhost',
         WEBAUTHN_ORIGINS: WEB,
         LOG_LEVEL: 'warn',
+        EXTENSION_IDS: 'hapijaoahockgcidibcnbghpajpnnanh',
       },
     },
     {

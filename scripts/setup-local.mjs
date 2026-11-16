@@ -26,5 +26,7 @@ env = set(env, 'JWT_SECRET', secret());
 env = set(env, 'TOKEN_PEPPER', secret());
 env = set(env, 'VAPID_PUBLIC_KEY', vapid.publicKey);
 env = set(env, 'VAPID_PRIVATE_KEY', vapid.privateKey);
+// the unpacked dev build of the Chrome extension (apps/extension/dev-key.json pins this id)
+env = set(env, 'EXTENSION_IDS', 'hapijaoahockgcidibcnbghpajpnnanh');
 writeFileSync('.env', env);
 console.log(`Wrote .env — owner ${email.toLowerCase()}, fresh secrets, web-push keys. Next: pnpm dev`);

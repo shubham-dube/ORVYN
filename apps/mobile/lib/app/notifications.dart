@@ -35,8 +35,8 @@ class NotificationsController extends Notifier<List<NotificationView>> {
 
   Future<void> load() async {
     try {
-      final list = await ref.read(apiProvider).get<List<dynamic>>('/notifications');
-      state = [for (final j in list) NotificationView.fromJson(j as Map<String, dynamic>)];
+      final res = await ref.read(apiProvider).get<Map<String, dynamic>>('/notifications');
+      state = [for (final j in res['items'] as List<dynamic>) NotificationView.fromJson(j as Map<String, dynamic>)];
     } catch (_) {
       // offline: keep what we have
     }

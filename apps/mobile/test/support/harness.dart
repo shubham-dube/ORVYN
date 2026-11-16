@@ -78,7 +78,7 @@ class RecordingPusher implements Pusher {
 class AppHarness {
   AppHarness() {
     driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
-    server.on('GET /notifications', (_) => <dynamic>[]);
+    server.on('GET /notifications', (_) => {'items': <dynamic>[], 'unread': 0}); // the API's real shape
     server.on(
       'GET /notifications/settings',
       (_) => {

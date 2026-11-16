@@ -81,7 +81,17 @@ Sign in with the same email and code. Debug builds may use plain HTTP only to th
 Push notifications while the app is closed need the Firebase config (release step, see `apps/mobile/README.md`);
 locally they arrive while the app is open.
 
-## 6. Everyday commands
+## 6. Chrome extension
+
+```powershell
+pnpm --filter @orvyn/extension build:dev
+```
+
+Chrome → `chrome://extensions` → Developer mode → **Load unpacked** → `apps/extension/dist/development`. Click the
+ORVYN icon → **Connect to ORVYN** → approve. (If your `.env` predates this, add
+`EXTENSION_IDS=hapijaoahockgcidibcnbghpajpnnanh` and restart `pnpm dev`.)
+
+## 7. Everyday commands
 
 | Command                        | What                                                                  |
 | ------------------------------ | --------------------------------------------------------------------- |
