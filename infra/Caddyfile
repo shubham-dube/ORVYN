@@ -1,0 +1,50 @@
+# Only cloudflared can reach Caddy (no published ports), so Cloudflare's CF-Connecting-IP is the real client
+# address. It overwrites X-Forwarded-For so nobody can spoof their IP past the API's rate limits.
+{
+	auto_https off
+	admin off
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+(proxy_headers) {
+	header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+	header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+}
+
+http://{$DOMAIN} {
+	encode zstd gzip
+	# Android App Links (invite links open the app; later passkeys)
+	handle /.well-known/assetlinks.json {
+		root * /srv
+		header Content-Type application/json
+		file_server
+	}
+	handle {
+		reverse_proxy web:3000 {
+			import proxy_headers
+		}
+	}
+}
+
+http://api.{$DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 4MB
+	}
+	reverse_proxy api:4000 {
+		import proxy_headers
+	}
+}
+
+http://status.{$DOMAIN} {
+	reverse_proxy uptime-kuma:3001
+}
+
+http://errors.{$DOMAIN} {
+	request_body {
+		max_size 2MB
+	}
+	reverse_proxy glitchtip:8000
+}

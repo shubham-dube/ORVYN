@@ -9,4 +9,5 @@
 | [0005](0005-entitlements-per-person.md)        | One deployment, features per person       | Accepted |
 | [0006](0006-offline-first-sync.md)             | Offline-first sync with a change log      | Accepted |
 | [0007](0007-design-tokens-single-source.md)    | One design-token source for all platforms | Accepted |
-| [0008](0008-hosting.md)                        | Hosting                                   | Proposed |
+| [0008](0008-hosting.md)                        | Hosting                                   | Accepted |
+| [0009](0009-deployment-and-operations.md)      | Deployment and operations                 | Accepted |

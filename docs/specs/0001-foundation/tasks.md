@@ -17,4 +17,4 @@
 - [x] mobile: Flutter foundation (theme, sign-in, shell, devices, notifications, sync client, FCM)
 - [ ] desktop: Tauri tray companion
 - [ ] extension: MV3 shell
-- [ ] infra: compose, backups + restore test, monitoring, deploy script
+- [x] infra: compose, backups + restore test, monitoring, deploy script

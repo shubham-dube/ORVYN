@@ -55,6 +55,10 @@ export const EnvSchema = z.object({
   /** Which work this process does: the API, background workers, or both. */
   PROCESS_ROLE: z.enum(['all', 'api', 'worker']).default('all'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+  /** Error reporting to the self-hosted GlitchTip (Sentry protocol). Empty = off. */
+  SENTRY_DSN: z.union([z.literal(''), z.string().url()]).default(''),
+  /** Deployed git revision, set by the deploy script. */
+  RELEASE: z.string().default('dev'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

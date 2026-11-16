@@ -112,6 +112,19 @@ jobs:
             retention-days: 14,
           }
 
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shell scripts
+        run: shellcheck -s sh infra/*.sh infra/backup/*.sh infra/test/*.sh infra/postgres/*.sh
+      - name: Compose file is valid
+        run: docker compose -f infra/docker-compose.yml --env-file infra/.env.production.example config -q
+      - name: Install age
+        run: sudo apt-get update -q && sudo apt-get install -y -q age
+      - name: Production stack smoke test (build, boot, route, real IP, backup + restore)
+        run: sh infra/test/stack-smoke.sh
+
   secrets-scan:
     runs-on: ubuntu-latest
     steps:

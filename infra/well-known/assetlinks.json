@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls", "delegate_permission/common.get_login_creds"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.dubey.orvyn",
+      "sha256_cert_fingerprints": ["REPLACE_WITH_UPLOAD_KEY_SHA256 (see docs/guides/deploy.md)"]
+    }
+  }
+]

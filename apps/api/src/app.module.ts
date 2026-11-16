@@ -5,6 +5,7 @@ import { RedisModule } from './common/redis.module';
 import { ENV, type Env } from './config/env';
 import { DbModule } from './db/db.module';
 import { AccessModule } from './modules/access/access.module';
+import { logSerializers } from './common/log-serializers';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthController } from './modules/health/health.controller';
@@ -23,8 +24,9 @@ export class AppModule {
         LoggerModule.forRoot({
           pinoHttp: {
             level: env.LOG_LEVEL,
-            // never log secrets: tokens, cookies, codes
-            redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+            // never log secrets: request lines carry only method, masked path and status (log-serializers.ts)
+            serializers: logSerializers,
+            redact: ['req.headers', 'res.headers'],
             transport:
               env.NODE_ENV === 'development'
                 ? { target: 'pino-pretty', options: { singleLine: true } }

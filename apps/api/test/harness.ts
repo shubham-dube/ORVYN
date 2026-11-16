@@ -8,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import postgres from 'postgres';
 import { AppModule } from '../src/app.module';
 import { configureApp, fastifyAdapter } from '../src/bootstrap';
+import { type ErrorReporter, noReporter } from '../src/common/error-reporting';
 import { type Env, loadEnv } from '../src/config/env';
 import { runMigrations } from '../src/db/migrate';
 import { GoogleVerifier } from '../src/modules/auth/google.service';
@@ -70,6 +71,7 @@ export async function startApp(
   over: Record<string, string> = {},
   overrides: { provide: unknown; useValue: unknown }[] = [],
   beforeListen?: (env: Env) => Promise<void>,
+  reporter: ErrorReporter = noReporter,
 ): Promise<Harness> {
   const env = testEnv(over);
   await resetStores(env);
@@ -80,7 +82,7 @@ export async function startApp(
   for (const o of overrides) builder = builder.overrideProvider(o.provide).useValue(o.useValue);
   const mod = await builder.compile();
   const app = mod.createNestApplication<NestFastifyApplication>(fastifyAdapter(), { logger: false });
-  await configureApp(app, env);
+  await configureApp(app, env, reporter);
   await app.listen(0, '127.0.0.1');
   const url = await app.getUrl();
   return { app, url: url.replace('[::1]', '127.0.0.1'), env, close: () => app.close() };

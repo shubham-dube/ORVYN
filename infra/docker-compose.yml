@@ -1,0 +1,192 @@
+# ORVYN production stack — one Hetzner server (docs/guides/deploy.md).
+# No public ports: Cloudflare Tunnel (cloudflared) is the only way in, and it reaches Caddy, which routes by host.
+name: orvyn
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://orvyn:${POSTGRES_PASSWORD}@postgres:5432/orvyn
+  REDIS_URL: redis://valkey:6379/0
+  API_URL: https://api.${DOMAIN}
+  WEB_URL: https://${DOMAIN}
+  COOKIE_DOMAIN: ${DOMAIN}
+  WEBAUTHN_RP_ID: ${DOMAIN}
+  WEBAUTHN_ORIGINS: https://${DOMAIN}
+  CORS_ORIGINS: ${CORS_ORIGINS:-}
+  OWNER_EMAIL: ${OWNER_EMAIL}
+  JWT_SECRET: ${JWT_SECRET}
+  TOKEN_PEPPER: ${TOKEN_PEPPER}
+  RESEND_API_KEY: ${RESEND_API_KEY}
+  MAIL_FROM: ${MAIL_FROM}
+  VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+  VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+  VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@dubey.app}
+  FCM_SERVICE_ACCOUNT_B64: ${FCM_SERVICE_ACCOUNT_B64:-}
+  GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+  GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
+  GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
+  SENTRY_DSN: ${SENTRY_DSN:-}
+  RELEASE: ${RELEASE:-unknown}
+  LOG_LEVEL: info
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '20m', max-file: '5' }
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orvyn
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: orvyn
+    command: >-
+      postgres -c shared_buffers=512MB -c effective_cache_size=2GB -c work_mem=16MB
+      -c max_connections=100 -c wal_compression=on -c log_min_duration_statement=500
+    volumes:
+      - pg:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    healthcheck:
+      test: ['CMD', 'pg_isready', '-U', 'orvyn', '-d', 'orvyn']
+      interval: 10s
+      retries: 10
+    logging: *logging
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command:
+      ['valkey-server', '--appendonly', 'yes', '--maxmemory', '512mb', '--maxmemory-policy', 'noeviction']
+    volumes: [valkey:/data]
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 10s
+    logging: *logging
+
+  migrate:
+    image: orvyn-api:${RELEASE:-latest}
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    environment: { DATABASE_URL: 'postgres://orvyn:${POSTGRES_PASSWORD}@postgres:5432/orvyn' }
+    command: ['node', 'dist/db/migrate.js']
+    depends_on: { postgres: { condition: service_healthy } }
+    profiles: [tools]
+    logging: *logging
+
+  api:
+    image: orvyn-api:${RELEASE:-latest}
+    build: { context: .., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    environment: { <<: *app-env, PROCESS_ROLE: api }
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+    logging: *logging
+
+  worker:
+    image: orvyn-api:${RELEASE:-latest}
+    restart: unless-stopped
+    environment: { <<: *app-env, PROCESS_ROLE: worker }
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+    logging: *logging
+
+  web:
+    image: orvyn-web:${RELEASE:-latest}
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.${DOMAIN}
+        NEXT_PUBLIC_GOOGLE_ENABLED: ${NEXT_PUBLIC_GOOGLE_ENABLED:-0}
+    restart: unless-stopped
+    logging: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment: { DOMAIN: '${DOMAIN}' }
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./well-known:/srv/.well-known:ro
+    depends_on: [api, web]
+    logging: *logging
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ['tunnel', '--no-autoupdate', 'run']
+    environment: { TUNNEL_TOKEN: '${CLOUDFLARE_TUNNEL_TOKEN}' }
+    depends_on: [caddy]
+    logging: *logging
+
+  backup:
+    build: ./backup
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: orvyn
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: orvyn
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT}
+      BACKUP_TARGET: ${BACKUP_TARGET:-r2:orvyn-backups}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-35}
+      BACKUP_HEARTBEAT_URL: ${BACKUP_HEARTBEAT_URL:-}
+      RESTORE_HEARTBEAT_URL: ${RESTORE_HEARTBEAT_URL:-}
+      RCLONE_CONFIG_R2_TYPE: s3
+      RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+      RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      RCLONE_CONFIG_R2_ENDPOINT: ${R2_ENDPOINT:-}
+      RCLONE_CONFIG_R2_NO_CHECK_BUCKET: 'true'
+    volumes:
+      # the age identity is only needed by the weekly restore test; root-only file on the server
+      - ./secrets/backup-identity.txt:/run/secrets/backup-identity.txt:ro
+    depends_on: { postgres: { condition: service_healthy } }
+    logging: *logging
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes: [kuma:/app/data]
+    logging: *logging
+
+  glitchtip:
+    image: glitchtip/glitchtip:v5.1
+    restart: unless-stopped
+    environment: &glitchtip-env
+      DATABASE_URL: postgres://orvyn:${POSTGRES_PASSWORD}@postgres:5432/glitchtip
+      REDIS_URL: redis://valkey:6379/1
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
+      GLITCHTIP_DOMAIN: https://errors.${DOMAIN}
+      DEFAULT_FROM_EMAIL: ${MAIL_FROM}
+      EMAIL_URL: smtp+tls://resend:${RESEND_API_KEY}@smtp.resend.com:587
+      ENABLE_USER_REGISTRATION: ${GLITCHTIP_REGISTRATION:-false}
+      ENABLE_ORGANIZATION_CREATION: ${GLITCHTIP_REGISTRATION:-false}
+      GLITCHTIP_MAX_EVENT_LIFE_DAYS: '30'
+      PORT: '8000'
+    depends_on:
+      postgres: { condition: service_healthy }
+      valkey: { condition: service_healthy }
+    logging: *logging
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:v5.1
+    restart: unless-stopped
+    command: ./bin/run-celery-with-beat.sh
+    environment: *glitchtip-env
+    depends_on: [glitchtip]
+    logging: *logging
+
+  glitchtip-migrate:
+    image: glitchtip/glitchtip:v5.1
+    command: ./bin/run-migrate.sh
+    environment: *glitchtip-env
+    depends_on: { postgres: { condition: service_healthy } }
+    profiles: [tools]
+    logging: *logging
+
+volumes:
+  pg:
+  valkey:
+  kuma:

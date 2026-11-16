@@ -8,7 +8,7 @@ Goal (D6): the cheapest setup that still has everything production needs.
 | ------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------- |
 | Server              | **Hetzner Cloud CAX21** (4 ARM vCPU, 8 GB RAM, 80 GB), Docker Compose: api, workers, web, Postgres, Valkey    | ~€7                       |
 | Files               | **Cloudflare R2** (10 GB free, no egress fees)                                                                | €0 → ~$0.015/GB after     |
-| DNS, TLS, CDN, DDoS | **Cloudflare** free plan, subdomains of `dubey.app`                                                           | €0                        |
+| DNS, TLS, CDN, DDoS | **Cloudflare** free plan + **Cloudflare Tunnel** (no open ports), subdomains of `dubey.app`                   | €0                        |
 | Push                | FCM (Android), Web Push/VAPID (web + iPhone PWA)                                                              | €0                        |
 | Email               | Resend (already set up for JobOS)                                                                             | €0 (free tier)            |
 | Backups             | nightly encrypted `pg_dump` + WAL archive → R2 (separate bucket, separate key); weekly automatic restore test | ~€0                       |
@@ -22,3 +22,6 @@ listed in `ai.md`.
 Alternatives: Oracle Cloud "Always Free" ARM (4 cores, 24 GB, $0) — viable but free instances can be
 reclaimed and support is minimal; a Hetzner Singapore server — lower latency from India for a few euros more.
 Scaling path: a second server for workers, then managed Postgres — only when needed.
+
+How it is deployed and operated: [ADR-0009](../adr/0009-deployment-and-operations.md) and
+[docs/guides/deploy.md](../guides/deploy.md).

@@ -7,6 +7,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { WsAdapter } from '@nestjs/platform-ws';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { type ErrorReporter, initErrorReporting, ReportingFilter } from './common/error-reporting';
 import { type Env } from './config/env';
 
 export const fastifyAdapter = () => new FastifyAdapter({ trustProxy: true, bodyLimit: 2 * 1024 * 1024 });
@@ -24,8 +25,13 @@ export async function createApp(env: Env, extra: DynamicModule['imports'] = []):
   return app;
 }
 
-export async function configureApp(app: NestFastifyApplication, env: Env): Promise<void> {
+export async function configureApp(
+  app: NestFastifyApplication,
+  env: Env,
+  reporter: ErrorReporter = initErrorReporting(env),
+): Promise<void> {
   app.useLogger(app.get(Logger));
+  app.useGlobalFilters(new ReportingFilter(app.getHttpAdapter(), reporter));
   await app.register(helmet, { contentSecurityPolicy: false }); // API serves JSON only; the web app sets its own CSP
   await app.register(cookie);
   const origins = [env.WEB_URL, ...env.CORS_ORIGINS];

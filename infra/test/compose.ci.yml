@@ -1,0 +1,12 @@
+# CI/local smoke test of the production stack: Caddy published, no tunnel, backups to a local folder.
+services:
+  caddy:
+    ports: ['8088:80']
+  cloudflared:
+    profiles: [disabled]
+  backup:
+    environment:
+      BACKUP_TARGET: /tmp/backups
+      BACKUP_SCRIPTS: /usr/local/bin
+    volumes:
+      - ./test:/t:ro

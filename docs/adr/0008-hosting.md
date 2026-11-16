@@ -1,6 +1,6 @@
 # ADR-0008: Hosting
 
-- Status: Proposed (founder approval: DECISIONS O1) · Date: 2026-11-16 · Related: hosting-and-cost.md
+- Status: Accepted (founder: D6, cheapest with nothing cut) · Date: 2026-11-16 · Related: hosting-and-cost.md
 
 ## Decision
 
