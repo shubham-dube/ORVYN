@@ -1,0 +1,46 @@
+import { type DynamicModule, Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { LoggerModule } from 'nestjs-pino';
+import { RedisModule } from './common/redis.module';
+import { ENV, type Env } from './config/env';
+import { DbModule } from './db/db.module';
+import { AccessModule } from './modules/access/access.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { HealthController } from './modules/health/health.controller';
+import { MailModule } from './modules/mail/mail.module';
+
+@Module({})
+export class AppModule {
+  static forRoot(env: Env, extra: DynamicModule['imports'] = []): DynamicModule {
+    return {
+      module: AppModule,
+      global: true,
+      imports: [
+        LoggerModule.forRoot({
+          pinoHttp: {
+            level: env.LOG_LEVEL,
+            // never log secrets: tokens, cookies, codes
+            redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+            transport:
+              env.NODE_ENV === 'development'
+                ? { target: 'pino-pretty', options: { singleLine: true } }
+                : undefined,
+            autoLogging: env.NODE_ENV !== 'test',
+          },
+        }),
+        EventEmitterModule.forRoot(),
+        DbModule,
+        RedisModule,
+        AuditModule,
+        MailModule.register(env.NODE_ENV === 'production'),
+        AccessModule,
+        AuthModule,
+        ...(extra ?? []),
+      ],
+      controllers: [HealthController],
+      providers: [{ provide: ENV, useValue: env }],
+      exports: [ENV],
+    };
+  }
+}
