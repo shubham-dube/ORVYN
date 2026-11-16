@@ -1,6 +1,18 @@
 'use client';
 
-import { Bell, Home, LogOut, Moon, Settings, Shield, Sparkles, Sun, Sunrise, Sunset } from 'lucide-react';
+import {
+  Bell,
+  CirclePlus,
+  Home,
+  LogOut,
+  Moon,
+  Settings,
+  Shield,
+  Sparkles,
+  Sun,
+  Sunrise,
+  Sunset,
+} from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,6 +22,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
 import { useSession } from '@/lib/session';
+import { localDay, useTodayMaybe } from '@/lib/today';
 
 interface Command {
   id: string;
@@ -75,7 +88,26 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
     return list;
   }, [router, me, signOut, setPreference]);
 
-  const filtered = commands.filter((c) => c.label.toLowerCase().includes(q.trim().toLowerCase()));
+  const today = useTodayMaybe();
+  const typed = q.trim();
+  const matches = commands.filter((c) => c.label.toLowerCase().includes(typed.toLowerCase()));
+  // anything typed can become a task (natural-language dates arrive with the parser, spec 0002 M2)
+  const filtered: Command[] =
+    today && typed.length > 1
+      ? [
+          ...matches,
+          {
+            id: 'add-task',
+            label: `Add “${typed}” to Today`,
+            hint: 'Task',
+            icon: <CirclePlus size={16} />,
+            run: async () => {
+              await today.addTask({ title: typed, dueDate: localDay(new Date()), source: 'orb' });
+              toast({ title: 'Added to Today', body: typed, tone: 'success' });
+            },
+          },
+        ]
+      : matches;
 
   useEffect(() => {
     if (open) {

@@ -6,6 +6,7 @@ import '../design/orb.dart';
 import '../features/gallery_screen.dart';
 import '../features/home_screen.dart';
 import '../features/settings_screen.dart';
+import '../features/today_screen.dart';
 import '../features/shell.dart';
 import '../features/sign_in_screen.dart';
 import 'state.dart';
@@ -53,6 +54,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/',
             pageBuilder: (_, _) => const NoTransitionPage(child: HomeScreen()),
+          ),
+          GoRoute(
+            path: '/today',
+            pageBuilder: (_, _) => const NoTransitionPage(child: TodayScreen()),
           ),
           GoRoute(
             path: '/settings',

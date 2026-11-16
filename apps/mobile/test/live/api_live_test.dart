@@ -109,6 +109,31 @@ void main() {
     expect(reasons, hasLength(1));
   });
 
+  test('Today: a task made on the phone reaches the laptop through the real API', () async {
+    final phoneApi = Api(baseUrl: base!, store: MemorySessionStore());
+    await signIn(phoneApi, owner);
+    final laptopApi = Api(baseUrl: base!, store: MemorySessionStore());
+    await signIn(laptopApi, owner);
+    final phone = SyncClient(db: LocalDb(NativeDatabase.memory()), api: phoneApi, node: 'livephone');
+    final laptop = SyncClient(db: LocalDb(NativeDatabase.memory()), api: laptopApi, node: 'livelaptop');
+
+    final id = await phone.upsert('today.task', {'title': 'Pay rent', 'dueDate': '2026-12-01', 'priority': 3});
+    await phone.sync();
+    expect(await phone.pendingCount(), 0, reason: 'accepted by the server');
+    await laptop.sync();
+    final t = (await laptop.get('today.task', id))!.data;
+    expect(
+      [t['title'], t['dueDate'], t['priority'], t['notes']],
+      ['Pay rent', '2026-12-01', 3, ''],
+      reason: 'server filled defaults',
+    );
+
+    await laptop.upsert('today.task', {'completedAt': DateTime.utc(2026, 12, 1, 9).toIso8601String()}, id: id);
+    await laptop.sync();
+    await phone.sync();
+    expect((await phone.get('today.task', id))!.data['completedAt'], '2026-12-01T09:00:00.000Z');
+  });
+
   test('a revoked device is cut off live (socket closes) and cannot refresh', () async {
     final api = Api(baseUrl: base!, store: MemorySessionStore());
     final s = await signIn(api, owner);

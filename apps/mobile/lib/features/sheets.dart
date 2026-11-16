@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/notifications.dart';
 import '../app/state.dart';
+import '../app/today.dart';
 import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
@@ -25,7 +26,11 @@ Future<T?> showGlassSheet<T>(BuildContext context, Widget Function(BuildContext)
         padding: EdgeInsets.only(left: 8, right: 8, bottom: MediaQuery.viewInsetsOf(ctx).bottom + 8),
         child: Glass(
           level: GlassLevel.halo,
-          child: SafeArea(top: false, child: builder(ctx)),
+          // list tiles and ripples paint on a transparent Material inside the glass
+          child: Material(
+            type: MaterialType.transparency,
+            child: SafeArea(top: false, child: builder(ctx)),
+          ),
         ),
       ),
     ),
@@ -200,6 +205,17 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     ];
     final q = _q.text.trim().toLowerCase();
     final shown = commands.where((c) => c.label.toLowerCase().contains(q)).toList();
+    // anything typed can become a task (natural-language dates arrive with the parser, spec 0002 M2)
+    final session = ref.read(sessionProvider);
+    final typed = _q.text.trim();
+    if (typed.length > 1 && session is SignedIn && session.me.can('today')) {
+      shown.add(
+        _Command('Add “$typed” to Today', LucideIcons.circlePlus, () async {
+          await ref.read(todayActionsProvider).add(typed, dueDate: dayKey(ref.read(clockProvider)()), source: 'orb');
+          toaster.show('Added to Today', body: typed, tone: ToastTone.success);
+        }, hint: 'Task'),
+      );
+    }
     Future<void> run(_Command c) async {
       Navigator.of(context).pop();
       try {

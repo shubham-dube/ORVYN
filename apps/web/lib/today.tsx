@@ -117,6 +117,11 @@ export function useToday(): TodayCtx {
   return c;
 }
 
+/** For places that only sometimes have Today (the command bar): null when it isn't switched on. */
+export function useTodayMaybe(): TodayCtx | null {
+  return useContext(Ctx);
+}
+
 // ------------------------------------------------------------------ grouping (pure, tested)
 
 export const localDay = (d: Date) =>

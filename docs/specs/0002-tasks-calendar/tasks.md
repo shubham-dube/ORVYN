@@ -2,11 +2,11 @@
 
 ## M1 — tasks and projects end to end
 
-- [ ] api: `today` module — project/task tables, migrations, sync entities with validation, owner isolation tests
-- [ ] packages/sync-client: Dexie mirror + outbox + pull, HLC merge, socket nudges; tests shared with the Dart client's cases
-- [ ] web: Inbox + Today list, quick add (command bar + Orb), task sheet, complete with "settle" animation, offline
-- [ ] mobile: Inbox + Today list, quick add from the Orb, task sheet, offline, haptics
-- [ ] e2e: create on web → appears on phone (live API test) and vice versa; airplane-mode edit merges
+- [x] api: `today` module — project/task tables, migrations, sync entities with validation, owner isolation tests
+- [x] packages/sync-client: Dexie mirror + outbox + pull, HLC merge, socket nudges; tests shared with the Dart client's cases
+- [x] web: Inbox + Today list, quick add (command bar + Orb), task sheet, complete with "settle" animation, offline
+- [x] mobile: Inbox + Today list, quick add from the Orb, task sheet, offline, haptics
+- [x] e2e: create on web → appears on phone (live API test) and vice versa; airplane-mode edit merges
 
 ## M2 — natural language
 

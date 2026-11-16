@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app/notifications.dart';
+import '../app/state.dart';
 import '../core/models.dart';
 import '../design/orb.dart';
 import '../design/theme.dart';
@@ -45,6 +46,8 @@ class _ShellState extends ConsumerState<Shell> {
   Widget build(BuildContext context) {
     final l = context.orv;
     final unread = ref.watch(notificationsProvider).where((n) => n.readAt == null).length;
+    final session = ref.watch(sessionProvider);
+    final canToday = session is SignedIn && session.me.can('today');
     return Scaffold(
       extendBody: true,
       body: SafeArea(
@@ -90,7 +93,14 @@ class _ShellState extends ConsumerState<Shell> {
                           active: widget.location == '/',
                           onTap: () => context.go('/'),
                         ),
-                        const Spacer(),
+                        if (canToday)
+                          _DockItem(
+                            icon: LucideIcons.circleCheck,
+                            label: 'Today',
+                            active: widget.location.startsWith('/today'),
+                            onTap: () => context.go('/today'),
+                          ),
+                        const Spacer(flex: 3),
                         _DockItem(
                           icon: LucideIcons.settings,
                           label: 'Settings',

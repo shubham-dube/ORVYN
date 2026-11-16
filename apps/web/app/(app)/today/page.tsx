@@ -9,15 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
-import { groupTasks, localDay, taskMoment, TodayProvider, useToday } from '@/lib/today';
+import { groupTasks, localDay, taskMoment, useToday } from '@/lib/today';
 
 export default function TodayPage() {
   return (
-    <TodayProvider>
-      <div data-module="today">
-        <TodayView />
-      </div>
-    </TodayProvider>
+    <div data-module="today">
+      <TodayView />
+    </div>
   );
 }
 

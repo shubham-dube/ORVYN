@@ -160,3 +160,9 @@ Future<void> settle(WidgetTester tester, [int frames = 12]) async {
 
 /// Debug aid: every visible text.
 List<String?> texts(WidgetTester t) => [for (final e in find.byType(Text).evaluate()) (e.widget as Text).data];
+
+/// Unmount inside the test so drift's live queries close (their cleanup timers must finish before the test ends).
+Future<void> finish(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pump(const Duration(milliseconds: 10));
+}

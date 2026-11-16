@@ -11,6 +11,7 @@ import { Orb } from '@/components/ui/orb';
 import { cn } from '@/lib/cn';
 import { NotificationsProvider, useNotifications } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
+import { TodayProvider } from '@/lib/today';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { status } = useSession();
@@ -21,8 +22,20 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (status !== 'signedIn') return <Splash />;
   return (
     <NotificationsProvider>
-      <Shell>{children}</Shell>
+      <MaybeToday>
+        <Shell>{children}</Shell>
+      </MaybeToday>
     </NotificationsProvider>
+  );
+}
+
+/** Today syncs app-wide (so the command bar can add tasks anywhere) — only for people who have it. */
+function MaybeToday({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  return me?.role === 'owner' || me?.entitlements.includes('today') ? (
+    <TodayProvider>{children}</TodayProvider>
+  ) : (
+    children
   );
 }
 

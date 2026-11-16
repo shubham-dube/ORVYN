@@ -36,7 +36,7 @@ void main() {
     expect((verifyBody?['device'] as Map?)?['platform'], 'android');
 
     expect(find.text('Good morning, Asha'), findsOneWidget);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Tasks and calendar on one river of time'), findsOneWidget);
     expect(find.text('IPO desk'), findsNothing);
     expect(h.store.values['refresh'], 'refresh-1', reason: 'native refresh token kept in secure storage');
     expect(h.sockets.sockets, hasLength(1), reason: 'realtime connects after sign-in');
