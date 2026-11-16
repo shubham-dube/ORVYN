@@ -41,6 +41,8 @@ export const EnvSchema = z.object({
   WEBAUTHN_ORIGINS: list,
   /** Google sign-in: client ids allowed as ID token audience (web, android, desktop) + web secret for code flow. */
   GOOGLE_CLIENT_IDS: list,
+  /** Chrome extension ids allowed to link to accounts (published id + your unpacked dev id). */
+  EXTENSION_IDS: list,
   GOOGLE_WEB_CLIENT_ID: z.string().default(''),
   GOOGLE_WEB_CLIENT_SECRET: z.string().default(''),
   /** Email (Resend). Without a key, mail goes to the dev outbox (never in production). */

@@ -70,3 +70,31 @@ export const DeviceView = z.object({
 export type DeviceView = z.infer<typeof DeviceView>;
 
 export const UpdateProfileRequest = z.object({ name: z.string().trim().min(1).max(80) });
+
+/**
+ * Linking a desktop app or the browser extension to an account (ADR-0003 addendum): the app opens the web app with a
+ * PKCE challenge and its redirect URI; the signed-in person approves; the web app gets a one-time code from the API
+ * and sends it to the redirect; the app redeems it with the verifier for its own device session.
+ */
+export const LinkStartRequest = z.object({
+  /** base64url(SHA-256(verifier)), 43 chars */
+  challenge: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  /** http://127.0.0.1:<port>/… (desktop) or https://<extension-id>.chromiumapp.org/… (extension) */
+  redirectUri: z.string().url().max(300),
+  state: z.string().min(16).max(128),
+});
+export type LinkStartRequest = z.infer<typeof LinkStartRequest>;
+
+export const LinkStartResponse = z.object({
+  /** where the web app sends the person next (redirect URI + code + state) */
+  redirect: z.string(),
+  client: z.enum(['desktop', 'extension']),
+});
+export type LinkStartResponse = z.infer<typeof LinkStartResponse>;
+
+export const LinkRedeemRequest = z.object({
+  code: z.string().min(20).max(100),
+  verifier: z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/),
+  device: DeviceInfo,
+});
+export type LinkRedeemRequest = z.infer<typeof LinkRedeemRequest>;

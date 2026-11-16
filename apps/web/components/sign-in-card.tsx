@@ -40,8 +40,8 @@ export function SignInCard({
   );
 
   useEffect(() => {
-    if (s.status === 'signedIn') router.replace('/');
-  }, [s.status, router]);
+    if (s.status === 'signedIn') router.replace(safeNext(params.get('next')));
+  }, [s.status, router, params]);
 
   const run = async (kind: 'email' | 'code' | 'passkey', fn: () => Promise<void>) => {
     setBusy(kind);
@@ -211,4 +211,9 @@ function GoogleMark() {
       />
     </svg>
   );
+}
+
+/** Only same-site paths: `/connect?…` yes, `//evil.example` or `https://…` no (no open redirect). */
+export function safeNext(next: string | null): string {
+  return next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/\\') ? next : '/';
 }

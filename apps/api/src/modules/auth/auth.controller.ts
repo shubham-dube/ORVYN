@@ -17,6 +17,9 @@ import {
   EmailStartRequest,
   EmailVerifyRequest,
   GoogleIdTokenRequest,
+  LinkRedeemRequest,
+  LinkStartRequest,
+  type LinkStartResponse,
   RefreshRequest,
   type SessionResponse,
   UpdateProfileRequest,
@@ -37,6 +40,7 @@ import { AuditService } from '../audit/audit.service';
 import { Auth, type AuthContext, Public } from './auth.decorators';
 import { AuthService, type IssuedSession } from './auth.service';
 import { GoogleVerifier } from './google.service';
+import { LinkService } from './link.service';
 import { PasskeysService } from './passkeys.service';
 
 export const REFRESH_COOKIE = 'orvyn_rt';
@@ -55,6 +59,7 @@ export class AuthController {
     @Inject(REDIS) private readonly redis: Redis,
     private readonly auth: AuthService,
     private readonly passkeys: PasskeysService,
+    private readonly link: LinkService,
     private readonly google: GoogleVerifier,
     private readonly access: AccessService,
     private readonly audit: AuditService,
@@ -241,6 +246,30 @@ export class AuthController {
       client,
     });
     return { ok: true };
+  }
+
+  // ------------------------------------------------------------------ desktop / extension linking
+  /** The signed-in web app approves an app and gets where to send its one-time code. */
+  @Post('auth/link/start')
+  @HttpCode(200)
+  linkStart(
+    @Auth() a: AuthContext,
+    @Body(new ZodPipe(LinkStartRequest)) body: LinkStartRequest,
+    @Client() client: ClientInfo,
+  ): Promise<LinkStartResponse> {
+    return this.link.start(a.userId, body.challenge, body.redirectUri, body.state, client);
+  }
+
+  /** The app exchanges the code + its PKCE verifier for its own device session. */
+  @Public()
+  @Post('auth/link/redeem')
+  @HttpCode(200)
+  async linkRedeem(
+    @Body(new ZodPipe(LinkRedeemRequest)) body: LinkRedeemRequest,
+    @Client() client: ClientInfo,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<SessionResponse> {
+    return this.respond(await this.link.redeem(body.code, body.verifier, body.device, client), reply);
   }
 
   // ------------------------------------------------------------------ session

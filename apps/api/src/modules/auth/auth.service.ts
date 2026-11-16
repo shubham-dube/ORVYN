@@ -20,7 +20,7 @@ export interface Identity {
   email: string;
   name?: string;
   avatarUrl?: string | null;
-  method: 'email' | 'google' | 'passkey';
+  method: 'email' | 'google' | 'passkey' | 'link';
 }
 
 export interface IssuedSession {
@@ -153,8 +153,23 @@ export class AuthService {
         .returning();
     }
     if (!user) throw unauthorized();
-    if (user.disabled) throw forbidden('account_disabled', 'This account has been disabled.');
+    return this.openSession(user, device, id.method, client);
+  }
 
+  /** A linked app (desktop, extension) gets its own device session for an already signed-in person. */
+  async signInLinked(userId: string, device: DeviceInfo, client: ClientInfo): Promise<IssuedSession> {
+    const [user] = await this.db.select().from(users).where(eq(users.id, userId));
+    if (!user) throw unauthorized();
+    return this.openSession(user, device, 'link', client);
+  }
+
+  private async openSession(
+    user: typeof users.$inferSelect,
+    device: DeviceInfo,
+    method: Identity['method'],
+    client: ClientInfo,
+  ): Promise<IssuedSession> {
+    if (user.disabled) throw forbidden('account_disabled', 'This account has been disabled.');
     const deviceId = newId();
     await this.db.insert(devices).values({
       id: deviceId,
@@ -173,14 +188,14 @@ export class AuthService {
       targetType: 'device',
       targetId: deviceId,
       client,
-      meta: { method: id.method, platform: device.platform },
+      meta: { method, platform: device.platform },
     });
     this.events.emit('auth.signed_in', {
       userId: user.id,
       deviceId,
       deviceName: device.name,
       platform: device.platform,
-      method: id.method,
+      method,
     });
     return {
       accessToken,

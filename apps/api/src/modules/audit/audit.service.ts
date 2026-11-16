@@ -12,6 +12,7 @@ export type AuditAction =
   | 'auth.sign_out'
   | 'auth.passkey_added'
   | 'auth.passkey_removed'
+  | 'auth.link_approved'
   | 'device.revoked'
   | 'invite.created'
   | 'invite.revoked'
