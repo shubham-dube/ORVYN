@@ -72,7 +72,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: { flutter-version: '3.50.0', channel: stable, cache: true }
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '17' }
+        with: { distribution: temurin, java-version: '21' } # Android lint (AGP 9) runs on JDK 21
       - run: flutter pub get
       - name: Generated code is current
         run: dart run build_runner build && git diff --exit-code lib
