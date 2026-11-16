@@ -8,7 +8,8 @@ plugins {
 
 android {
     namespace = "app.dubey.orvyn"
-    compileSdk = flutter.compileSdkVersion
+    // plugins (flutter_local_notifications, androidx.core) need API 37 to compile against; targetSdk is unchanged
+    compileSdk = maxOf(flutter.compileSdkVersion, 37)
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
