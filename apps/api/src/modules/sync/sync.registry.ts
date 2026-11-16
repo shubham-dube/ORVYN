@@ -6,6 +6,9 @@ import { type Db } from '../../db/db.module';
 /** Transaction handle (same API as Db). */
 export type Tx = Db;
 
+/** Throw from an entity's write to refuse one mutation (reported to the client), not the whole push. */
+export class Rejected extends Error {}
+
 /**
  * What a module provides to make one of its tables syncable. The engine handles ordering, idempotency,
  * merge clocks, ownership and the change log; the module only reads and writes its own table.

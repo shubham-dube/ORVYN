@@ -5,11 +5,10 @@ import { DB, type Db } from '../../db/db.module';
 import { type AuthContext } from '../auth/auth.decorators';
 import { RealtimeService } from '../realtime/realtime.service';
 import { type SyncEntity, SyncRegistry, type Tx } from './sync.registry';
+import { Rejected } from './sync.registry';
 import { changeLog, syncMeta } from './sync.schema';
 
 const PAGE = 500;
-
-class Rejected extends Error {}
 
 @Injectable()
 export class SyncService {
