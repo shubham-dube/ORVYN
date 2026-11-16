@@ -9,6 +9,9 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthController } from './modules/health/health.controller';
 import { MailModule } from './modules/mail/mail.module';
+import { NotifyModule } from './modules/notify/notify.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
+import { SyncModule } from './modules/sync/sync.module';
 
 @Module({})
 export class AppModule {
@@ -36,6 +39,9 @@ export class AppModule {
         MailModule.register(env.NODE_ENV === 'production'),
         AccessModule,
         AuthModule,
+        RealtimeModule,
+        SyncModule,
+        NotifyModule,
         ...(extra ?? []),
       ],
       controllers: [HealthController],

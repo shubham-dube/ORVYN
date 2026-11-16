@@ -8,6 +8,13 @@
       "when": 1794836655582,
       "tag": "0000_foundation_auth_access_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794837005974,
+      "tag": "0001_sync_and_notify",
+      "breakpoints": true
     }
   ]
 }

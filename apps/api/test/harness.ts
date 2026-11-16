@@ -64,13 +64,17 @@ export interface Harness {
 export async function startApp(
   extra: DynamicModule['imports'] = [],
   over: Record<string, string> = {},
+  overrides: { provide: unknown; useValue: unknown }[] = [],
+  beforeListen?: (env: Env) => Promise<void>,
 ): Promise<Harness> {
   const env = testEnv(over);
   await resetStores(env);
-  const mod = await Test.createTestingModule({ imports: [AppModule.forRoot(env, extra)] })
+  if (beforeListen) await beforeListen(env);
+  let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env, extra)] })
     .overrideProvider(GoogleVerifier)
-    .useValue(new FakeGoogle())
-    .compile();
+    .useValue(new FakeGoogle());
+  for (const o of overrides) builder = builder.overrideProvider(o.provide).useValue(o.useValue);
+  const mod = await builder.compile();
   const app = mod.createNestApplication<NestFastifyApplication>(fastifyAdapter(), { logger: false });
   await configureApp(app, env);
   await app.listen(0, '127.0.0.1');
@@ -125,3 +129,30 @@ export async function signIn(
     body: { email, code, device: device(opts.platform ?? 'android'), invite: opts.invite },
   });
 }
+
+/** A realtime socket for a session; collects every message it receives. */
+export async function openSocket(h: Harness, accessToken: string) {
+  const { WebSocket } = await import('ws');
+  const ws = new WebSocket(h.url.replace('http', 'ws') + '/ws');
+  const messages: any[] = [];
+  let closed: number | null = null;
+  ws.on('message', (d) => messages.push(JSON.parse(String(d))));
+  ws.on('close', (code) => (closed = code));
+  await new Promise<void>((resolve, reject) => {
+    ws.once('open', () => resolve());
+    ws.once('error', reject);
+  });
+  ws.send(JSON.stringify({ type: 'auth', token: accessToken }));
+  await waitFor(() => messages.some((m) => m.type === 'hello'));
+  return { ws, messages, closed: () => closed, close: () => ws.close() };
+}
+
+export async function waitFor(pred: () => boolean, timeoutMs = 4000): Promise<void> {
+  const end = Date.now() + timeoutMs;
+  while (!pred()) {
+    if (Date.now() > end) throw new Error('timed out waiting');
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

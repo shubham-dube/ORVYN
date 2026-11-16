@@ -52,6 +52,8 @@ export const EnvSchema = z.object({
   VAPID_SUBJECT: z.string().default('mailto:admin@dubey.app'),
   /** FCM HTTP v1: service account JSON (base64) */
   FCM_SERVICE_ACCOUNT_B64: z.string().default(''),
+  /** Which work this process does: the API, background workers, or both. */
+  PROCESS_ROLE: z.enum(['all', 'api', 'worker']).default('all'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
 

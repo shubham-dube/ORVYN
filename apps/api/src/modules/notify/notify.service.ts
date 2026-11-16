@@ -1,0 +1,368 @@
+import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { type NotificationView, type NotifySettings, type RegisterPushRequest } from '@orvyn/contracts';
+import { Queue, Worker } from 'bullmq';
+import { and, desc, eq, isNull, lt, ne, sql } from 'drizzle-orm';
+import { notFound } from '../../common/errors';
+import { ENV, type Env } from '../../config/env';
+import { DB, type Db } from '../../db/db.module';
+import { newId } from '../../db/ids';
+import { devices, users } from '../auth/auth.schema';
+import { layout, MailService } from '../mail/mail.service';
+import { RealtimeService } from '../realtime/realtime.service';
+import { notifications, notifySettings, pushTargets, type StoredAction } from './notify.schema';
+import { PUSH_SENDER, type PushPayload, type PushSender } from './push-sender';
+import { msUntilQuietEnds } from './quiet-hours';
+
+export interface SendInput {
+  userId: string;
+  module: string;
+  kind: string;
+  title: string;
+  body?: string;
+  url?: string | null;
+  actions?: StoredAction[];
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+  /** Same key = update the existing notification instead of adding a new one. */
+  dedupeKey?: string;
+  /** Not pushed to this device (it caused the notification). */
+  sourceDeviceId?: string;
+}
+
+type Job =
+  { kind: 'deliver'; id: string } | { kind: 'clear'; id: string; ownerId: string; type: 'dismiss' | 'read' };
+const QUEUE = 'notify';
+const MAX_FAILURES = 5;
+
+/** One notification pipeline for every module (spec 0001 §notify). */
+@Injectable()
+export class NotifyService implements OnModuleInit, OnModuleDestroy {
+  private readonly log = new Logger('notify');
+  private queue!: Queue<Job>;
+  private worker?: Worker<Job>;
+
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    @Inject(ENV) private readonly env: Env,
+    @Inject(PUSH_SENDER) private readonly sender: PushSender,
+    private readonly realtime: RealtimeService,
+    private readonly mail: MailService,
+  ) {}
+
+  onModuleInit(): void {
+    const connection = { url: this.env.REDIS_URL };
+    this.queue = new Queue<Job>(QUEUE, {
+      connection,
+      defaultJobOptions: {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      },
+    });
+    if (this.env.PROCESS_ROLE !== 'api') {
+      this.worker = new Worker<Job>(QUEUE, (job) => this.process(job.data), { connection, concurrency: 8 });
+      this.worker.on('failed', (job, err) => this.log.warn(`job ${job?.id} failed: ${err.message}`));
+    }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.worker?.close();
+    await this.queue?.close();
+  }
+
+  // ------------------------------------------------------------------ sending
+  async send(input: SendInput): Promise<NotificationView> {
+    const values = {
+      ownerId: input.userId,
+      module: input.module,
+      kind: input.kind,
+      title: input.title.slice(0, 200),
+      body: (input.body ?? '').slice(0, 1000),
+      url: input.url ?? null,
+      actions: input.actions ?? [],
+      priority: input.priority ?? 'normal',
+      dedupeKey: input.dedupeKey ?? null,
+      sourceDeviceId: input.sourceDeviceId ?? null,
+    };
+    const [row] = input.dedupeKey
+      ? await this.db
+          .insert(notifications)
+          .values({ id: newId(), ...values })
+          .onConflictDoUpdate({
+            target: [notifications.ownerId, notifications.dedupeKey],
+            targetWhere: sql`${notifications.dedupeKey} is not null`,
+            set: {
+              title: values.title,
+              body: values.body,
+              url: values.url,
+              actions: values.actions,
+              priority: values.priority,
+              readAt: null,
+              dismissedAt: null,
+              updatedAt: new Date(),
+            },
+          })
+          .returning()
+      : await this.db
+          .insert(notifications)
+          .values({ id: newId(), ...values })
+          .returning();
+    const view = toView(row!);
+    await this.realtime.toUser(
+      input.userId,
+      { type: 'notify.new', notification: view },
+      input.sourceDeviceId,
+    );
+    await this.queue.add(
+      'deliver',
+      { kind: 'deliver', id: view.id },
+      { jobId: `deliver-${view.id}-${row!.updatedAt.getTime()}` },
+    );
+    return view;
+  }
+
+  private async process(job: Job): Promise<void> {
+    if (job.kind === 'clear') return this.pushClear(job.ownerId, job.id, job.type);
+    const [n] = await this.db.select().from(notifications).where(eq(notifications.id, job.id));
+    if (!n || n.dismissedAt || n.readAt) return;
+    const settings = await this.settings(n.ownerId);
+    if (settings.mutedModules.includes(n.module) && n.priority !== 'urgent') return;
+    if (n.priority !== 'urgent') {
+      const wait = msUntilQuietEnds(new Date(), settings.quietHours);
+      if (wait > 0) {
+        await this.queue.add('deliver', job, { delay: wait, jobId: `deliver-${n.id}-quiet-${Date.now()}` });
+        return;
+      }
+    }
+    const payload: PushPayload = {
+      type: 'notify',
+      id: n.id,
+      title: n.title,
+      body: n.body,
+      url: n.url,
+      module: n.module,
+      priority: n.priority,
+      actions: n.actions,
+    };
+    await this.pushToTargets(n.ownerId, payload, n.sourceDeviceId);
+    if (settings.emailFor.includes(n.priority)) await this.emailCopy(n.ownerId, n.title, n.body, n.url);
+  }
+
+  private async pushToTargets(
+    ownerId: string,
+    payload: PushPayload,
+    exceptDeviceId: string | null,
+    channel?: 'fcm' | 'webpush',
+  ): Promise<void> {
+    const rows = await this.db
+      .select({ t: pushTargets })
+      .from(pushTargets)
+      .innerJoin(devices, eq(devices.id, pushTargets.deviceId))
+      .where(
+        and(eq(pushTargets.ownerId, ownerId), isNull(pushTargets.disabledAt), isNull(devices.revokedAt)),
+      );
+    for (const { t } of rows) {
+      if (exceptDeviceId && t.deviceId === exceptDeviceId) continue;
+      if (channel && t.channel !== channel) continue;
+      const outcome = await this.sender.send(
+        { channel: t.channel, address: t.address, keys: t.keys },
+        payload,
+      );
+      if (outcome === 'gone')
+        await this.db.update(pushTargets).set({ disabledAt: new Date() }).where(eq(pushTargets.id, t.id));
+      if (outcome === 'failed') {
+        await this.db
+          .update(pushTargets)
+          .set({
+            failures: sql`${pushTargets.failures} + 1`,
+            disabledAt: t.failures + 1 >= MAX_FAILURES ? new Date() : null,
+          })
+          .where(eq(pushTargets.id, t.id));
+      }
+      if (outcome === 'sent' && t.failures)
+        await this.db.update(pushTargets).set({ failures: 0 }).where(eq(pushTargets.id, t.id));
+    }
+  }
+
+  /** Android renders pushes itself, so it can also remove them; browsers get this via the socket when open. */
+  private pushClear(ownerId: string, id: string, type: 'dismiss' | 'read'): Promise<void> {
+    return this.pushToTargets(ownerId, { type, id }, null, 'fcm');
+  }
+
+  private async emailCopy(ownerId: string, title: string, body: string, url: string | null): Promise<void> {
+    const [u] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, ownerId));
+    if (!u) return;
+    const link = url ? `${this.env.WEB_URL}${url.startsWith('/') ? url : '/' + url}` : this.env.WEB_URL;
+    await this.mail.send({
+      to: u.email,
+      subject: title,
+      text: `${body}\n\n${link}`,
+      html: layout(
+        escapeHtml(title),
+        `<p style="font-size:15px;color:#475569">${escapeHtml(body)}</p><p><a href="${link}" style="color:#1a56c4">Open ORVYN</a></p>`,
+      ),
+    });
+  }
+
+  // ------------------------------------------------------------------ reading / clearing
+  async list(
+    ownerId: string,
+    before?: string,
+    limit = 50,
+  ): Promise<{ items: NotificationView[]; unread: number }> {
+    const conds = [eq(notifications.ownerId, ownerId), isNull(notifications.dismissedAt)];
+    if (before) conds.push(lt(notifications.createdAt, new Date(before)));
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(and(...conds))
+      .orderBy(desc(notifications.createdAt))
+      .limit(Math.min(limit, 100));
+    const [{ unread } = { unread: 0 }] = await this.db
+      .select({ unread: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.ownerId, ownerId),
+          isNull(notifications.readAt),
+          isNull(notifications.dismissedAt),
+        ),
+      );
+    return { items: rows.map(toView), unread };
+  }
+
+  async markRead(ownerId: string, id: string, deviceId: string): Promise<void> {
+    const r = await this.db
+      .update(notifications)
+      .set({ readAt: new Date() })
+      .where(and(eq(notifications.id, id), eq(notifications.ownerId, ownerId)))
+      .returning({ id: notifications.id });
+    if (!r.length) throw notFound();
+    await this.realtime.toUser(ownerId, { type: 'notify.read', id }, deviceId);
+    await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'read' });
+  }
+
+  async dismiss(ownerId: string, id: string, deviceId: string): Promise<void> {
+    const r = await this.db
+      .update(notifications)
+      .set({ dismissedAt: new Date() })
+      .where(and(eq(notifications.id, id), eq(notifications.ownerId, ownerId)))
+      .returning({ id: notifications.id });
+    if (!r.length) throw notFound();
+    await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id }, deviceId);
+    await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'dismiss' });
+  }
+
+  async dismissAll(ownerId: string, deviceId: string): Promise<number> {
+    const rows = await this.db
+      .update(notifications)
+      .set({ dismissedAt: new Date() })
+      .where(and(eq(notifications.ownerId, ownerId), isNull(notifications.dismissedAt)))
+      .returning({ id: notifications.id });
+    for (const r of rows) {
+      await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id: r.id }, deviceId);
+      await this.queue.add('clear', { kind: 'clear', id: r.id, ownerId, type: 'dismiss' });
+    }
+    return rows.length;
+  }
+
+  // ------------------------------------------------------------------ settings & targets
+  async settings(ownerId: string): Promise<NotifySettings> {
+    const [s] = await this.db.select().from(notifySettings).where(eq(notifySettings.ownerId, ownerId));
+    return {
+      quietHours: s?.quietHours ?? null,
+      emailFor: (s?.emailFor ?? ['urgent']) as NotifySettings['emailFor'],
+      mutedModules: s?.mutedModules ?? [],
+    };
+  }
+
+  async saveSettings(ownerId: string, s: NotifySettings): Promise<NotifySettings> {
+    await this.db
+      .insert(notifySettings)
+      .values({ ownerId, quietHours: s.quietHours, emailFor: s.emailFor, mutedModules: s.mutedModules })
+      .onConflictDoUpdate({
+        target: notifySettings.ownerId,
+        set: { quietHours: s.quietHours, emailFor: s.emailFor, mutedModules: s.mutedModules },
+      });
+    return this.settings(ownerId);
+  }
+
+  async registerTarget(ownerId: string, deviceId: string, req: RegisterPushRequest): Promise<{ id: string }> {
+    const address = req.channel === 'fcm' ? req.token : req.subscription.endpoint;
+    const keys = req.channel === 'webpush' ? req.subscription.keys : null;
+    const [row] = await this.db
+      .insert(pushTargets)
+      .values({ id: newId(), ownerId, deviceId, channel: req.channel, address, keys })
+      .onConflictDoUpdate({
+        target: pushTargets.address,
+        set: { ownerId, deviceId, channel: req.channel, keys, failures: 0, disabledAt: null },
+      })
+      .returning({ id: pushTargets.id });
+    // one active target per device and channel
+    await this.db
+      .update(pushTargets)
+      .set({ disabledAt: new Date() })
+      .where(
+        and(
+          eq(pushTargets.deviceId, deviceId),
+          eq(pushTargets.channel, req.channel),
+          ne(pushTargets.id, row!.id),
+          isNull(pushTargets.disabledAt),
+        ),
+      );
+    return { id: row!.id };
+  }
+
+  async removeTarget(ownerId: string, id: string): Promise<void> {
+    await this.db
+      .update(pushTargets)
+      .set({ disabledAt: new Date() })
+      .where(and(eq(pushTargets.id, id), eq(pushTargets.ownerId, ownerId)));
+  }
+
+  // ------------------------------------------------------------------ security notifications
+  @OnEvent('auth.signed_in', { async: true, promisify: true })
+  async onSignedIn(p: {
+    userId: string;
+    deviceId: string;
+    deviceName: string;
+    platform: string;
+  }): Promise<void> {
+    const [{ others } = { others: 0 }] = await this.db
+      .select({ others: sql<number>`count(*)::int` })
+      .from(devices)
+      .where(and(eq(devices.ownerId, p.userId), isNull(devices.revokedAt), ne(devices.id, p.deviceId)));
+    if (!others) return; // first device: nothing to warn about
+    await this.send({
+      userId: p.userId,
+      module: 'core',
+      kind: 'security.new_device',
+      title: 'New sign-in',
+      body: `${p.deviceName} (${p.platform}) just signed in. Not you? Sign it out in Devices.`,
+      url: '/settings/devices',
+      priority: 'high',
+      sourceDeviceId: p.deviceId,
+      actions: [{ id: 'review', label: 'Review', open: '/settings/devices' }],
+    });
+  }
+}
+
+function toView(n: typeof notifications.$inferSelect): NotificationView {
+  return {
+    id: n.id,
+    module: n.module,
+    kind: n.kind,
+    title: n.title,
+    body: n.body,
+    url: n.url,
+    actions: n.actions,
+    priority: n.priority,
+    createdAt: n.createdAt.toISOString(),
+    readAt: n.readAt?.toISOString() ?? null,
+    dismissedAt: n.dismissedAt?.toISOString() ?? null,
+  };
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
