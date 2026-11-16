@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+.next/
+.turbo/
+coverage/
+*.log
+.DS_Store
+# flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+apps/mobile/android/local.properties
+# local data
+data/
+.private/
