@@ -38,6 +38,12 @@ class OrvAccent {
   final Color to;
 }
 
+class OrvLabel {
+  const OrvLabel({required this.light, required this.dark});
+  final Color light;
+  final Color dark;
+}
+
 class OrvSpring {
   const OrvSpring(this.stiffness, this.damping, this.mass);
   final double stiffness;
@@ -65,6 +71,17 @@ abstract final class OrvTokens {
     'chat': OrvAccent(light: Color(0xFFBE123C), dark: Color(0xFFFDA4AF), from: Color(0xFFF43F5E), to: Color(0xFFFB923C)),
     'ipo': OrvAccent(light: Color(0xFF854D0E), dark: Color(0xFFFDE047), from: Color(0xFFEAB308), to: Color(0xFFF59E0B)),
     'jobs': OrvAccent(light: Color(0xFF0B6278), dark: Color(0xFF67E8F9), from: Color(0xFF06B6D4), to: Color(0xFF3B82F6)),
+  };
+  /// Colours people pick for projects and calendars (readable as text on glass in both modes).
+  static const Map<String, OrvLabel> labels = {
+    'sky': OrvLabel(light: Color(0xFF0B5CAD), dark: Color(0xFF7CC4FF)),
+    'emerald': OrvLabel(light: Color(0xFF046C4E), dark: Color(0xFF6EE7B7)),
+    'amber': OrvLabel(light: Color(0xFF8A4B00), dark: Color(0xFFFCD34D)),
+    'violet': OrvLabel(light: Color(0xFF6D28D9), dark: Color(0xFFC4B5FD)),
+    'coral': OrvLabel(light: Color(0xFFB4232C), dark: Color(0xFFFDA4AF)),
+    'gold': OrvLabel(light: Color(0xFF7A5A00), dark: Color(0xFFFDE047)),
+    'cyan': OrvLabel(light: Color(0xFF0B6278), dark: Color(0xFF67E8F9)),
+    'slate': OrvLabel(light: Color(0xFF334155), dark: Color(0xFFCBD5E1)),
   };
   /// Minutes after midnight at which each phase begins (clock fallback when sunrise is unknown).
   static const Map<OrvPhase, int> phaseStarts = {OrvPhase.dawn: 300, OrvPhase.day: 480, OrvPhase.dusk: 1020, OrvPhase.night: 1200};

@@ -220,6 +220,9 @@ importers:
       '@orvyn/today-parse':
         specifier: workspace:*
         version: link:../../packages/today-parse
+      '@orvyn/today-plan':
+        specifier: workspace:*
+        version: link:../../packages/today-plan
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0

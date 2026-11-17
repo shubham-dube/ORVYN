@@ -126,7 +126,7 @@ export function expandEvents(
       for (const o of occ) {
         if (overrides.has(`${e.id}|${o.at}`)) continue;
         // exdates may be written as the exact instant in any offset form
-        if (e.exdates.some((x) => x.length > 10 && Date.parse(x) === Date.parse(o.at!))) continue;
+        if ((e.exdates ?? []).some((x) => x.length > 10 && Date.parse(x) === Date.parse(o.at!))) continue;
         const i: Instance = {
           ...base(e),
           seriesId: e.id,

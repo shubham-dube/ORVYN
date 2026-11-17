@@ -306,3 +306,6 @@ export function eventProblem(e: Partial<EventFields>): string | null {
 /** POST /today/plan: preview a day plan (nothing is changed until the person accepts). */
 export const PlanRequest = z.object({ date: isoDate });
 export type PlanRequest = z.infer<typeof PlanRequest>;
+
+/** Defaults for every event field but the title (a record written offline holds only what was set). */
+export const EVENT_DEFAULTS: Omit<EventFields, 'title'> = EventFields.omit({ title: true }).parse({});

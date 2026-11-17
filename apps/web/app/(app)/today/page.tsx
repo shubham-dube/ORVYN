@@ -5,6 +5,7 @@ import { CalendarDays, Check, Flag, Inbox, Plus, Sun, Trash2 } from 'lucide-reac
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Glass, Label, Segmented, Sheet } from '@/components/ui/bits';
+import { CalendarViews } from '@/components/today-calendar';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
@@ -26,10 +27,24 @@ function TodayView() {
   const { ready, tasks, pending } = useToday();
   const [now, setNow] = useState(() => new Date());
   const [editing, setEditing] = useState<Task | null>(null);
+  const [mode, setMode] = useState<'list' | 'calendar'>('list');
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
+    try {
+      if (localStorage.getItem('orvyn.today.mode') === 'calendar') setMode('calendar');
+    } catch {
+      /* storage blocked: start on the list */
+    }
     return () => clearInterval(t);
   }, []);
+  const pickMode = (m: 'list' | 'calendar') => {
+    setMode(m);
+    try {
+      localStorage.setItem('orvyn.today.mode', m);
+    } catch {
+      /* fine */
+    }
+  };
   const g = useMemo(() => groupTasks(tasks, now), [tasks, now]);
 
   return (
@@ -41,12 +56,25 @@ function TodayView() {
           </span>
           <h1 className="text-title font-semibold">Today</h1>
         </div>
-        {pending ? <Badge>{pending} waiting to sync</Badge> : null}
+        <div className="flex items-center gap-2">
+          {pending ? <Badge>{pending} waiting to sync</Badge> : null}
+          <Segmented
+            label="Today view"
+            value={mode}
+            onChange={pickMode}
+            options={[
+              { value: 'list', label: 'List' },
+              { value: 'calendar', label: 'Calendar' },
+            ]}
+          />
+        </div>
       </header>
 
       <QuickAdd />
 
-      {!ready ? (
+      {ready && mode === 'calendar' ? (
+        <CalendarViews onOpenTask={setEditing} />
+      ) : !ready ? (
         <Glass className="p-5">
           <div className="skeleton h-4 w-2/3 rounded" />
           <div className="skeleton mt-3 h-4 w-1/2 rounded" />

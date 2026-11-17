@@ -18,6 +18,7 @@ const base: Task = {
   rrule: null,
   reminders: null,
   completedAt: null,
+  lastDoneAt: null,
   source: 'typed',
 };
 const t = (id: string, f: Partial<Task>): Task => ({ ...base, id, title: id, ...f });

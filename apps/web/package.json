@@ -16,6 +16,7 @@
     "@orvyn/design-tokens": "workspace:*",
     "@orvyn/sync-client": "workspace:*",
     "@orvyn/today-parse": "workspace:*",
+    "@orvyn/today-plan": "workspace:*",
     "@simplewebauthn/browser": "^13.3.0",
     "geist": "^1.9.2",
     "lucide-react": "^0.460.0",

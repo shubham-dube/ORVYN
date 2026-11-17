@@ -10,14 +10,20 @@ export function Glass({
   className,
   children,
   as: As = 'div',
+  role,
+  'aria-label': ariaLabel,
 }: {
   level?: 'pane' | 'float' | 'halo';
   className?: string;
   children?: ReactNode;
   as?: 'div' | 'section' | 'aside' | 'nav';
+  role?: string;
+  'aria-label'?: string;
 }) {
   return (
     <As
+      role={role}
+      aria-label={ariaLabel}
       className={cn(
         level === 'pane'
           ? 'glass-pane'

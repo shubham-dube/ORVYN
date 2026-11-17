@@ -23,6 +23,11 @@ describe('contrast on glass', () => {
           expect(contrast(parseColor(m[key]), surface)).toBeGreaterThanOrEqual(4.5);
         });
       }
+      for (const [label, a] of Object.entries<Record<string, string>>(T.labels)) {
+        it(`${phase}: ${label} label on glass over ${backdrop}`, () => {
+          expect(contrast(parseColor(a[p.mode]!), surface)).toBeGreaterThanOrEqual(4.5);
+        });
+      }
       for (const [mod, a] of Object.entries<Record<string, string>>(T.modules)) {
         it(`${phase}: ${mod} accent on glass over ${backdrop}`, () => {
           expect(contrast(parseColor(a[p.mode]!), surface)).toBeGreaterThanOrEqual(4.5); // accents also label small text

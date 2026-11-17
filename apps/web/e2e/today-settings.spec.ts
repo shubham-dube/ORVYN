@@ -74,3 +74,26 @@ test('a task can have its own reminders, or none', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Remove 10 min before' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Remove 1 day before' })).toHaveCount(0);
 });
+
+test('with working hours set, the river shows free time and plans the day with reasons', async ({ page }) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/today');
+  await page.getByLabel('New task').fill('Prepare slides 45 min');
+  await page.keyboard.press('Enter');
+  await page.getByRole('radio', { name: 'Calendar' }).click();
+  const cal = page.getByRole('region', { name: 'Calendar' });
+  await expect(page.getByText('Set your working hours in Today settings')).toHaveCount(0);
+  await cal.getByRole('button', { name: 'Plan my day' }).click();
+  const plan = page.getByRole('dialog', { name: 'Your plan' });
+  await expect(plan.getByText('Prepare slides')).toBeVisible();
+  // depending on the day and the hour this runs, it is placed with a reason or explained
+  await expect(
+    plan.getByText(/due today · 45 min|no working hours on this day|longest free stretch/).first(),
+  ).toBeVisible();
+  if (await plan.getByRole('list', { name: 'Placed' }).getByText('Prepare slides').count()) {
+    await plan.getByRole('button', { name: 'Accept plan' }).click();
+    await expect(cal.getByRole('button', { name: /^Prepare slides, .*task$/ })).toBeVisible();
+  } else {
+    await plan.getByRole('button', { name: 'Not now' }).click();
+  }
+});

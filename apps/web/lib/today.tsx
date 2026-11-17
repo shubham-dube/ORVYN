@@ -1,11 +1,16 @@
 'use client';
 
 import {
+  type CalEvent,
+  EVENT_DEFAULTS,
+  type Calendar,
   type Mutation,
   type Project,
   type PullResponse,
   type PushResult,
   type Task,
+  TODAY_CALENDAR,
+  TODAY_EVENT,
   TODAY_PROJECT,
   TODAY_SETTINGS,
   TODAY_TASK,
@@ -30,6 +35,12 @@ interface TodayCtx {
   updateTask(id: string, fields: Partial<Task>): Promise<void>;
   removeTask(id: string): Promise<void>;
   addProject(name: string): Promise<string>;
+  events: CalEvent[];
+  calendars: Calendar[];
+  addEvent(fields: Partial<CalEvent> & { title: string }): Promise<string>;
+  updateEvent(id: string, fields: Partial<CalEvent>): Promise<void>;
+  removeEvent(id: string): Promise<void>;
+  saveCalendar(id: string | null, fields: Partial<Calendar>): Promise<string>;
 }
 
 const Ctx = createContext<TodayCtx | null>(null);
@@ -39,6 +50,8 @@ export function TodayProvider({ children }: { children: ReactNode }) {
   const { me, deviceId } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [pending, setPending] = useState(0);
   const [settings, setSettings] = useState<TodaySettingsFields | null>(null);
   const [ready, setReady] = useState(false);
@@ -59,12 +72,16 @@ export function TodayProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     if (!client) return;
-    const [t, p, n, st] = await Promise.all([
+    const [t, p, n, st, ev, cal] = await Promise.all([
       client.list<Task>(TODAY_TASK),
       client.list<Project>(TODAY_PROJECT),
       client.pendingCount(),
       me ? client.get<TodaySettingsFields>(TODAY_SETTINGS, me.id) : null,
+      client.list<CalEvent>(TODAY_EVENT),
+      client.list<Calendar>(TODAY_CALENDAR),
     ]);
+    setEvents(ev.map((e) => ({ ...EVENT_DEFAULTS, ...e })));
+    setCalendars(cal);
     setSettings(st);
     setTasks(t);
     setProjects(p);
@@ -116,8 +133,19 @@ export function TodayProvider({ children }: { children: ReactNode }) {
       updateTask: (id, fields) => write(async () => void (await client!.upsert(TODAY_TASK, fields, id))),
       removeTask: (id) => write(() => client!.remove(TODAY_TASK, id)),
       addProject: (name) => write(() => client!.upsert(TODAY_PROJECT, { name })),
+      events,
+      calendars,
+      addEvent: (fields) => write(() => client!.upsert(TODAY_EVENT, { ...fields })),
+      updateEvent: (id, fields) => write(async () => void (await client!.upsert(TODAY_EVENT, fields, id))),
+      removeEvent: (id) => write(() => client!.remove(TODAY_EVENT, id)),
+      saveCalendar: (id, fields) =>
+        write(async () =>
+          id
+            ? (await client!.upsert(TODAY_CALENDAR, fields, id), id)
+            : client!.upsert(TODAY_CALENDAR, fields),
+        ),
     };
-  }, [client, me, ready, tasks, projects, pending, settings]);
+  }, [client, me, ready, tasks, projects, pending, settings, events, calendars]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

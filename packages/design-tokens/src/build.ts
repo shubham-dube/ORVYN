@@ -54,6 +54,7 @@ function phaseBlock(selector: string, phase: string): void {
   p.aurora.forEach((c: string, i: number) => css.push(`  --orv-aurora-${i + 1}: ${c};`));
   for (const k of modeKeys) css.push(`  --orv-${kebab(k)}: ${m[k]};`);
   css.push(
+    ...Object.entries<Record<string, string>>(T.labels).map(([k, v]) => `  --orv-label-${k}: ${v[p.mode]};`),
     `  --orv-accent: ${core[p.mode]};`,
     `  --orv-accent-from: ${core.from};`,
     `  --orv-accent-to: ${core.to};`,
@@ -137,11 +138,15 @@ export type Mode = 'light' | 'dark';
 export type ModuleKey = ${Object.keys(T.modules)
     .map((k) => `'${k}'`)
     .join(' | ')};
+export type LabelKey = ${Object.keys(T.labels)
+    .map((k) => `'${k}'`)
+    .join(' | ')};
 export interface Spring { stiffness: number; damping: number; mass: number }
 export declare const tokens: {
   modes: Record<Mode, Record<string, string>>;
   phases: Record<Phase, { mode: Mode; base: string; aurora: string[]; veil: string; starts: string }>;
   modules: Record<ModuleKey, { light: string; dark: string; from: string; to: string }>;
+  labels: Record<LabelKey, { light: string; dark: string }>;
   glass: Record<'pane' | 'float' | 'halo', { blur: number; saturate: number; radius: number }>;
   radius: Record<string, number>;
   space: Record<string, number>;
@@ -193,6 +198,12 @@ const dart: string[] = [
   '  final Color to;',
   '}',
   '',
+  'class OrvLabel {',
+  '  const OrvLabel({required this.light, required this.dark});',
+  '  final Color light;',
+  '  final Color dark;',
+  '}',
+  '',
   'class OrvSpring {',
   '  const OrvSpring(this.stiffness, this.damping, this.mass);',
   '  final double stiffness;',
@@ -227,6 +238,12 @@ for (const [k, a] of Object.entries<Record<string, string>>(T.modules)) {
   dart.push(
     `    '${k}': OrvAccent(light: ${dc(a.light!)}, dark: ${dc(a.dark!)}, from: ${dc(a.from!)}, to: ${dc(a.to!)}),`,
   );
+}
+dart.push('  };');
+dart.push('  /// Colours people pick for projects and calendars (readable as text on glass in both modes).');
+dart.push('  static const Map<String, OrvLabel> labels = {');
+for (const [k, a] of Object.entries<Record<string, string>>(T.labels)) {
+  dart.push(`    '${k}': OrvLabel(light: ${dc(a.light!)}, dark: ${dc(a.dark!)}),`);
 }
 dart.push('  };');
 dart.push(
