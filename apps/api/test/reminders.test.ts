@@ -197,7 +197,12 @@ describe('events remind with the person’s own lead times (D17)', () => {
       reminders: { timed: [60, 10], dateOnly: { mode: 'none' }, overdueInDigest: false },
     });
     const id = v7();
-    await push(phone, 'today.event', id, { title: 'Dentist', start: at(120), end: at(150), location: 'MG Road' });
+    await push(phone, 'today.event', id, {
+      title: 'Dentist',
+      start: at(120),
+      end: at(150),
+      location: 'MG Road',
+    });
     const start = Date.parse(at(120));
     expect(await eventJobs(id)).toEqual([`${start} 10`, `${start} 60`]);
     await push(phone, 'today.event', id, { start: at(30), end: at(60) });
