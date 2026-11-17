@@ -3,13 +3,16 @@ import { OnEvent } from '@nestjs/event-emitter';
 import {
   effectiveReminders,
   type ReminderDefaults,
+  type CalEvent,
+  TODAY_EVENT,
   TODAY_SETTINGS,
   TODAY_TASK,
   type TaskFields,
 } from '@orvyn/contracts';
 import { wallIn } from '@orvyn/today-parse';
+import { expandEvents } from '@orvyn/today-plan';
 import { Queue, Worker } from 'bullmq';
-import { and, eq, isNull, lte } from 'drizzle-orm';
+import { and, eq, isNull, lte, or } from 'drizzle-orm';
 import Redis from 'ioredis';
 import { ENV, type Env } from '../../config/env';
 import { DB, type Db } from '../../db/db.module';
@@ -17,11 +20,12 @@ import { AccessService } from '../access/access.service';
 import { type AuthContext } from '../auth/auth.decorators';
 import { type NotifyAction, NotifyService } from '../notify/notify.service';
 import { type SyncApplied, SyncService } from '../sync/sync.service';
-import { todaySettings, todayTasks } from './today.schema';
+import { todayEvents, todaySettings, todayTasks } from './today.schema';
 
 type Job =
   | { kind: 'remind'; ownerId: string; taskId: string; momentMs: number; snoozed?: boolean }
-  | { kind: 'digest'; ownerId: string };
+  | { kind: 'digest'; ownerId: string }
+  | { kind: 'event'; ownerId: string; eventId: string; startMs: number };
 
 const QUEUE = 'today';
 const ACTIONS = [
@@ -86,6 +90,11 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
     try {
       if (e.entity === TODAY_TASK) await this.scheduleTask(e.ownerId, e.entityId);
       if (e.entity === TODAY_SETTINGS) await this.scheduleOwner(e.ownerId);
+      if (e.entity === TODAY_EVENT) {
+        const series = await this.scheduleEvent(e.ownerId, e.entityId);
+        // a changed or cancelled occurrence also changes what its series should remind about
+        if (series) await this.scheduleEvent(e.ownerId, series);
+      }
     } catch (err) {
       this.log.warn(`schedule failed: ${(err as Error).message}`);
     }
@@ -168,12 +177,123 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
         and(eq(todayTasks.ownerId, ownerId), isNull(todayTasks.deletedAt), isNull(todayTasks.completedAt)),
       );
     for (const t of open) await this.scheduleTask(ownerId, t.id, s);
+    const events = await this.db
+      .select({ id: todayEvents.id })
+      .from(todayEvents)
+      .where(and(eq(todayEvents.ownerId, ownerId), isNull(todayEvents.deletedAt)));
+    for (const e of events) await this.scheduleEvent(ownerId, e.id, s);
+  }
+
+  // ------------------------------------------------------------------ events (D17: the person's timed defaults)
+
+  private async seriesRows(ownerId: string, eventId: string) {
+    return this.db
+      .select()
+      .from(todayEvents)
+      .where(
+        and(
+          eq(todayEvents.ownerId, ownerId),
+          isNull(todayEvents.deletedAt),
+          or(eq(todayEvents.id, eventId), eq(todayEvents.recurringEventId, eventId)),
+        ),
+      );
+  }
+
+  /** The next start of this event row (its next occurrence when it repeats), or null. */
+  private async nextStart(ownerId: string, eventId: string, after: number): Promise<number | null> {
+    const rows = await this.seriesRows(ownerId, eventId);
+    const me = rows.find((r) => r.id === eventId);
+    if (!me || me.allDay || me.cancelled || !me.start || !me.end) return null;
+    const asEvent = (r: (typeof rows)[number]) =>
+      ({ ...r, start: r.start?.toISOString() ?? null, end: r.end?.toISOString() ?? null }) as CalEvent;
+    if (!me.rrule) return me.start.getTime() > after ? me.start.getTime() : null;
+    const from = new Date(after);
+    const horizon = new Date(after + 400 * 86_400_000);
+    // overrides are their own rows (scheduled on their own); expanding with them skips the changed occurrences
+    const next = expandEvents(rows.map(asEvent), from, horizon).find(
+      (i) => i.eventId === eventId && Date.parse(i.start!) > after,
+    );
+    return next ? Date.parse(next.start!) : null;
+  }
+
+  /** Replace an event's pending reminder with the next one; returns its series id when it is an override. */
+  async scheduleEvent(
+    ownerId: string,
+    eventId: string,
+    settings?: Settings | null,
+    /** only occurrences after this one (the one that just fired) */
+    afterMs?: number,
+  ): Promise<string | null> {
+    const key = `today:erem:${eventId}`;
+    for (const id of await this.redis.smembers(key))
+      await (await this.queue.getJob(id))?.remove().catch(() => undefined);
+    await this.redis.del(key);
+    const [row] = await this.db
+      .select({ recurringEventId: todayEvents.recurringEventId })
+      .from(todayEvents)
+      .where(and(eq(todayEvents.id, eventId), eq(todayEvents.ownerId, ownerId)));
+    const s = settings === undefined ? await this.settings(ownerId) : settings;
+    const leads = s ? (s.reminders as ReminderDefaults).timed : []; // nothing assumed before settings exist
+    if (!leads.length) return row?.recurringEventId ?? null;
+    // the first occurrence that still has a reminder ahead of it
+    let start = await this.nextStart(ownerId, eventId, Math.max(this.now() - 60_000, afterMs ?? -Infinity));
+    const maxLead = Math.max(...leads) * 60_000;
+    while (start !== null && start - Math.min(...leads) * 60_000 <= this.now() - 60_000) {
+      start = await this.nextStart(ownerId, eventId, start);
+    }
+    if (start !== null) {
+      for (const m of new Set(leads)) {
+        const at = start - m * 60_000;
+        if (at <= this.now() - 60_000 || start - maxLead > this.now() + 400 * 86_400_000) continue;
+        const jobId = `erem-${eventId}-${start}-${m}`;
+        await this.queue.add(
+          'remind',
+          { kind: 'event', ownerId, eventId, startMs: start },
+          { jobId, delay: Math.max(0, at - this.now()) },
+        );
+        await this.redis.sadd(key, jobId);
+      }
+    }
+    return row?.recurringEventId ?? null;
+  }
+
+  async remindEvent(ownerId: string, eventId: string, startMs: number): Promise<void> {
+    const [e] = await this.db
+      .select()
+      .from(todayEvents)
+      .where(
+        and(eq(todayEvents.id, eventId), eq(todayEvents.ownerId, ownerId), isNull(todayEvents.deletedAt)),
+      );
+    // still on, at that time? (moved, cancelled or deleted since → nothing)
+    if (!e || (await this.nextStart(ownerId, eventId, startMs - 1)) !== startMs) return;
+    const tz = (await this.settings(ownerId))?.timeZone ?? e.timeZone;
+    const mins = Math.round((startMs - this.now()) / 60_000);
+    const when =
+      mins > 1
+        ? `In ${mins >= 120 ? `${Math.round(mins / 60)} h` : `${mins} min`} · ${this.fmtTime(startMs, tz)}`
+        : `Now · ${this.fmtTime(startMs, tz)}`;
+    await this.notify.send({
+      userId: ownerId,
+      module: 'today',
+      kind: 'reminder',
+      title: e.title,
+      body: e.location ? `${when} · ${e.location}` : when,
+      url: '/today',
+      dedupeKey: `today:event:${eventId}:${startMs}`,
+      ref: `today.event:${eventId}`,
+    });
+    // the last lead for this occurrence has fired: line up the next occurrence
+    const leads = ((await this.settings(ownerId))?.reminders as ReminderDefaults | undefined)?.timed ?? [];
+    if (leads.length && startMs - Math.min(...leads) * 60_000 <= this.now() + 60_000) {
+      await this.scheduleEvent(ownerId, eventId, undefined, startMs);
+    }
   }
 
   // ------------------------------------------------------------------ firing
 
   async process(job: Job): Promise<void> {
     if (job.kind === 'remind') return this.remind(job.ownerId, job.taskId, job.momentMs, job.snoozed);
+    if (job.kind === 'event') return this.remindEvent(job.ownerId, job.eventId, job.startMs);
     return this.digest(job.ownerId);
   }
 

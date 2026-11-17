@@ -183,3 +183,60 @@ describe('date-only tasks: a summary at the time chosen', () => {
     ).toBe(false);
   });
 });
+
+describe('events remind with the person’s own lead times (D17)', () => {
+  const eventJobs = async (eventId: string) =>
+    ((await (rem as any).queue.getDelayed()) as { id: string; delay: number; data: any }[])
+      .filter((j) => j.id.startsWith(`erem-${eventId}-`))
+      .map((j) => j.id.split('-').slice(-2).join(' ')) // "<start ms> <lead min>"
+      .sort();
+
+  it('a single event gets its reminders; moving it moves them; deleting it clears them', async () => {
+    await push(phone, 'today.settings', phone.user.id, {
+      ...STARTING_SETTINGS,
+      reminders: { timed: [60, 10], dateOnly: { mode: 'none' }, overdueInDigest: false },
+    });
+    const id = v7();
+    await push(phone, 'today.event', id, { title: 'Dentist', start: at(120), end: at(150), location: 'MG Road' });
+    const start = Date.parse(at(120));
+    expect(await eventJobs(id)).toEqual([`${start} 10`, `${start} 60`]);
+    await push(phone, 'today.event', id, { start: at(30), end: at(60) });
+    expect(await eventJobs(id)).toEqual([`${Date.parse(at(30))} 10`]); // an hour before is already past
+    await push(phone, 'today.event', id, {}, 'delete');
+    expect(await eventJobs(id)).toEqual([]);
+  });
+
+  it('a repeating event reminds about its next occurrence, skips a cancelled one, and lines up the next', async () => {
+    const id = v7();
+    const first = Date.parse(at(30)) - 86_400_000; // started yesterday, 30 min from now each day
+    await push(phone, 'today.event', id, {
+      title: 'Standup',
+      start: new Date(first).toISOString(),
+      end: new Date(first + 15 * 60_000).toISOString(),
+      rrule: 'FREQ=DAILY',
+    });
+    const today = first + 86_400_000;
+    expect(await eventJobs(id)).toEqual([`${today} 10`]);
+
+    // cancel today's: tomorrow's comes up
+    await push(phone, 'today.event', id, { exdates: [new Date(today).toISOString()] });
+    expect(await eventJobs(id)).toEqual([`${today + 86_400_000} 10`, `${today + 86_400_000} 60`]);
+
+    // it fires, as a notification with the time, and the one after is lined up
+    await push(phone, 'today.event', id, { exdates: [] });
+    rem.now = () => today - 10 * 60_000;
+    await rem.remindEvent(phone.user.id, id, today);
+    rem.now = () => NOW;
+    const n = (await notifications(phone)).find((x) => x.title === 'Standup');
+    expect(n.body).toMatch(/^In 10 min · /);
+    expect(n.actions).toEqual([]);
+    expect(await eventJobs(id)).toContain(`${today + 86_400_000} 60`);
+  });
+
+  it('a stale reminder for a moved event says nothing', async () => {
+    const id = v7();
+    await push(phone, 'today.event', id, { title: 'Moved meeting', start: at(200), end: at(230) });
+    await rem.remindEvent(phone.user.id, id, Date.parse(at(100)));
+    expect((await notifications(phone)).some((x) => x.title === 'Moved meeting')).toBe(false);
+  });
+});
