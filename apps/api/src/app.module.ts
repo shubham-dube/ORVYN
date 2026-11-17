@@ -7,6 +7,7 @@ import { DbModule } from './db/db.module';
 import { AccessModule } from './modules/access/access.module';
 import { logSerializers } from './common/log-serializers';
 import { TodayModule } from './modules/today/today.module';
+import { CalendarModule } from './modules/calendar/calendar.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthController } from './modules/health/health.controller';
@@ -46,6 +47,7 @@ export class AppModule {
         SyncModule,
         NotifyModule,
         TodayModule,
+        CalendarModule,
         ...(extra ?? []),
       ],
       controllers: [HealthController],

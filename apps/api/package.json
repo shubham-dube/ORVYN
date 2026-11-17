@@ -33,6 +33,7 @@
     "google-auth-library": "^10.9.1",
     "ioredis": "^5.11.1",
     "jose": "^6.2.17",
+    "libsodium-wrappers": "0.7.15",
     "nestjs-pino": "^4.6.1",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
@@ -47,6 +48,7 @@
   "devDependencies": {
     "@nestjs/testing": "^11.2.10",
     "@swc/core": "^1.16.22",
+    "@types/libsodium-wrappers": "0.7.14",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",

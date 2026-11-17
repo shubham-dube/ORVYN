@@ -45,6 +45,17 @@ export const EnvSchema = z.object({
   EXTENSION_IDS: list,
   GOOGLE_WEB_CLIENT_ID: z.string().default(''),
   GOOGLE_WEB_CLIENT_SECRET: z.string().default(''),
+  /**
+   * Google Calendar (spec 0002 M5, D15): the same OAuth web client as sign-in, with the calendar scope.
+   * CALENDAR_TOKEN_KEY (base64, 32 bytes) encrypts each account's tokens at rest (libsodium secretbox).
+   * The URLs are configurable so tests run against a fake Google.
+   */
+  CALENDAR_TOKEN_KEY: z.string().default(''),
+  GOOGLE_AUTH_URL: z.string().url().default('https://accounts.google.com/o/oauth2/v2/auth'),
+  GOOGLE_TOKEN_URL: z.string().url().default('https://oauth2.googleapis.com/token'),
+  GOOGLE_REVOKE_URL: z.string().url().default('https://oauth2.googleapis.com/revoke'),
+  GOOGLE_USERINFO_URL: z.string().url().default('https://openidconnect.googleapis.com/v1/userinfo'),
+  GOOGLE_CALENDAR_API: z.string().url().default('https://www.googleapis.com/calendar/v3'),
   /** Email (Resend). Without a key, mail goes to the dev outbox (never in production). */
   RESEND_API_KEY: z.string().default(''),
   MAIL_FROM: z.string().default('ORVYN <orvyn@dubey.app>'),
@@ -75,6 +86,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (env.NODE_ENV === 'production') {
     if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is required in production');
     if (env.API_URL.startsWith('http://')) throw new Error('API_URL must be https in production');
+    if (env.GOOGLE_WEB_CLIENT_ID && !env.CALENDAR_TOKEN_KEY)
+      throw new Error('CALENDAR_TOKEN_KEY is required in production when Google is configured');
   }
   return env;
 }

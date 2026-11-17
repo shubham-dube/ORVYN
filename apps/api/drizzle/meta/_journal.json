@@ -57,6 +57,13 @@
       "when": 1794940358206,
       "tag": "0007_today_calendars_events",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794942658413,
+      "tag": "0008_calendar_accounts",
+      "breakpoints": true
     }
   ]
 }

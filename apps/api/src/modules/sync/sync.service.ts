@@ -96,6 +96,19 @@ export class SyncService {
       throw new Rejected('clock_skew');
     }
 
+    // two writers creating the same object at the same moment: the loser retries and merges like any later edit
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.applyOnce(auth, m, entity);
+      } catch (e) {
+        const code =
+          (e as { code?: string; cause?: { code?: string } }).cause?.code ?? (e as { code?: string }).code;
+        if (code !== '23505' || attempt >= 2) throw e;
+      }
+    }
+  }
+
+  private applyOnce(auth: AuthContext, m: Mutation, entity: SyncEntity): Promise<bigint> {
     return this.db.transaction(async (tx) => {
       const [dup] = await tx
         .select({ seq: changeLog.seq })

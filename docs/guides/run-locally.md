@@ -59,6 +59,15 @@ Create an OAuth client (Google Cloud Console → Credentials → Web application
 `http://localhost:4000/auth/google/callback`), put `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_WEB_CLIENT_SECRET` and the same
 id in `GOOGLE_CLIENT_IDS` in `.env`, and start the web app with `NEXT_PUBLIC_GOOGLE_ENABLED=1`.
 
+### Google Calendar (optional)
+
+Use the same OAuth web client. In Google Cloud Console enable the **Google Calendar API**, add the redirect URI
+`http://localhost:4000/calendar/google/callback`, and add the scopes `calendar.events` and
+`calendar.calendarlist.readonly` on the consent screen (while the app is in "Testing", add each Google account you
+want to connect as a test user). Then Settings → Calendars → _Connect a Google account_ — repeat for every account.
+Changes arrive within 5 minutes locally (Google can only push changes instantly to a public https address, so in
+production they arrive within seconds). `CALENDAR_TOKEN_KEY` is optional locally.
+
 ### Real emails (optional)
 
 Add `RESEND_API_KEY` and a `MAIL_FROM` on a domain verified in Resend.

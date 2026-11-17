@@ -36,6 +36,16 @@
 - Clipboard auto-clear; `FLAG_SECURE` on vault screens (no screenshots); no vault content in notifications.
 - Lost passphrase **and** lost recovery kit ⇒ data is unrecoverable. This is stated plainly at setup.
 
+## Connected calendars (spec 0002 M5)
+
+- Google OAuth (authorization code + PKCE, one-time `state` tied to the person who started), offline access with
+  the narrowest calendar scopes (`calendar.events`, `calendar.calendarlist.readonly`).
+- Refresh and access tokens are stored only encrypted with **libsodium secretbox** (random nonce per value, key
+  `CALENDAR_TOKEN_KEY` from the environment, never in the database). They never reach clients, logs or analytics.
+- Push-channel webhooks are accepted only with an HMAC channel token; Google content (titles, notes, locations) is
+  data, never instructions.
+- Disconnecting revokes the token at Google and removes that account's calendars and events from every device.
+
 ## Library & everything else
 
 - Encrypted at rest: database volume encrypted; every uploaded object encrypted with its own data key
