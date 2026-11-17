@@ -65,6 +65,9 @@ importers:
       '@orvyn/today-parse':
         specifier: workspace:*
         version: link:../../packages/today-parse
+      '@orvyn/today-plan':
+        specifier: workspace:*
+        version: link:../../packages/today-plan
       '@sentry/node':
         specifier: ^10.78.0
         version: 10.78.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))
@@ -298,6 +301,25 @@ importers:
       chrono-node:
         specifier: ^2.10.3
         version: 2.10.3
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.16.22)(jiti@2.7.0)(postcss@8.5.33)(tsx@4.23.15)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)
+
+  packages/today-plan:
+    dependencies:
+      '@orvyn/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@orvyn/today-parse':
+        specifier: workspace:*
+        version: link:../today-parse
+      rrule:
+        specifier: ^2.8.1
+        version: 2.8.1
     devDependencies:
       tsup:
         specifier: ^8.5.1
@@ -3342,6 +3364,9 @@ packages:
     resolution: {integrity: sha512-5acdO1/M9urvHQuZVkoOt8JWQH6XxCnFnox1qodE39qkXaML67S2E7MhHDgx3pQYycM1A5dRJwahYMDLO9a3Yg==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
+
+  rrule@2.8.1:
+    resolution: {integrity: sha512-hM3dHSBMeaJ0Ktp7W38BJZ7O1zOgaFEsn41PDk+yHoEtfLV+PoJt9E9xAlZiWgf/iqEqionN0ebHFZIDAp+iGw==}
 
   rxjs@7.8.2:
     resolution: {integrity: sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==}
@@ -6412,6 +6437,10 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.68.4
       '@rollup/rollup-win32-x64-msvc': 4.68.4
       fsevents: 2.3.3
+
+  rrule@2.8.1:
+    dependencies:
+      tslib: 2.9.1
 
   rxjs@7.8.2:
     dependencies:

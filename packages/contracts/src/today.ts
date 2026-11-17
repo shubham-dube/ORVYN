@@ -75,6 +75,8 @@ export const TaskFields = z.object({
   /** null = use my defaults (D17); [] = no reminder for this task; otherwise exactly these */
   reminders: z.array(Reminder).max(10).nullable().default(null),
   completedAt: isoDateTime.nullable().default(null),
+  /** a repeating task never stays done: it moves to its next time and remembers when it was last done */
+  lastDoneAt: isoDateTime.nullable().default(null),
   /** how it was created: typed, spoken, orb, email … (analytics-free; shown in the task sheet) */
   source: z.string().max(20).default('typed'),
 });

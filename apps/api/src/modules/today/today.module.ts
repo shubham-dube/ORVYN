@@ -11,6 +11,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { Rejected, SyncRegistry } from '../sync/sync.registry';
 import { tableEntity } from '../sync/table-entity';
 import { SyncModule } from '../sync/sync.module';
+import { RecurrenceService } from './recurrence.service';
 import { RemindersService } from './reminders.service';
 import { TodayController } from './today.controller';
 import { todayProjects, todaySettings, todayTasks } from './today.schema';
@@ -42,7 +43,7 @@ class TodayEntities implements OnModuleInit {
         entitlement: 'today',
         table: todayTasks,
         schema: TaskFields,
-        timestamps: ['dueAt', 'scheduledStart', 'completedAt'],
+        timestamps: ['dueAt', 'scheduledStart', 'completedAt', 'lastDoneAt'],
         validate: async (tx, ownerId, f) => {
           if (typeof f.projectId !== 'string') return;
           const [p] = await tx
@@ -64,7 +65,7 @@ class TodayEntities implements OnModuleInit {
 
 @Module({
   imports: [SyncModule],
-  providers: [TodayEntities, RemindersService],
+  providers: [TodayEntities, RemindersService, RecurrenceService],
   controllers: [TodayController],
   exports: [RemindersService],
 })

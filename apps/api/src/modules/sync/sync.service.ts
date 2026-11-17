@@ -13,6 +13,9 @@ import { changeLog, syncMeta } from './sync.schema';
 const PAGE = 500;
 
 /** Emitted after each accepted change; modules react (e.g. Today reschedules reminders). */
+/** The device id recorded for changes the server makes on its own (roll-forward, calendar sync). */
+export const SERVER_DEVICE = '00000000-0000-0000-0000-000000000000';
+
 export interface SyncApplied {
   ownerId: string;
   entity: string;

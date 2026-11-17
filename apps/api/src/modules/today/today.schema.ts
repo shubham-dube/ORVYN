@@ -44,6 +44,7 @@ export const todayTasks = pgTable(
     rrule: text('rrule'),
     reminders: jsonb('reminders').$type<unknown[] | null>(),
     completedAt: ts('completed_at'),
+    lastDoneAt: ts('last_done_at'),
     source: text('source').notNull().default('typed'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

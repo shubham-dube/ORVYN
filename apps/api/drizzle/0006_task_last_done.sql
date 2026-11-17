@@ -1,0 +1,1 @@
+ALTER TABLE "today_tasks" ADD COLUMN "last_done_at" timestamp with time zone;

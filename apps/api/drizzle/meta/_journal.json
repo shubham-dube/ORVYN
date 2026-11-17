@@ -43,6 +43,13 @@
       "when": 1794931889764,
       "tag": "0005_notification_ref",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794940175648,
+      "tag": "0006_task_last_done",
+      "breakpoints": true
     }
   ]
 }
