@@ -15,6 +15,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
 import 'sheets.dart';
+import 'today_calendar.dart';
 
 /// Today (spec 0002, M1): quick add, overdue / today / upcoming / inbox / done, settle on complete, task sheet.
 class TodayScreen extends ConsumerStatefulWidget {
@@ -24,6 +25,8 @@ class TodayScreen extends ConsumerStatefulWidget {
 }
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
+  bool _calendar = false;
+
   @override
   Widget build(BuildContext context) {
     final now = ref.watch(clockProvider)();
@@ -41,13 +44,36 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
               children: [
                 PageTitle('Today', overline: loc.formatFullDate(now)),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      for (final (cal, name) in const [(false, 'List'), (true, 'Calendar')])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(name),
+                            selected: _calendar == cal,
+                            showCheckmark: false,
+                            onSelected: (_) => setState(() => _calendar = cal),
+                            selectedColor: l.accent.withValues(alpha: 0.16),
+                            side: BorderSide(color: _calendar == cal ? l.accent : l.c.edge),
+                            backgroundColor: Colors.transparent,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
                 const _QuickAdd(),
                 const SizedBox(height: 14),
-                switch (tasks) {
-                  AsyncData(:final value) => _Sections(groups: groupTasks(value, now), now: now),
-                  AsyncError() => Text('Couldn’t read your tasks.', style: OrvText.muted(l)),
-                  _ => const SizedBox(height: 120),
-                },
+                if (_calendar)
+                  TodayCalendar(onOpenTask: (t) => openTaskSheet(context, t))
+                else
+                  switch (tasks) {
+                    AsyncData(:final value) => _Sections(groups: groupTasks(value, now), now: now),
+                    AsyncError() => Text('Couldn’t read your tasks.', style: OrvText.muted(l)),
+                    _ => const SizedBox(height: 120),
+                  },
               ],
             ),
           );
@@ -335,7 +361,7 @@ class _TaskRowState extends ConsumerState<_TaskRow> {
     final late = moment != null && moment.isBefore(widget.now) && !done;
     return InkWell(
       borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-      onTap: () => showGlassSheet<void>(context, (_) => _TaskSheet(task: t)),
+      onTap: () => openTaskSheet(context, t),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Row(
@@ -397,6 +423,9 @@ class _TaskRowState extends ConsumerState<_TaskRow> {
 
   static String _shortDate(String day, MaterialLocalizations loc) => loc.formatShortMonthDay(DateTime.parse(day));
 }
+
+/// The task sheet, also opened from the calendar.
+void openTaskSheet(BuildContext context, TaskItem t) => showGlassSheet<void>(context, (_) => _TaskSheet(task: t));
 
 class _TaskSheet extends ConsumerStatefulWidget {
   const _TaskSheet({required this.task});

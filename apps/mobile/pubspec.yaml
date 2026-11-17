@@ -26,6 +26,7 @@ dependencies:
   package_info_plus: ^10.2.2
   path: ^1.9.1
   path_provider: ^2.1.6
+  rrule: ^0.2.18
   uuid: ^4.6.0
   web_socket_channel: ^3.0.3
 
