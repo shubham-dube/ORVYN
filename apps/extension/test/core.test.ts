@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { badgeText, Client, codeFromCallback, connectUrl, pkce, type Store } from '../src/core';
+import {
+  badgeText,
+  Client,
+  codeFromCallback,
+  connectUrl,
+  notificationButtons,
+  pkce,
+  type Store,
+} from '../src/core';
 
 const mem = (): Store & { m: Map<string, string> } => {
   const m = new Map<string, string>();
@@ -118,4 +126,22 @@ describe('the API client', () => {
 
 it('badge shows nothing at zero and caps at 9+', () => {
   expect([badgeText(0), badgeText(3), badgeText(12)]).toEqual(['', '3', '9+']);
+});
+
+it("desktop notification buttons: the reminder's own first two, else Open/Dismiss", () => {
+  const reminder = {
+    actions: [
+      { id: 'done', label: 'Done' },
+      { id: 'snooze_10m', label: 'Snooze 10 min' },
+      { id: 'later_today', label: 'Later today' },
+    ],
+  };
+  expect(notificationButtons(reminder)).toEqual([
+    { id: 'done', title: 'Done' },
+    { id: 'snooze_10m', title: 'Snooze 10 min' },
+  ]);
+  expect(notificationButtons({ actions: [] }).map((b) => b.title)).toEqual(['Open', 'Dismiss']);
+  expect(
+    notificationButtons({ actions: [{ id: 'see', label: 'See', open: '/today' }] }).map((b) => b.title),
+  ).toEqual(['Open', 'Dismiss']);
 });

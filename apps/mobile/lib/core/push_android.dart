@@ -6,7 +6,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'actions.dart';
+import 'api.dart';
+import 'config.dart';
 import 'push.dart';
+import 'session_store.dart';
 
 final _plugin = FlutterLocalNotificationsPlugin();
 const _channel = AndroidNotificationChannel(
@@ -39,8 +43,9 @@ class AndroidShade implements NotificationShade {
         tag: p.id,
         styleInformation: BigTextStyleInformation(p.body),
         actions: [
-          for (final a in p.actions)
-            AndroidNotificationAction(a.id, a.label, showsUserInterface: true, cancelNotification: true),
+          for (final a in p.actions.take(maxShadeActions))
+            // a button that only does something (Done, Snooze…) runs without opening the app
+            AndroidNotificationAction(a.id, a.label, showsUserInterface: a.open != null, cancelNotification: true),
         ],
       ),
     ),
@@ -57,10 +62,22 @@ Future<void> initShade() async {
       final p = r.payload == null ? <String, dynamic>{} : jsonDecode(r.payload!) as Map<String, dynamic>;
       notificationTaps.add({...p, 'action': r.actionId});
     },
+    onDidReceiveBackgroundNotificationResponse: backgroundAction,
   );
   final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
   await android?.createNotificationChannel(_channel);
   await android?.createNotificationChannel(_urgent);
+}
+
+/// A shade button pressed while the app is in the background or closed: do it with the stored session.
+@pragma('vm:entry-point')
+Future<void> backgroundAction(NotificationResponse r) async {
+  final action = r.actionId;
+  if (action == null || r.payload == null) return;
+  final id = (jsonDecode(r.payload!) as Map<String, dynamic>)['id'] as String?;
+  if (id == null) return;
+  final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
+  await runNotificationAction(api, id, action);
 }
 
 /// Data messages while the app is in the background or killed.
@@ -77,6 +94,9 @@ class PushService implements Pusher {
   bool _ready = false;
   @override
   bool get ready => _ready;
+
+  @override
+  Stream<Map<String, dynamic>> get taps => notificationTaps.stream;
 
   @override
   Future<void> init() async {

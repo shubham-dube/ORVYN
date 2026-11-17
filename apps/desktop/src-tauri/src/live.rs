@@ -20,6 +20,24 @@ pub struct Notification {
     pub url: Option<String>,
     #[serde(default)]
     pub priority: String,
+    #[serde(default)]
+    pub actions: Vec<NotifyAction>,
+}
+
+/// A button on a notification (Done, Snooze 10 min, …). `open` = it opens a page instead of doing something.
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotifyAction {
+    pub id: String,
+    pub label: String,
+    #[serde(default)]
+    pub open: Option<String>,
+}
+
+impl Notification {
+    /// Buttons that do something on the server (shown on the toast; the toast body opens ORVYN).
+    pub fn doing_actions(&self) -> Vec<&NotifyAction> {
+        self.actions.iter().filter(|a| a.open.is_none()).take(5).collect()
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -138,6 +156,21 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(m, ServerMessage::NotifyNew { ref notification } if notification.title == "Hi"));
+        let r: ServerMessage = serde_json::from_str(
+            r#"{"type":"notify.new","notification":{"id":"n2","title":"Pay rent","body":"In 10 min","url":"/today","priority":"normal","actions":[{"id":"done","label":"Done"},{"id":"snooze_10m","label":"Snooze 10 min"},{"id":"open","label":"Open","open":"/today"}]}}"#,
+        )
+        .unwrap();
+        let ServerMessage::NotifyNew { notification } = r else {
+            panic!()
+        };
+        assert_eq!(
+            notification
+                .doing_actions()
+                .iter()
+                .map(|a| a.id.as_str())
+                .collect::<Vec<_>>(),
+            ["done", "snooze_10m"]
+        );
         let m: ServerMessage = serde_json::from_str(r#"{"type":"entitlements.changed","entitlements":[]}"#).unwrap();
         assert!(matches!(m, ServerMessage::Other));
         assert_eq!(ws_url("https://api.orvyn.dubey.app"), "wss://api.orvyn.dubey.app/ws");

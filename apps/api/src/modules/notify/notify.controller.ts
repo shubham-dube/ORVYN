@@ -31,6 +31,13 @@ export class NotifyController {
     return { ok: true };
   }
 
+  @Post(':id/actions/:actionId')
+  @HttpCode(200)
+  async act(@Auth() a: AuthContext, @Param('id') id: string, @Param('actionId') actionId: string) {
+    await this.notify.act(a.userId, id, actionId, a.deviceId);
+    return { ok: true };
+  }
+
   @Post('dismiss-all')
   @HttpCode(200)
   async dismissAll(@Auth() a: AuthContext) {

@@ -1,9 +1,9 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { type NotificationView, type NotifySettings, type RegisterPushRequest } from '@orvyn/contracts';
 import { Queue, Worker } from 'bullmq';
 import { and, desc, eq, isNull, lt, ne, sql } from 'drizzle-orm';
-import { notFound } from '../../common/errors';
+import { badRequest, notFound } from '../../common/errors';
 import { ENV, type Env } from '../../config/env';
 import { DB, type Db } from '../../db/db.module';
 import { newId } from '../../db/ids';
@@ -27,6 +27,16 @@ export interface SendInput {
   dedupeKey?: string;
   /** Not pushed to this device (it caused the notification). */
   sourceDeviceId?: string;
+  /** What it is about, for actions (e.g. "today.task:<id>") */
+  ref?: string;
+}
+
+/** Emitted when a person presses an action button anywhere; the owning module acts on it. */
+export interface NotifyAction {
+  ownerId: string;
+  deviceId: string;
+  actionId: string;
+  notification: { id: string; module: string; kind: string; ref: string | null };
 }
 
 type Job =
@@ -47,6 +57,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     @Inject(PUSH_SENDER) private readonly sender: PushSender,
     private readonly realtime: RealtimeService,
     private readonly mail: MailService,
+    private readonly events: EventEmitter2,
   ) {}
 
   onModuleInit(): void {
@@ -84,6 +95,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       priority: input.priority ?? 'normal',
       dedupeKey: input.dedupeKey ?? null,
       sourceDeviceId: input.sourceDeviceId ?? null,
+      ref: input.ref ?? null,
     };
     const [row] = input.dedupeKey
       ? await this.db
@@ -98,6 +110,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
               url: values.url,
               actions: values.actions,
               priority: values.priority,
+              ref: values.ref,
               readAt: null,
               dismissedAt: null,
               updatedAt: new Date(),
@@ -243,14 +256,35 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'read' });
   }
 
-  async dismiss(ownerId: string, id: string, deviceId: string): Promise<void> {
+  /**
+   * An action button pressed on any device (shade, toast, web push, extension, in-app). The owning module does the
+   * work (awaited, so the reply means it's done), then the notification clears everywhere.
+   */
+  async act(ownerId: string, id: string, actionId: string, deviceId: string): Promise<void> {
+    const [n] = await this.db
+      .select()
+      .from(notifications)
+      .where(and(eq(notifications.id, id), eq(notifications.ownerId, ownerId)));
+    if (!n) throw notFound();
+    if (!n.actions.some((a) => a.id === actionId))
+      throw badRequest('unknown_action', 'That action is not available.');
+    await this.events.emitAsync('notify.action', {
+      ownerId,
+      deviceId,
+      actionId,
+      notification: { id: n.id, module: n.module, kind: n.kind, ref: n.ref },
+    } satisfies NotifyAction);
+    if (!n.dismissedAt) await this.dismiss(ownerId, id, deviceId, true);
+  }
+
+  async dismiss(ownerId: string, id: string, deviceId: string, everywhere = false): Promise<void> {
     const r = await this.db
       .update(notifications)
       .set({ dismissedAt: new Date() })
       .where(and(eq(notifications.id, id), eq(notifications.ownerId, ownerId)))
       .returning({ id: notifications.id });
     if (!r.length) throw notFound();
-    await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id }, deviceId);
+    await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id }, everywhere ? undefined : deviceId);
     await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'dismiss' });
   }
 

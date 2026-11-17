@@ -23,8 +23,8 @@
 
 ## M3 — reminders
 
-- [ ] worker scheduler + digest; notify actions done/snooze/later/tomorrow
-- [ ] Android shade actions without opening the app; web/PWA, Windows, extension actions
+- [x] worker scheduler from the person's settings (nothing assumed before they save) + summary/ping at their time and zone; actions done / snooze 10 min / later today / tomorrow applied as server changes that sync everywhere
+- [x] Android shade actions without opening the app (3 buttons max there, all 4 in-app); web/PWA (via the page), Windows toasts (all 4), extension (2 in the toast, all in the popup); in-app buttons on web and Android
 
 ## M4 — events and the Time River
 

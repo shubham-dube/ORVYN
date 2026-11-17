@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/actions.dart';
 import '../core/models.dart';
 import 'state.dart';
 
@@ -82,6 +83,19 @@ class NotificationsController extends Notifier<List<NotificationView>> {
     for (final id in ids) {
       await ref.read(pusherProvider).clear(id);
     }
+  }
+
+  /// Press an action (Done, Snooze 10 min, …): the server does it and clears it on every device.
+  Future<bool> act(String id, String actionId) async {
+    final before = state;
+    state = state.where((n) => n.id != id).toList();
+    final ok = await runNotificationAction(ref.read(apiProvider), id, actionId);
+    if (ok) {
+      await ref.read(pusherProvider).clear(id);
+    } else {
+      state = before;
+    }
+    return ok;
   }
 
   Future<void> sendTest() => ref.read(apiProvider).post<dynamic>('/notifications/test');

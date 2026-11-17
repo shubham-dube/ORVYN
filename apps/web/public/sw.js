@@ -69,7 +69,14 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const d = e.notification.data || {};
   const action = (d.actions || []).find((a) => a.id === e.action);
-  const target = new URL((action && action.open) || d.url || '/', self.location.origin).href;
+  // a button that does something (Done, Snooze…): the page runs it with the person's session — the worker holds
+  // no tokens. A button that opens something just opens it.
+  const target = new URL(
+    action && !action.open
+      ? `/?notification=${encodeURIComponent(d.id)}&action=${encodeURIComponent(action.id)}`
+      : (action && action.open) || d.url || '/',
+    self.location.origin,
+  ).href;
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
       const open = wins.find((w) => w.url.startsWith(self.location.origin));

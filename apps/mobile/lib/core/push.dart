@@ -95,6 +95,9 @@ Future<void> handlePush(Map<String, dynamic> data, NotificationShade shade) asyn
 /// Device push (FCM on Android). Tests and unconfigured builds use [NoPush].
 abstract interface class Pusher {
   bool get ready;
+
+  /// Taps on this phone's notifications while the app runs: {id, url, action}
+  Stream<Map<String, dynamic>> get taps;
   Future<void> init();
   Future<String?> token();
   Stream<String> get tokenRefresh;
@@ -105,6 +108,8 @@ class NoPush implements Pusher {
   const NoPush();
   @override
   bool get ready => false;
+  @override
+  Stream<Map<String, dynamic>> get taps => const Stream.empty();
   @override
   Future<void> init() async {}
   @override

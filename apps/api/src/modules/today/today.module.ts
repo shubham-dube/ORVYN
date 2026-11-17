@@ -10,6 +10,8 @@ import {
 import { and, eq, isNull } from 'drizzle-orm';
 import { Rejected, SyncRegistry } from '../sync/sync.registry';
 import { tableEntity } from '../sync/table-entity';
+import { SyncModule } from '../sync/sync.module';
+import { RemindersService } from './reminders.service';
 import { TodayController } from './today.controller';
 import { todayProjects, todaySettings, todayTasks } from './today.schema';
 
@@ -60,5 +62,10 @@ class TodayEntities implements OnModuleInit {
   }
 }
 
-@Module({ providers: [TodayEntities], controllers: [TodayController] })
+@Module({
+  imports: [SyncModule],
+  providers: [TodayEntities, RemindersService],
+  controllers: [TodayController],
+  exports: [RemindersService],
+})
 export class TodayModule {}

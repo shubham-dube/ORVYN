@@ -128,6 +128,29 @@ class NotificationsSheet extends ConsumerWidget {
                                       timeAgo(n.createdAt, now),
                                       style: OrvText.muted(l).copyWith(color: l.c.faint, fontSize: 11),
                                     ),
+                                    if (n.actions.any((a) => a.open == null))
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: [
+                                            for (final a in n.actions.where((a) => a.open == null))
+                                              OrvButton(
+                                                label: a.label,
+                                                small: true,
+                                                variant: a.id == 'done'
+                                                    ? ButtonVariant.primary
+                                                    : ButtonVariant.secondary,
+                                                onPressed: () async {
+                                                  final toaster = Toaster.of(context);
+                                                  final ok = await ctl.act(n.id, a.id);
+                                                  if (!ok) toaster.show('That didn’t work', tone: ToastTone.danger);
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),

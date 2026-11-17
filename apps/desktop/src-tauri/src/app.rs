@@ -298,6 +298,16 @@ fn start_live(app: AppHandle, s: Arc<State>) {
                                             )
                                             .await;
                                     }
+                                    Choice::Action(a) => {
+                                        let _ = st3
+                                            .client
+                                            .call::<serde_json::Value>(
+                                                reqwest::Method::POST,
+                                                &format!("/notifications/{}/actions/{}", n3.id, a),
+                                                Some(serde_json::json!({})),
+                                            )
+                                            .await;
+                                    }
                                 }
                             });
                         });

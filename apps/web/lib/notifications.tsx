@@ -13,6 +13,8 @@ interface Ctx {
   dismiss(id: string): Promise<void>;
   dismissAll(): Promise<void>;
   markRead(id: string): Promise<void>;
+  /** press an action button (Done, Snooze 10 min, …); the server does it and clears it everywhere */
+  act(id: string, actionId: string): Promise<void>;
 }
 const NCtx = createContext<Ctx | null>(null);
 
@@ -52,6 +54,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setItems([]);
     await api('/notifications/dismiss-all', { method: 'POST' });
   }, []);
+  const act = useCallback(async (id: string, actionId: string) => {
+    setItems((xs) => xs.filter((x) => x.id !== id));
+    await api(`/notifications/${id}/actions/${encodeURIComponent(actionId)}`, { method: 'POST' });
+  }, []);
+  // a button pressed on a web push notification arrives as /?notification=…&action=… (see public/sw.js)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const id = q.get('notification');
+    const action = q.get('action');
+    if (!id || !action) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    void act(id, action).then(
+      () => toast({ title: 'Done', tone: 'success' }),
+      () => toast({ title: 'That didn’t work', tone: 'danger' }),
+    );
+  }, [act, toast]);
   const markRead = useCallback(async (id: string) => {
     setItems((xs) => xs.map((x) => (x.id === id ? { ...x, readAt: new Date().toISOString() } : x)));
     await api(`/notifications/${id}/read`, { method: 'POST' });
@@ -59,7 +77,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
 
   return (
     <NCtx.Provider
-      value={{ items, unread: items.filter((i) => !i.readAt).length, dismiss, dismissAll, markRead }}
+      value={{ items, unread: items.filter((i) => !i.readAt).length, dismiss, dismissAll, markRead, act }}
     >
       {children}
     </NCtx.Provider>

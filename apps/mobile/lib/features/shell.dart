@@ -26,10 +26,26 @@ class Shell extends ConsumerStatefulWidget {
 
 class _ShellState extends ConsumerState<Shell> {
   StreamSubscription<NotificationView>? _arrivals;
+  StreamSubscription<Map<String, dynamic>>? _taps;
 
   @override
   void initState() {
     super.initState();
+    // a tap on one of this phone's notifications while ORVYN is open: a button does its job, the body opens
+    _taps = ref.read(pusherProvider).taps.listen((t) async {
+      final id = t['id'] as String?;
+      final action = t['action'] as String?;
+      if (id == null) return;
+      final ctl = ref.read(notificationsProvider.notifier);
+      if (action != null && action.isNotEmpty) {
+        final ok = await ctl.act(id, action);
+        if (mounted && !ok) Toaster.of(context).show('That didn’t work', tone: ToastTone.danger);
+        return;
+      }
+      unawaited(ctl.markRead(id).catchError((Object _) {}));
+      final url = t['url'] as String?;
+      if (url != null && mounted) context.go(url);
+    });
     _arrivals = ref.read(arrivalsProvider).stream.listen((n) {
       HapticFeedback.lightImpact();
       if (mounted) Toaster.of(context).show(n.title, body: n.body.isEmpty ? null : n.body);
@@ -38,6 +54,7 @@ class _ShellState extends ConsumerState<Shell> {
 
   @override
   void dispose() {
+    _taps?.cancel();
     _arrivals?.cancel();
     super.dispose();
   }

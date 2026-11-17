@@ -26,6 +26,8 @@ export const notifications = pgTable(
       .notNull()
       .default('normal'),
     dedupeKey: text('dedupe_key'),
+    /** What it is about, for actions (e.g. "today.task:<id>"). Never shown, never pushed. */
+    ref: text('ref'),
     /** Device that caused it (e.g. a new sign-in) — it is not pushed there. */
     sourceDeviceId: uuid('source_device_id'),
     readAt: ts('read_at'),

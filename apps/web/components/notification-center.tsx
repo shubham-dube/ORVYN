@@ -51,7 +51,7 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: 60 }}
                     transition={spring.smooth}
-                    className="glass-pane flex gap-3 p-3"
+                    className="glass-pane flex flex-wrap gap-3 p-3"
                   >
                     <span
                       aria-hidden
@@ -81,6 +81,26 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
                     >
                       <X size={16} className="mx-auto" />
                     </button>
+                    {item.actions.some((a) => !a.open) ? (
+                      <div
+                        className="flex basis-full flex-wrap gap-1.5 pl-5"
+                        role="group"
+                        aria-label={`Actions for ${item.title}`}
+                      >
+                        {item.actions
+                          .filter((a) => !a.open)
+                          .map((a) => (
+                            <Button
+                              key={a.id}
+                              size="sm"
+                              variant={a.id === 'done' ? 'primary' : 'secondary'}
+                              onClick={() => void n.act(item.id, a.id)}
+                            >
+                              {a.label}
+                            </Button>
+                          ))}
+                      </div>
+                    ) : null}
                   </motion.li>
                 ))}
               </AnimatePresence>

@@ -6,6 +6,7 @@ import {
   Client,
   codeFromCallback,
   connectUrl,
+  notificationButtons,
   pkce,
   type Request,
   type Status,
@@ -103,7 +104,7 @@ async function onMessage(m: ServerMessage): Promise<void> {
           title: m.notification.title,
           message: m.notification.body || ' ',
           priority: m.notification.priority === 'urgent' ? 2 : 0,
-          buttons: [{ title: 'Open' }, { title: 'Dismiss' }],
+          buttons: notificationButtons(m.notification).map((b) => ({ title: b.title })),
         });
       }
       break;
@@ -133,6 +134,14 @@ async function dismiss(id: string): Promise<void> {
   await client.call('POST', `/notifications/${id}/dismiss`);
 }
 
+/** One of the notification's own buttons (Done, Snooze 10 min, …): the server does it and clears it everywhere. */
+async function act(id: string, action: string): Promise<void> {
+  notifications = notifications.filter((n) => n.id !== id);
+  chrome.notifications.clear(id);
+  await render();
+  await client.call('POST', `/notifications/${id}/actions/${encodeURIComponent(action)}`);
+}
+
 async function open(id: string): Promise<void> {
   const n = notifications.find((x) => x.id === id);
   await chrome.tabs.create({ url: new URL(n?.url ?? '/', WEB_URL).toString() });
@@ -159,6 +168,7 @@ chrome.runtime.onMessage.addListener((req: Request, _sender, reply) => {
       if (req.type === 'connect') await connect();
       if (req.type === 'disconnect') await client.signOut();
       if (req.type === 'dismiss') await dismiss(req.id);
+      if (req.type === 'act') await act(req.id, req.action);
       if (req.type === 'test') await client.call('POST', '/notifications/test');
       if (req.type === 'status' && !ws) await startLive();
       return await status();

@@ -4,5 +4,9 @@ import { SyncRegistry } from './sync.registry';
 import { SyncService } from './sync.service';
 
 @Global()
-@Module({ providers: [SyncRegistry, SyncService], controllers: [SyncController], exports: [SyncRegistry] })
+@Module({
+  providers: [SyncRegistry, SyncService],
+  controllers: [SyncController],
+  exports: [SyncRegistry, SyncService],
+})
 export class SyncModule {}

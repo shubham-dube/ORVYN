@@ -118,15 +118,40 @@ function Popup() {
                   className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
                   style={{ background: n.readAt ? 'transparent' : 'var(--orv-accent)' }}
                 />
-                <a
-                  className="min-w-0 flex-1"
-                  href={new URL(n.url ?? '/', WEB_URL).toString()}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <p className="truncate text-[13px] font-semibold">{n.title}</p>
-                  {n.body ? <p className="line-clamp-2 text-[12px] text-orv-muted">{n.body}</p> : null}
-                </a>
+                <div className="min-w-0 flex-1">
+                  <a
+                    className="block"
+                    href={new URL(n.url ?? '/', WEB_URL).toString()}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <p className="truncate text-[13px] font-semibold">{n.title}</p>
+                    {n.body ? <p className="line-clamp-2 text-[12px] text-orv-muted">{n.body}</p> : null}
+                  </a>
+                  {n.actions.some((a) => !a.open) ? (
+                    <div
+                      className="mt-1.5 flex flex-wrap gap-1"
+                      role="group"
+                      aria-label={`Actions for ${n.title}`}
+                    >
+                      {n.actions
+                        .filter((a) => !a.open)
+                        .map((a) => (
+                          <button
+                            key={a.id}
+                            onClick={() => void ask({ type: 'act', id: n.id, action: a.id }).then(setS)}
+                            className={
+                              a.id === 'done'
+                                ? 'rounded-full px-2 py-0.5 text-[11px] font-semibold text-white [background:var(--orv-accent-grad)]'
+                                : 'rounded-full border border-orv-edge px-2 py-0.5 text-[11px] font-medium hover:bg-orv-track'
+                            }
+                          >
+                            {a.label}
+                          </button>
+                        ))}
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   aria-label={`Dismiss ${n.title}`}
                   onClick={() => void ask({ type: 'dismiss', id: n.id }).then(setS)}

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,6 +64,9 @@ class FakeAuthenticator implements Authenticator {
 
 class RecordingPusher implements Pusher {
   final cleared = <String>[];
+  final tapController = StreamController<Map<String, dynamic>>.broadcast();
+  @override
+  Stream<Map<String, dynamic>> get taps => tapController.stream;
   @override
   bool get ready => false;
   @override

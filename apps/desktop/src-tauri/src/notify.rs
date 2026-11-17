@@ -4,6 +4,8 @@ use crate::live::Notification;
 pub enum Choice {
     Open,
     Dismiss,
+    /// one of the notification's own buttons (Done, Snooze 10 min, …)
+    Action(String),
 }
 
 #[cfg(windows)]

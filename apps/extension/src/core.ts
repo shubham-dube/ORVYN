@@ -178,6 +178,7 @@ export type Request =
   | { type: 'connect' }
   | { type: 'disconnect' }
   | { type: 'dismiss'; id: string }
+  | { type: 'act'; id: string; action: string }
   | { type: 'test' };
 
 export interface Status {
@@ -186,4 +187,15 @@ export interface Status {
   live: boolean;
   notifications: NotificationView[];
   error?: string;
+}
+
+/** Buttons for a desktop notification: the notification's own (Done, Snooze…) when it has them, else Open/Dismiss. */
+export function notificationButtons(n: Pick<NotificationView, 'actions'>): { id: string; title: string }[] {
+  const own = n.actions.filter((a) => !a.open).slice(0, 2); // Chrome shows at most two
+  return own.length
+    ? own.map((a) => ({ id: a.id, title: a.label }))
+    : [
+        { id: 'orvyn:open', title: 'Open' },
+        { id: 'orvyn:dismiss', title: 'Dismiss' },
+      ];
 }

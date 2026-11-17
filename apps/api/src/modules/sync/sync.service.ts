@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Inject, Injectable } from '@nestjs/common';
 import { compareHlc, Hlc, type Mutation, type PullResponse, type PushResult } from '@orvyn/contracts';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
@@ -5,10 +6,19 @@ import { DB, type Db } from '../../db/db.module';
 import { type AuthContext } from '../auth/auth.decorators';
 import { RealtimeService } from '../realtime/realtime.service';
 import { type SyncEntity, SyncRegistry, type Tx } from './sync.registry';
+import { newId } from '../../db/ids';
 import { Rejected } from './sync.registry';
 import { changeLog, syncMeta } from './sync.schema';
 
 const PAGE = 500;
+
+/** Emitted after each accepted change; modules react (e.g. Today reschedules reminders). */
+export interface SyncApplied {
+  ownerId: string;
+  entity: string;
+  entityId: string;
+  op: 'upsert' | 'delete';
+}
 
 @Injectable()
 export class SyncService {
@@ -18,15 +28,39 @@ export class SyncService {
     @Inject(DB) private readonly db: Db,
     private readonly registry: SyncRegistry,
     private readonly realtime: RealtimeService,
+    private readonly events: EventEmitter2,
   ) {}
 
-  async push(auth: AuthContext, mutations: Mutation[]): Promise<PushResult> {
+  /**
+   * A change made by the server on the person's behalf (a notification action like "Done"): stamped with the
+   * server's clock so it merges per field like any device's edit, and announced to every device, including the
+   * one that asked for it.
+   */
+  async pushAsServer(
+    auth: AuthContext,
+    changes: Pick<Mutation, 'entity' | 'entityId' | 'op' | 'fields'>[],
+  ): Promise<PushResult> {
+    const mutations = changes.map((c) => ({ ...c, mutationId: newId(), hlc: this.clock.tick() }));
+    return this.push({ ...auth, deviceId: auth.deviceId }, mutations, { notifyAll: true });
+  }
+
+  async push(
+    auth: AuthContext,
+    mutations: Mutation[],
+    opts: { notifyAll?: boolean } = {},
+  ): Promise<PushResult> {
     const result: PushResult = { applied: [], rejected: [], hlc: '' };
     let last: bigint | null = null;
     for (const m of mutations) {
       try {
         const seq = await this.apply(auth, m);
         result.applied.push({ mutationId: m.mutationId, seq: seq.toString() });
+        await this.events.emitAsync('sync.applied', {
+          ownerId: auth.userId,
+          entity: m.entity,
+          entityId: m.entityId,
+          op: m.op,
+        } satisfies SyncApplied);
         if (last === null || seq > last) last = seq;
       } catch (e) {
         if (!(e instanceof Rejected)) throw e;
@@ -35,7 +69,11 @@ export class SyncService {
     }
     result.hlc = this.clock.tick();
     if (last !== null)
-      await this.realtime.toUser(auth.userId, { type: 'sync.changed', seq: last.toString() }, auth.deviceId);
+      await this.realtime.toUser(
+        auth.userId,
+        { type: 'sync.changed', seq: last.toString() },
+        opts.notifyAll ? undefined : auth.deviceId,
+      );
     return result;
   }
 
