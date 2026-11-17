@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:orvyn/app/calendar.dart';
 import 'package:orvyn/app/app.dart';
 import 'package:orvyn/app/lock.dart';
 import 'package:orvyn/app/state.dart';
@@ -123,6 +124,7 @@ class AppHarness {
   final auth = FakeAuthenticator();
   final pusher = RecordingPusher();
   DateTime now = DateTime(2026, 11, 16, 9, 30);
+  final opened = <Uri>[];
 
   /// Starts already signed in (a stored refresh token the fake server accepts).
   void signedInAs(Map<String, dynamic> user) {
@@ -147,6 +149,10 @@ class AppHarness {
           pusherProvider.overrideWithValue(pusher),
           authenticatorProvider.overrideWithValue(auth),
           clockProvider.overrideWithValue(() => now),
+          urlOpenerProvider.overrideWithValue((u) async {
+            opened.add(u);
+            return true;
+          }),
         ],
         child: const OrvynApp(),
       ),

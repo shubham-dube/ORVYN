@@ -160,6 +160,7 @@ void main() {
     await settle(tester);
     expect(find.text('Welcome back'), findsOneWidget);
     expect(h.server.count('POST /auth/sign-out'), 1);
+    await finish(tester);
   });
 
   testWidgets('app lock: locked at launch, unlocks with the device check', (tester) async {

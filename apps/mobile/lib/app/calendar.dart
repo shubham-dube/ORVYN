@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rrule/rrule.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../sync/sync_client.dart';
 import 'state.dart';
@@ -335,4 +336,56 @@ class CalendarActions {
     unawaited(sync.sync().catchError((Object _) {}));
     return r;
   }
+}
+
+// ------------------------------------------------------------------ connected accounts (D15)
+
+class CalendarAccount {
+  CalendarAccount(this.raw);
+  final Map<String, dynamic> raw;
+  String get id => raw['id'] as String;
+  String get email => raw['email'] as String;
+  bool get needsReconnect => raw['status'] == 'needs_reconnect';
+  DateTime? get lastSyncedAt =>
+      raw['lastSyncedAt'] == null ? null : DateTime.parse(raw['lastSyncedAt'] as String).toLocal();
+}
+
+final calendarAccountsProvider = FutureProvider.autoDispose<List<CalendarAccount>>(
+  (ref) async {
+    final rows = await ref.watch(apiProvider).get<List<dynamic>>('/calendar/accounts');
+    return [for (final r in rows.cast<Map<String, dynamic>>()) CalendarAccount(r)];
+  },
+  retry: (_, _) => null, // offline or refused: say so; the person can pull to refresh
+);
+
+/// Opens a page outside the app (Google's consent screen); replaced in tests.
+final urlOpenerProvider = Provider<Future<bool> Function(Uri)>(
+  (_) =>
+      (u) => launchUrl(u, mode: LaunchMode.externalApplication),
+);
+
+extension CalendarAccountActions on CalendarActions {
+  /// Starts connecting a Google account in the browser; Google sends the person back to ORVYN's settings page.
+  Future<void> connectGoogle({String? hint}) async {
+    final r = await ref
+        .read(apiProvider)
+        .post<Map<String, dynamic>>(
+          '/calendar/google/start${hint == null ? '' : '?hint=${Uri.encodeQueryComponent(hint)}'}',
+        );
+    await ref.read(urlOpenerProvider)(Uri.parse(r['url'] as String));
+  }
+
+  Future<void> disconnect(String accountId) async {
+    await ref.read(apiProvider).delete<Map<String, dynamic>>('/calendar/accounts/$accountId');
+    ref.invalidate(calendarAccountsProvider);
+    unawaited(sync.sync().catchError((Object _) {}));
+  }
+
+  Future<void> syncNow(String accountId) async {
+    await ref.read(apiProvider).post<Map<String, dynamic>>('/calendar/accounts/$accountId/sync');
+    ref.invalidate(calendarAccountsProvider);
+    unawaited(sync.sync().catchError((Object _) {}));
+  }
+
+  Future<void> setCalendar(String id, Map<String, dynamic> fields) => _then(sync.upsert(todayCalendar, fields, id: id));
 }

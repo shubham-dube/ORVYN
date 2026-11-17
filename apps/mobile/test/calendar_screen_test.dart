@@ -146,4 +146,50 @@ void main() {
     expect(find.text('Set your working hours first'), findsOneWidget);
     await finish(tester);
   });
+
+  testWidgets('Settings → Calendars: accounts, show a calendar, connect another, disconnect', (tester) async {
+    final h = AppHarness()..signedInAs(userJson(ent: ['today']));
+    final b = FakeSyncBackend()..attach(h.server);
+    var accounts = [
+      {'id': 'a1', 'provider': 'google', 'email': 'asha@gmail.test', 'status': 'active', 'lastSyncedAt': null},
+      {'id': 'a2', 'provider': 'google', 'email': 'asha@work.test', 'status': 'needs_reconnect', 'lastSyncedAt': null},
+    ];
+    h.server.on('GET /calendar/accounts', (_) => accounts);
+    h.server.on('POST /calendar/google/start', (r) => {'url': 'https://accounts.google.test/auth?x=1'});
+    h.server.on('DELETE /calendar/accounts/a1', (_) {
+      accounts = accounts.where((a) => a['id'] != 'a1').toList();
+      return {'ok': true};
+    });
+    seed(b, 'today.calendar', 'c1', {'name': 'Asha', 'provider': 'google', 'accountId': 'a1', 'visible': true});
+    seed(b, 'today.calendar', 'c2', {
+      'name': 'Holidays in India',
+      'provider': 'google',
+      'accountId': 'a1',
+      'visible': false,
+      'writable': false,
+    });
+    await h.pump(tester);
+    await tester.tap(find.bySemanticsLabel('Settings'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('asha@gmail.test'), 300, scrollable: find.byType(Scrollable).first);
+    expect(find.text('Holidays in India'), findsOneWidget);
+    expect(find.text('View only'), findsOneWidget);
+    expect(find.text('Google stopped accepting this connection.'), findsOneWidget);
+
+    await tapIt(
+      tester,
+      find.descendant(of: find.widgetWithText(OrvSwitchRow, 'Holidays in India'), matching: find.byType(Switch)),
+    );
+    expect(b.rows['today.calendar/c2']!['visible'], true);
+
+    await tapIt(tester, find.text('Connect another Google account'));
+    expect(h.opened.single.host, 'accounts.google.test');
+
+    await tapIt(tester, find.byTooltip('Disconnect asha@gmail.test'));
+    await tester.tap(find.text('Disconnect'));
+    await settle(tester);
+    expect(find.text('asha@gmail.test'), findsNothing);
+    expect(find.text('asha@work.test'), findsOneWidget);
+    await finish(tester);
+  });
 }

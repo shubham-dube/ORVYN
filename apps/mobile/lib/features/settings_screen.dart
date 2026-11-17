@@ -6,7 +6,9 @@ import '../app/lock.dart';
 import '../app/platform.dart';
 import '../app/notifications.dart';
 import '../app/state.dart';
+import '../app/calendar.dart';
 import '../app/today_settings.dart';
+import '../core/api.dart';
 
 import 'package:go_router/go_router.dart';
 
@@ -41,6 +43,7 @@ class SettingsScreen extends ConsumerWidget {
         _Notifications(),
         SizedBox(height: 14),
         _TodayEntry(),
+        _Calendars(),
         _Security(),
       ],
     );
@@ -444,6 +447,109 @@ class _TodayEntry extends ConsumerWidget {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Settings → Calendars (D15): every Google account the person connected, each calendar shown or hidden.
+class _Calendars extends ConsumerWidget {
+  const _Calendars();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(sessionProvider);
+    if (s is! SignedIn || !s.me.can('today')) return const SizedBox.shrink();
+    final l = context.orv;
+    final accounts = ref.watch(calendarAccountsProvider);
+    final calendars = ref.watch(calendarsProvider).value ?? const <CalendarItem>[];
+    final actions = ref.read(calendarActionsProvider);
+    final toaster = Toaster.of(context);
+    Future<void> connect([String? hint]) async {
+      try {
+        await actions.connectGoogle(hint: hint);
+      } on ApiError catch (e) {
+        toaster.show(
+          e.code == 'google_not_configured'
+              ? 'Google Calendar isn’t set up on this server yet'
+              : 'Couldn’t start connecting',
+          tone: ToastTone.danger,
+        );
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: _Section(
+        title: 'Calendars',
+        line: 'Connect as many Google accounts as you use. Changes go both ways; pick which calendars show.',
+        children: [
+          ...switch (accounts) {
+            AsyncData(:final value) => [
+              for (final a in value) ...[
+                Row(
+                  children: [
+                    Icon(LucideIcons.calendarDays, size: 18, color: l.accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(a.email, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                    if (a.needsReconnect)
+                      OrvButton(label: 'Reconnect', small: true, onPressed: () => connect(a.email))
+                    else
+                      IconButton(
+                        tooltip: 'Sync ${a.email} now',
+                        icon: Icon(LucideIcons.refreshCw, size: 18, color: l.c.muted),
+                        onPressed: () => actions.syncNow(a.id).catchError((Object _) {}),
+                      ),
+                    IconButton(
+                      tooltip: 'Disconnect ${a.email}',
+                      icon: Icon(LucideIcons.unplug, size: 18, color: l.c.muted),
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (c) => AlertDialog(
+                            title: Text('Disconnect ${a.email}?'),
+                            content: const Text('Its calendars leave ORVYN on every device.'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Keep')),
+                              TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Disconnect')),
+                            ],
+                          ),
+                        );
+                        if (ok == true) await actions.disconnect(a.id);
+                      },
+                    ),
+                  ],
+                ),
+                if (a.needsReconnect)
+                  Text(
+                    'Google stopped accepting this connection.',
+                    style: OrvText.muted(l).copyWith(color: l.c.danger),
+                  ),
+                for (final c in calendars.where((c) => c.accountId == a.id))
+                  Padding(
+                    padding: const EdgeInsets.only(left: 26),
+                    child: OrvSwitchRow(
+                      label: c.name,
+                      subtitle: c.writable ? null : 'View only',
+                      value: c.visible,
+                      onChanged: (v) => actions.setCalendar(c.id, {'visible': v}),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+              ],
+            ],
+            AsyncError() => [Text('Couldn’t load your calendars.', style: OrvText.muted(l))],
+            _ => [const SizedBox(height: 24)],
+          },
+          OrvButton(
+            label: (accounts.value?.isNotEmpty ?? false)
+                ? 'Connect another Google account'
+                : 'Connect a Google account',
+            icon: LucideIcons.plus,
+            onPressed: connect,
+          ),
+        ],
       ),
     );
   }
