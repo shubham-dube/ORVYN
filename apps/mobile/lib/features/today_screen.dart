@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/state.dart';
 import '../app/today.dart';
+import '../app/smart_add.dart';
 import '../app/today_settings.dart';
 import 'today_settings_screen.dart' show LeadTimesEditor;
 import '../design/controls.dart';
@@ -67,34 +68,78 @@ enum _When { today, tomorrow, someday }
 class _QuickAddState extends ConsumerState<_QuickAdd> {
   final _c = TextEditingController();
   _When _when = _When.today;
+  ParsedTask? _parsed;
+  String _parsedFor = '';
+  final _literal = <List<int>>[];
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.addListener(_onText);
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _c.dispose();
     super.dispose();
+  }
+
+  void _onText() {
+    final text = _c.text;
+    // a removed chip only counts while its words are still where they were
+    _literal.removeWhere((r) => r[1] > text.length);
+    _debounce?.cancel();
+    if (text.trim().length < 2) {
+      if (_parsed != null) setState(() => _parsed = null);
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 250), _parse);
+  }
+
+  Future<void> _parse() async {
+    final text = _c.text;
+    final p = await parseOnline(ref, text, [..._literal]);
+    if (!mounted || _c.text != text) return;
+    setState(() {
+      _parsed = p;
+      _parsedFor = text;
+    });
   }
 
   Future<void> _add() async {
     final title = _c.text.trim();
     if (title.isEmpty) return;
     final now = ref.read(clockProvider)();
-    final due = switch (_when) {
+    final fallback = switch (_when) {
       _When.today => dayKey(now),
       _When.tomorrow => dayKey(now.add(const Duration(days: 1))),
       _When.someday => null,
     };
     unawaited(HapticFeedback.lightImpact());
-    await ref.read(todayActionsProvider).add(title, dueDate: due);
+    final p = _parsedFor == _c.text ? _parsed : null; // offline or not parsed yet: the words as typed
+    if (p != null) {
+      await ref.read(todayActionsProvider).addParsed(p.fields(fallback), newProject: p.projectName);
+    } else {
+      await ref.read(todayActionsProvider).add(title, dueDate: fallback);
+    }
     _c.clear();
+    _literal.clear();
+    setState(() => _parsed = null);
   }
 
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
+    final loc = MaterialLocalizations.of(context);
+    final p = _parsedFor == _c.text ? _parsed : null;
+    final hasDay = p != null && (p.dueAt != null || p.dueDate != null);
     return Glass(
       level: GlassLevel.float,
       padding: const EdgeInsets.fromLTRB(14, 6, 8, 10),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
@@ -108,7 +153,7 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
                   onSubmitted: (_) => _add(),
                   style: OrvText.body(l).copyWith(fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: 'Add a task…',
+                    hintText: 'Add a task… “kal shaam 6 baje call mom”',
                     hintStyle: OrvText.body(l).copyWith(color: l.c.faint, fontSize: 16),
                     border: InputBorder.none,
                   ),
@@ -116,27 +161,66 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
               ),
             ],
           ),
+          if (p != null && p.spans.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 28, bottom: 6),
+              child: Semantics(
+                container: true,
+                label: 'Understood',
+                explicitChildNodes: true,
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('“${p.title}”', style: OrvText.muted(l).copyWith(fontSize: 12)),
+                    for (final s in p.spans)
+                      InputChip(
+                        visualDensity: VisualDensity.compact,
+                        label: Text(
+                          chipLabel(
+                            s,
+                            p,
+                            (d) => loc.formatShortMonthDay(d),
+                            (t) => loc.formatTimeOfDay(TimeOfDay.fromDateTime(t)),
+                          ),
+                        ),
+                        labelStyle: OrvText.muted(l)
+                            .copyWith(color: l.accent, fontWeight: FontWeight.w600, fontSize: 12),
+                        side: BorderSide(color: l.accent.withValues(alpha: 0.4)),
+                        backgroundColor: l.accent.withValues(alpha: 0.10),
+                        deleteButtonTooltipMessage: 'Not a ${s.kind}: “${s.text}”',
+                        onDeleted: () {
+                          _literal.add([s.start, s.end]);
+                          _parse();
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
           Row(
             children: [
-              for (final w in _When.values)
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(switch (w) {
-                      _When.today => 'Today',
-                      _When.tomorrow => 'Tomorrow',
-                      _When.someday => 'Someday',
-                    }),
-                    selected: _when == w,
-                    onSelected: (_) => setState(() => _when = w),
-                    showCheckmark: false,
-                    selectedColor: l.accent.withValues(alpha: 0.16),
-                    side: BorderSide(color: _when == w ? l.accent : l.c.edge),
-                    labelStyle: OrvText.muted(l)
-                        .copyWith(color: _when == w ? l.accent : l.c.muted, fontWeight: FontWeight.w600),
-                    backgroundColor: Colors.transparent,
+              if (!hasDay)
+                for (final w in _When.values)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ChoiceChip(
+                      label: Text(switch (w) {
+                        _When.today => 'Today',
+                        _When.tomorrow => 'Tomorrow',
+                        _When.someday => 'Someday',
+                      }),
+                      selected: _when == w,
+                      onSelected: (_) => setState(() => _when = w),
+                      showCheckmark: false,
+                      selectedColor: l.accent.withValues(alpha: 0.16),
+                      side: BorderSide(color: _when == w ? l.accent : l.c.edge),
+                      labelStyle: OrvText.muted(l)
+                          .copyWith(color: _when == w ? l.accent : l.c.muted, fontWeight: FontWeight.w600),
+                      backgroundColor: Colors.transparent,
+                    ),
                   ),
-                ),
               const Spacer(),
               OrvButton(label: 'Add', small: true, variant: ButtonVariant.primary, onPressed: _add),
             ],

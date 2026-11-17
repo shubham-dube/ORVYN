@@ -23,6 +23,7 @@
     "@nestjs/platform-ws": "^11.2.10",
     "@nestjs/websockets": "^11.2.10",
     "@orvyn/contracts": "workspace:*",
+    "@orvyn/today-parse": "workspace:*",
     "@sentry/node": "^10.78.0",
     "@simplewebauthn/server": "^13.3.3",
     "bullmq": "^5.81.5",

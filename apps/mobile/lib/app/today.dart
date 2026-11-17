@@ -109,6 +109,13 @@ class TodayActions {
   Future<String> add(String title, {String? dueDate, String source = 'typed'}) =>
       _then(sync.upsert(todayTask, {'title': title, 'dueDate': dueDate, 'source': source}));
 
+  /// A task from a parse; an unknown @project is created on the way.
+  Future<String> addParsed(Map<String, dynamic> fields, {String? newProject, String source = 'typed'}) async {
+    final f = {...fields, 'source': source};
+    if (newProject != null) f['projectId'] = await sync.upsert(todayProject, {'name': newProject});
+    return _then(sync.upsert(todayTask, f));
+  }
+
   Future<void> complete(String id, bool done) =>
       _then(sync.upsert(todayTask, {'completedAt': done ? now().toUtc().toIso8601String() : null}, id: id));
 

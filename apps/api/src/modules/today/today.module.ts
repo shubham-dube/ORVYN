@@ -10,6 +10,7 @@ import {
 import { and, eq, isNull } from 'drizzle-orm';
 import { Rejected, SyncRegistry } from '../sync/sync.registry';
 import { tableEntity } from '../sync/table-entity';
+import { TodayController } from './today.controller';
 import { todayProjects, todaySettings, todayTasks } from './today.schema';
 
 /** Today (spec 0002): projects and tasks as synced entities behind the `today` feature switch. */
@@ -59,5 +60,5 @@ class TodayEntities implements OnModuleInit {
   }
 }
 
-@Module({ providers: [TodayEntities] })
+@Module({ providers: [TodayEntities], controllers: [TodayController] })
 export class TodayModule {}

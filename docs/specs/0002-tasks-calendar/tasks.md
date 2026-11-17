@@ -16,9 +16,10 @@
 
 ## M2 — natural language
 
-- [ ] packages/today-parse + 200 fixtures (≥ 97%), Indian conventions
-- [ ] api `/today/parse` (+ cheap-model fallback via the ai module, budgeted)
-- [ ] chips UI on web and Android
+- [x] packages/today-parse + 205 fixtures (99.0% exact; the 2 misses are recorded ambiguities), Indian conventions + Hinglish
+- [x] api `/today/parse` (the person's zone and projects; removed chips read literally)
+- [ ] cheap-model fallback for phrases the rules leave unexplained — waits for the `ai` module (not built yet); rules are at 99%
+- [x] chips UI on web (local parse, offline) and Android (server parse; offline saves the words as typed); Orb / Ctrl-K too
 
 ## M3 — reminders
 

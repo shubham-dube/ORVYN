@@ -74,3 +74,48 @@ test('the command bar turns anything typed into a task, from any page', async ({
   await page.getByRole('link', { name: 'Today' }).first().click();
   await expect(page.getByRole('list', { name: 'Today' }).getByText('Renew passport')).toBeVisible();
 });
+
+test('type naturally: chips show what was understood, and removing one keeps the words', async ({ page }) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/today');
+  const add = page.getByLabel('New task');
+
+  await add.fill('dentist fri 11 for 45m !!');
+  const chips = page.getByRole('list', { name: 'Understood' });
+  await expect(chips.getByText('45 min')).toBeVisible();
+  await expect(chips.getByText('Medium')).toBeVisible();
+  await expect(chips.getByText(/Fri/)).toBeVisible();
+  await expect(page.getByText('“Dentist”')).toBeVisible();
+  await add.press('Enter');
+  await expect(page.getByRole('button', { name: 'Dentist' })).toBeVisible();
+  await expect(page.getByLabel('Medium priority')).toBeVisible();
+
+  // "Friday" here is part of the name, not a date
+  await add.fill('book Friday show tickets');
+  await expect(page.getByText('“Book show tickets”')).toBeVisible();
+  await page.getByRole('button', { name: 'Not a date: “Friday”' }).click();
+  await expect(chips).toHaveCount(0);
+  await add.press('Enter');
+  await expect(page.getByRole('list', { name: 'Today' }).getByText('Book Friday show tickets')).toBeVisible();
+
+  // a new @project is created on the way
+  await add.fill('plan beds @garden every saturday');
+  await expect(chips.getByText('garden (new project)')).toBeVisible();
+  await expect(chips.getByText('every Sat')).toBeVisible();
+  await add.press('Enter');
+  await page.getByRole('button', { name: 'Plan beds' }).click();
+  await expect(page.getByLabel('Project')).toHaveValue(/.+/);
+  await expect(page.getByLabel('Project').locator('option:checked')).toHaveText('garden');
+});
+
+test('the command bar reads naturally too', async ({ page }) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/today');
+  await page.getByRole('button', { name: /Ask or do anything/ }).click();
+  await page.getByRole('combobox', { name: 'Command' }).fill('pay rent every 1st');
+  const option = page.getByRole('option', { name: /Add “Pay rent”/ });
+  await expect(option).toContainText('every month on the 1st');
+  await option.click();
+  await expect(page.getByRole('list', { name: 'Upcoming' }).getByText('Pay rent')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Pay rent .* repeats/ })).toBeVisible();
+});

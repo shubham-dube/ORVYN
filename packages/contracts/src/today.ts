@@ -217,3 +217,17 @@ export function effectiveReminders(
   }
   return task.dueAt || task.scheduledStart ? { before: defaults.timed, at: [] } : { before: [], at: [] };
 }
+
+// ------------------------------------------------------------------ natural language (spec 0002 M2)
+
+export const ParseRequest = z.object({
+  text: z.string().min(1).max(500),
+  /** defaults to the person's Today time zone */
+  timeZone: z.string().min(1).max(64).optional(),
+  /** chips the person removed: [start, end) ranges to read literally */
+  literal: z
+    .array(z.tuple([z.number().int().min(0).max(500), z.number().int().min(0).max(500)]))
+    .max(20)
+    .optional(),
+});
+export type ParseRequest = z.infer<typeof ParseRequest>;

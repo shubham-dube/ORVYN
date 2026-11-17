@@ -138,6 +138,84 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('type naturally: the server reads it, chips show it, offline still works', (tester) async {
+    final h = AppHarness()..signedInAs(userJson(ent: ['today']));
+    final backend = FakeSyncBackend()..attach(h.server);
+    final parses = <Map<String, dynamic>>[];
+    h.server.on('POST /today/parse', (r) {
+      final body = Map<String, dynamic>.from(r.body as Map);
+      parses.add(body);
+      final literal = body['literal'] as List?;
+      if (literal != null && literal.isNotEmpty) {
+        return {
+          'title': 'Book Friday show tickets',
+          'dueDate': null,
+          'dueAt': null,
+          'priority': 0,
+          'tags': <String>[],
+          'spans': <dynamic>[],
+        };
+      }
+      if ((body['text'] as String).startsWith('book')) {
+        return {
+          'title': 'Book show tickets', 'dueDate': '2026-11-20', 'dueAt': null, 'priority': 0, 'tags': <String>[], //
+          'spans': [
+            {'kind': 'date', 'text': 'Friday', 'start': 5, 'end': 11},
+          ],
+        };
+      }
+      return {
+        'title': 'Dentist', 'dueDate': null, 'dueAt': '2026-11-20T05:30:00.000Z', 'durationMin': 45, 'priority': 2, //
+        'tags': <String>[], 'rrule': null, 'projectId': null, 'projectName': null,
+        'spans': [
+          {'kind': 'date', 'text': 'fri', 'start': 8, 'end': 11},
+          {'kind': 'time', 'text': '11', 'start': 12, 'end': 14},
+          {'kind': 'duration', 'text': 'for 45m', 'start': 15, 'end': 22},
+          {'kind': 'priority', 'text': '!!', 'start': 23, 'end': 25},
+        ],
+      };
+    });
+    await h.pump(tester);
+    await tester.tap(find.bySemanticsLabel('Today'));
+    await settle(tester);
+
+    await tester.enterText(find.byKey(const Key('quick-add')), 'dentist fri 11 for 45m !!');
+    await tester.pump(const Duration(milliseconds: 300));
+    await settle(tester);
+    expect(find.text('45 min'), findsOneWidget);
+    expect(find.text('Medium'), findsOneWidget);
+    expect(find.text('“Dentist”'), findsOneWidget);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester, 20);
+    final dentist = backend.rows.values.firstWhere((r) => r['title'] == 'Dentist');
+    expect([dentist['dueAt'], dentist['durationMin'], dentist['priority']], ['2026-11-20T05:30:00.000Z', 45, 2]);
+
+    // removing a chip asks again with that part read literally
+    await tester.enterText(find.byKey(const Key('quick-add')), 'book Friday show tickets');
+    await tester.pump(const Duration(milliseconds: 300));
+    await settle(tester);
+    await tester.tap(find.byTooltip('Not a date: “Friday”'));
+    await settle(tester);
+    expect(parses.last['literal'], [
+      [5, 11],
+    ]);
+    expect(find.text('“Book Friday show tickets”'), findsNothing); // no chips left → no preview line
+
+    // offline: the words are saved as typed, on the chosen day
+    h.server.on('POST /today/parse', (_) => const Reply(503));
+    await tester.enterText(find.byKey(const Key('quick-add')), 'water plants tomorrow');
+    await tester.pump(const Duration(milliseconds: 300));
+    await settle(tester);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await settle(tester, 20);
+    expect(
+      backend.rows.values.any((r) => r['title'] == 'water plants tomorrow' && r['dueDate'] == '2026-11-16'),
+      isTrue,
+    );
+    await tester.pump(const Duration(seconds: 2));
+    await finish(tester);
+  });
+
   testWidgets('no Today switch, no Today tab', (tester) async {
     final h = AppHarness()..signedInAs(userJson(ent: ['chat']));
     await h.pump(tester);

@@ -193,3 +193,39 @@ describe('Today settings: one record per person, theirs to change (D16, D17)', (
     expect(odd.body.rejected[0].reason).toBe('settings id must be your own id');
   });
 });
+
+describe('POST /today/parse (for Android)', () => {
+  it("uses the person's projects and returns chips", async () => {
+    const project = v7();
+    await push(phone, [up('today.project', project, { name: 'Garden' }, clockA.tick())]);
+    const r = await call<any>(h, 'POST', '/today/parse', {
+      token: phone.accessToken,
+      body: { text: 'water roses @garden every day 7am #plants' },
+    });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({
+      title: 'Water roses',
+      rrule: 'FREQ=DAILY',
+      projectId: project,
+      tags: ['plants'],
+    });
+    expect(r.body.dueAt).toMatch(/T01:30:00\.000Z$/); // 07:00 in Asia/Kolkata
+    expect(r.body.spans.map((s: { kind: string }) => s.kind)).toEqual(
+      expect.arrayContaining(['repeat', 'time', 'project', 'tag']),
+    );
+  });
+
+  it("never sees someone else's projects, and needs the Today switch", async () => {
+    const r = await call<any>(h, 'POST', '/today/parse', {
+      token: friend.accessToken,
+      body: { text: 'x @garden' },
+    });
+    expect([r.body.projectId, r.body.projectName]).toEqual([null, 'garden']);
+    expect(
+      (await call(h, 'POST', '/today/parse', { token: guest.accessToken, body: { text: 'x' } })).status,
+    ).toBe(403);
+    expect(
+      (await call(h, 'POST', '/today/parse', { token: phone.accessToken, body: { text: '' } })).status,
+    ).toBe(400);
+  });
+});

@@ -8,7 +8,7 @@ const config: NextConfig = {
   outputFileTracingRoot: join(__dirname, '../..'),
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ['@orvyn/contracts', '@orvyn/design-tokens', '@orvyn/sync-client'],
+  transpilePackages: ['@orvyn/contracts', '@orvyn/design-tokens', '@orvyn/sync-client', '@orvyn/today-parse'],
   async headers() {
     return [
       {

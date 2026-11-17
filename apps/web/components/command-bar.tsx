@@ -22,6 +22,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
 import { useSession } from '@/lib/session';
+import { chipLabel, smartParse, taskFields } from '@/lib/smart-task';
 import { localDay, useTodayMaybe } from '@/lib/today';
 
 interface Command {
@@ -91,19 +92,32 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
   const today = useTodayMaybe();
   const typed = q.trim();
   const matches = commands.filter((c) => c.label.toLowerCase().includes(typed.toLowerCase()));
-  // anything typed can become a task (natural-language dates arrive with the parser, spec 0002 M2)
-  const filtered: Command[] =
+  // anything typed can become a task, read naturally ("dentist fri 11 for 45m")
+  const parsed =
     today && typed.length > 1
+      ? smartParse(typed, { timeZone: today.settings?.timeZone, projects: today.projects, literal: [] })
+      : null;
+  const understood = parsed
+    ? parsed.spans.map((sp) => chipLabel(sp, parsed, today!.projects)).join(' · ')
+    : '';
+  const filtered: Command[] =
+    today && parsed
       ? [
           ...matches,
           {
             id: 'add-task',
-            label: `Add “${typed}” to Today`,
-            hint: 'Task',
+            label: `Add “${parsed.title}”${understood ? '' : ' to Today'}`,
+            hint: understood || 'Task',
             icon: <CirclePlus size={16} />,
             run: async () => {
-              await today.addTask({ title: typed, dueDate: localDay(new Date()), source: 'orb' });
-              toast({ title: 'Added to Today', body: typed, tone: 'success' });
+              const fields = taskFields(parsed, localDay(new Date()));
+              if (parsed.projectName) fields.projectId = await today.addProject(parsed.projectName);
+              await today.addTask({ ...fields, source: 'orb' });
+              toast({
+                title: 'Added to Today',
+                body: [parsed.title, understood].filter(Boolean).join(' — '),
+                tone: 'success',
+              });
             },
           },
         ]

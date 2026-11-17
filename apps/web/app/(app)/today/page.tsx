@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
+import { TaskChips } from '@/components/task-chips';
 import { LeadTimes, leadLabel } from '@/components/today-settings';
+import { smartParse, taskFields } from '@/lib/smart-task';
 import { groupTasks, localDay, taskMoment, useToday } from '@/lib/today';
 
 export default function TodayPage() {
@@ -91,54 +93,87 @@ function TodayView() {
 }
 
 function QuickAdd() {
-  const { addTask } = useToday();
+  const { addTask, addProject, projects, settings } = useToday();
   const [title, setTitle] = useState('');
   const [when, setWhen] = useState<'inbox' | 'today' | 'tomorrow'>('today');
+  // chips the person removed: those words are read literally (kept with their text, so edits elsewhere don't shift them)
+  const [literal, setLiteral] = useState<{ range: [number, number]; text: string }[]>([]);
   const input = useRef<HTMLInputElement>(null);
+  const liveKey = JSON.stringify(
+    literal.filter((l) => title.slice(l.range[0], l.range[1]) === l.text).map((l) => l.range),
+  );
+  const parsed = useMemo(
+    () =>
+      title.trim()
+        ? smartParse(title, {
+            timeZone: settings?.timeZone,
+            projects,
+            literal: JSON.parse(liveKey) as [number, number][],
+          })
+        : null,
+    [title, settings?.timeZone, projects, liveKey],
+  );
+  const hasDay = !!(parsed?.dueAt || parsed?.dueDate);
   const submit = async () => {
-    const t = title.trim();
-    if (!t) return;
+    if (!parsed) return;
     const d = new Date();
     if (when === 'tomorrow') d.setDate(d.getDate() + 1);
-    await addTask({ title: t, dueDate: when === 'inbox' ? null : localDay(d), source: 'typed' });
+    const fields = taskFields(parsed, when === 'inbox' ? null : localDay(d));
+    if (parsed.projectName) fields.projectId = await addProject(parsed.projectName);
+    await addTask({ ...fields, source: 'typed' });
     setTitle('');
+    setLiteral([]);
     input.current?.focus();
   };
   return (
-    <Glass level="float" className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
-      <form
-        className="flex flex-1 items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-      >
-        <Plus size={18} className="ml-1 shrink-0 text-orv-accent" aria-hidden />
-        <input
-          ref={input}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Add a task…"
-          aria-label="New task"
-          maxLength={500}
-          className="h-11 flex-1 bg-transparent text-[16px] outline-none placeholder:text-orv-faint"
-        />
-      </form>
-      <div className="flex items-center gap-2">
-        <Segmented<'inbox' | 'today' | 'tomorrow'>
-          label="When"
-          value={when}
-          onChange={setWhen}
-          options={[
-            { value: 'today', label: 'Today' },
-            { value: 'tomorrow', label: 'Tomorrow' },
-            { value: 'inbox', label: 'Someday' },
-          ]}
-        />
-        <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!title.trim()}>
-          Add
-        </Button>
+    <Glass level="float" className="flex flex-col gap-2 p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <form
+          className="flex flex-1 items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+        >
+          <Plus size={18} className="ml-1 shrink-0 text-orv-accent" aria-hidden />
+          <input
+            ref={input}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Add a task… try “dentist fri 11 for 45m” or “kal shaam 6 baje call mom”"
+            aria-label="New task"
+            maxLength={500}
+            className="h-11 flex-1 bg-transparent text-[16px] outline-none placeholder:text-orv-faint"
+          />
+        </form>
+        <div className="flex items-center gap-2">
+          {!hasDay ? (
+            <Segmented<'inbox' | 'today' | 'tomorrow'>
+              label="When"
+              value={when}
+              onChange={setWhen}
+              options={[
+                { value: 'today', label: 'Today' },
+                { value: 'tomorrow', label: 'Tomorrow' },
+                { value: 'inbox', label: 'Someday' },
+              ]}
+            />
+          ) : null}
+          <Button variant="primary" size="sm" onClick={() => void submit()} disabled={!title.trim()}>
+            Add
+          </Button>
+        </div>
       </div>
+      {parsed?.spans.length ? (
+        <div className="flex items-center gap-2 pl-7">
+          <span className="text-[12px] text-orv-muted">“{parsed.title}”</span>
+          <TaskChips
+            parsed={parsed}
+            projects={projects}
+            onRemove={(range, text) => setLiteral((l) => [...l, { range, text }])}
+          />
+        </div>
+      ) : null}
     </Glass>
   );
 }

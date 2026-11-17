@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/notifications.dart';
 import '../app/state.dart';
+import '../app/smart_add.dart';
 import '../app/today.dart';
 import '../design/controls.dart';
 import '../design/glass.dart';
@@ -211,7 +212,13 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     if (typed.length > 1 && session is SignedIn && session.me.can('today')) {
       shown.add(
         _Command('Add “$typed” to Today', LucideIcons.circlePlus, () async {
-          await ref.read(todayActionsProvider).add(typed, dueDate: dayKey(ref.read(clockProvider)()), source: 'orb');
+          final today = dayKey(ref.read(clockProvider)());
+          final p = await parseOnline(ref, typed, const []);
+          if (p != null) {
+            await ref.read(todayActionsProvider).addParsed(p.fields(today), newProject: p.projectName, source: 'orb');
+          } else {
+            await ref.read(todayActionsProvider).add(typed, dueDate: today, source: 'orb'); // offline: as typed
+          }
           toaster.show('Added to Today', body: typed, tone: ToastTone.success);
         }, hint: 'Task'),
       );
