@@ -233,3 +233,76 @@ export const ParseRequest = z.object({
     .optional(),
 });
 export type ParseRequest = z.infer<typeof ParseRequest>;
+
+// ------------------------------------------------------------------ calendars and events (M4, M5)
+
+export const TODAY_CALENDAR = 'today.calendar';
+export const TODAY_EVENT = 'today.event';
+
+/**
+ * A calendar: ORVYN's own, or one from a connected Google account (D15: several accounts per person). Google
+ * calendars are created and kept current by the server; the person only switches them on/off and recolours them.
+ */
+export const CalendarFields = z.object({
+  name: z.string().trim().min(1).max(120),
+  provider: z.enum(['orvyn', 'google']).default('orvyn'),
+  /** the connected account (calendar_accounts.id) for provider google */
+  accountId: z.string().uuid().nullable().default(null),
+  /** the provider's id for this calendar */
+  externalId: z.string().max(300).nullable().default(null),
+  colour: z.enum(PROJECT_COLOURS).default('sky'),
+  visible: z.boolean().default(true),
+  writable: z.boolean().default(true),
+  /** where new events go when none is chosen */
+  primary: z.boolean().default(false),
+});
+export type CalendarFields = z.infer<typeof CalendarFields>;
+export type Calendar = CalendarFields & { id: string };
+
+/**
+ * An event. Timed events use `start`/`end` (instants); all-day events use `startDate`/`endDate` (end exclusive,
+ * like iCalendar). A repeating event has `rrule` and `exdates` (cancelled occurrences, as the occurrence's ISO
+ * start or its date). A changed occurrence is its own event pointing back with `recurringEventId` +
+ * `originalStart`; expanding the series skips that occurrence.
+ */
+export const EventFields = z.object({
+  title: z.string().trim().min(1).max(500),
+  notes: z.string().max(20_000).default(''),
+  location: z.string().max(500).default(''),
+  allDay: z.boolean().default(false),
+  start: isoDateTime.nullable().default(null),
+  end: isoDateTime.nullable().default(null),
+  startDate: isoDate.nullable().default(null),
+  endDate: isoDate.nullable().default(null),
+  timeZone: timeZone.default('Asia/Kolkata'),
+  rrule: z.string().max(500).nullable().default(null),
+  exdates: z.array(z.string().max(40)).max(1000).default([]),
+  recurringEventId: z.string().uuid().nullable().default(null),
+  originalStart: z.string().max(40).nullable().default(null),
+  /** a cancelled single occurrence of a provider series (kept so it isn't re-created) */
+  cancelled: z.boolean().default(false),
+  calendarId: z.string().uuid().nullable().default(null),
+  /** the provider's ids, set by the server's calendar sync */
+  externalId: z.string().max(1024).nullable().default(null),
+  etag: z.string().max(200).nullable().default(null),
+  /** a task this time block was made from (drag to the river) */
+  taskId: z.string().uuid().nullable().default(null),
+});
+export type EventFields = z.infer<typeof EventFields>;
+export type CalEvent = EventFields & { id: string };
+
+/** Checks the shape rules zod can't express per field (used by the API and the clients' forms). */
+export function eventProblem(e: Partial<EventFields>): string | null {
+  if (e.allDay) {
+    if (!e.startDate || !e.endDate) return 'an all-day event needs a start and end date';
+    if (e.endDate <= e.startDate) return 'an all-day event must end after it starts';
+  } else {
+    if (!e.start || !e.end) return 'an event needs a start and end time';
+    if (Date.parse(e.end) <= Date.parse(e.start)) return 'an event must end after it starts';
+  }
+  return null;
+}
+
+/** POST /today/plan: preview a day plan (nothing is changed until the person accepts). */
+export const PlanRequest = z.object({ date: isoDate });
+export type PlanRequest = z.infer<typeof PlanRequest>;

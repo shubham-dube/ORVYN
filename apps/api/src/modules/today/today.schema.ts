@@ -72,3 +72,62 @@ export const todaySettings = pgTable('today_settings', {
   updatedAt: updatedAt(),
   deletedAt: ts('deleted_at'),
 });
+
+/** Calendars: ORVYN's own, or one per Google calendar the person has switched on (D15). */
+export const todayCalendars = pgTable(
+  'today_calendars',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id').notNull(),
+    name: text('name').notNull(),
+    provider: text('provider').notNull().default('orvyn'),
+    accountId: uuid('account_id'),
+    externalId: text('external_id'),
+    colour: text('colour').notNull().default('sky'),
+    visible: boolean('visible').notNull().default(true),
+    writable: boolean('writable').notNull().default(true),
+    primary: boolean('is_primary').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [index('today_calendars_owner_idx').on(t.ownerId)],
+);
+
+export const todayEvents = pgTable(
+  'today_events',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id').notNull(),
+    title: text('title').notNull(),
+    notes: text('notes').notNull().default(''),
+    location: text('location').notNull().default(''),
+    allDay: boolean('all_day').notNull().default(false),
+    start: ts('start_at'),
+    end: ts('end_at'),
+    startDate: text('start_date'),
+    endDate: text('end_date'),
+    timeZone: text('time_zone').notNull().default('Asia/Kolkata'),
+    rrule: text('rrule'),
+    exdates: text('exdates')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    recurringEventId: uuid('recurring_event_id'),
+    originalStart: text('original_start'),
+    cancelled: boolean('cancelled').notNull().default(false),
+    calendarId: uuid('calendar_id'),
+    externalId: text('external_id'),
+    etag: text('etag'),
+    taskId: uuid('task_id'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [
+    index('today_events_owner_start_idx').on(t.ownerId, t.start),
+    index('today_events_owner_cal_idx').on(t.ownerId, t.calendarId),
+    // one row per provider event per calendar: reconnects never duplicate (AC3)
+    index('today_events_cal_ext_idx').on(t.calendarId, t.externalId),
+  ],
+);

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Inject, Injectable } from '@nestjs/common';
 import { compareHlc, Hlc, type Mutation, type PullResponse, type PushResult } from '@orvyn/contracts';
@@ -13,6 +14,9 @@ import { changeLog, syncMeta } from './sync.schema';
 const PAGE = 500;
 
 /** Emitted after each accepted change; modules react (e.g. Today reschedules reminders). */
+/** Set while the server writes on the person's behalf, so entities can allow what only the server may do. */
+export const serverOrigin = new AsyncLocalStorage<true>();
+
 /** The device id recorded for changes the server makes on its own (roll-forward, calendar sync). */
 export const SERVER_DEVICE = '00000000-0000-0000-0000-000000000000';
 
@@ -44,7 +48,9 @@ export class SyncService {
     changes: Pick<Mutation, 'entity' | 'entityId' | 'op' | 'fields'>[],
   ): Promise<PushResult> {
     const mutations = changes.map((c) => ({ ...c, mutationId: newId(), hlc: this.clock.tick() }));
-    return this.push({ ...auth, deviceId: auth.deviceId }, mutations, { notifyAll: true });
+    return serverOrigin.run(true, () =>
+      this.push({ ...auth, deviceId: auth.deviceId }, mutations, { notifyAll: true }),
+    );
   }
 
   async push(

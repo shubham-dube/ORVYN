@@ -618,4 +618,4 @@ function cleanTitle(t: string): string {
   return /^[a-z]+(?=[\s:,.;]|$)/.test(out) ? out[0]!.toUpperCase() + out.slice(1) : out;
 }
 
-export { instantAt, wallIn } from './time';
+export { addDays, instantAt, wallIn } from './time';

@@ -1,5 +1,6 @@
 import { type TimeRange, workingRangesOn, type TodaySettingsFields } from '@orvyn/contracts';
 import { instantAt, wallIn } from '@orvyn/today-parse';
+import { expandEvents } from './events';
 
 /**
  * "Plan my day" (spec 0002 AC6): deterministic, no AI. Events and timed tasks are fixed walls; tasks go only into
@@ -154,4 +155,23 @@ export function planDay(input: {
     });
   }
   return { date, placed, unplaced, hours };
+}
+
+/** The planner fed straight from synced records: the day's timed events (repeats expanded) are the walls. */
+export function planFromRecords(input: {
+  date: string;
+  now: Date;
+  settings: Parameters<typeof planDay>[0]['settings'];
+  events: Parameters<typeof expandEvents>[0];
+  hiddenCalendars?: ReadonlySet<string>;
+  tasks: PlanTask[];
+}): Plan {
+  const tz = input.settings.timeZone;
+  const [Y, M, D] = input.date.split('-').map(Number) as [number, number, number];
+  const from = instantAt(Y, M, D, 0, 0, tz);
+  const to = new Date(from.getTime() + 36 * 3_600_000);
+  const busy = expandEvents(input.events, from, to, input.hiddenCalendars)
+    .filter((i) => !i.allDay)
+    .map((i) => ({ title: i.title, start: i.start!, end: i.end! }));
+  return planDay({ date: input.date, now: input.now, settings: input.settings, busy, tasks: input.tasks });
 }
