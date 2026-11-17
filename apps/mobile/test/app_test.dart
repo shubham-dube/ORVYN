@@ -154,6 +154,8 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300)); // clear of the dock
+    await settle(tester);
     await tester.tap(find.text('Sign out of this phone'));
     await settle(tester);
     expect(find.text('Welcome back'), findsOneWidget);

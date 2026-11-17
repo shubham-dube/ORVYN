@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
+import { LeadTimes, leadLabel } from '@/components/today-settings';
 import { groupTasks, localDay, taskMoment, useToday } from '@/lib/today';
 
 export default function TodayPage() {
@@ -277,7 +278,7 @@ function TaskRow({
 }
 
 function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
-  const { updateTask, removeTask, projects } = useToday();
+  const { updateTask, removeTask, projects, settings } = useToday();
   const [draft, setDraft] = useState<Task | null>(task);
   useEffect(() => setDraft(task), [task]);
   if (!draft)
@@ -302,6 +303,7 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
       dueAt: draft.dueAt,
       priority: draft.priority,
       projectId: draft.projectId,
+      reminders: draft.reminders,
     });
     onClose();
   };
@@ -370,6 +372,11 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
             </select>
           ) : null}
         </div>
+        <TaskReminders
+          draft={draft}
+          defaults={settings?.reminders.timed ?? null}
+          onChange={(reminders) => setDraft({ ...draft, reminders })}
+        />
         <Field label="Notes">
           {(id) => (
             <textarea
@@ -399,5 +406,58 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
         </div>
       </form>
     </Sheet>
+  );
+}
+
+/** A task's own reminders override the person's defaults (D17). */
+function TaskReminders({
+  draft,
+  defaults,
+  onChange,
+}: {
+  draft: Task;
+  defaults: number[] | null;
+  onChange(r: Task['reminders']): void;
+}) {
+  const own = (draft.reminders ?? []).flatMap((r) => (r.kind === 'before' ? [r.minutes] : []));
+  const custom = draft.reminders !== null;
+  if (!draft.dueAt && !draft.scheduledStart) {
+    return (
+      <p className="text-small text-orv-muted">
+        Reminders: this task has only a day, so it follows your “things with only a date” setting.
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <Segmented<'defaults' | 'custom'>
+        label="Reminders"
+        value={custom ? 'custom' : 'defaults'}
+        onChange={(v) =>
+          onChange(
+            v === 'custom' ? (defaults ?? []).map((minutes) => ({ kind: 'before' as const, minutes })) : null,
+          )
+        }
+        options={[
+          { value: 'defaults', label: 'My defaults' },
+          { value: 'custom', label: 'Just for this task' },
+        ]}
+      />
+      {custom ? (
+        <LeadTimes
+          label="Remind me"
+          value={own}
+          onChange={(m) => onChange(m.map((minutes) => ({ kind: 'before' as const, minutes })))}
+        />
+      ) : (
+        <p className="text-small text-orv-muted">
+          {defaults
+            ? defaults.length
+              ? defaults.map(leadLabel).join(', ')
+              : 'No reminder'
+            : 'Set your defaults in Settings → Today.'}
+        </p>
+      )}
+    </div>
   );
 }

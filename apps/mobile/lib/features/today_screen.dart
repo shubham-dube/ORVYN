@@ -7,6 +7,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/state.dart';
 import '../app/today.dart';
+import '../app/today_settings.dart';
+import 'today_settings_screen.dart' show LeadTimesEditor;
 import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
@@ -326,6 +328,14 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
   late TimeOfDay? _time = widget.task.dueAt == null ? null : TimeOfDay.fromDateTime(widget.task.dueAt!);
   late int _priority = widget.task.priority;
 
+  /// null = my defaults (D17); [] = none for this task; else these minutes-before
+  late List<int>? _reminders = widget.task.data['reminders'] == null
+      ? null
+      : [
+          for (final r in (widget.task.data['reminders'] as List).cast<Map<String, dynamic>>())
+            if (r['kind'] == 'before') (r['minutes'] as num).toInt(),
+        ];
+
   @override
   void dispose() {
     _title.dispose();
@@ -350,6 +360,11 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
       'dueDate': dueDate,
       'dueAt': dueAt,
       'priority': _priority,
+      'reminders': _reminders == null
+          ? null
+          : [
+              for (final m in _reminders!) {'kind': 'before', 'minutes': m},
+            ],
     });
     if (mounted) Navigator.of(context).pop();
   }
@@ -430,6 +445,14 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
             ],
           ),
           const SizedBox(height: 12),
+          if (_time != null)
+            _taskReminders(l)
+          else
+            Text(
+              'Reminders: this task has only a day, so it follows your “things with only a date” setting.',
+              style: OrvText.muted(l),
+            ),
+          const SizedBox(height: 12),
           OrvField(label: 'Notes', controller: _notes),
           const SizedBox(height: 16),
           Row(
@@ -450,6 +473,44 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _taskReminders(OrvLook l) {
+    final defaults = ((ref.watch(todaySettingsProvider).value?['reminders'] as Map?)?['timed'] as List?)?.cast<int>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 6,
+          children: [
+            ChoiceChip(
+              label: const Text('My defaults'),
+              selected: _reminders == null,
+              showCheckmark: false,
+              onSelected: (_) => setState(() => _reminders = null),
+            ),
+            ChoiceChip(
+              label: const Text('Just for this task'),
+              selected: _reminders != null,
+              showCheckmark: false,
+              onSelected: (_) => setState(() => _reminders = [...?defaults]),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (_reminders != null)
+          LeadTimesEditor(label: 'Remind me', value: _reminders!, onChanged: (v) => setState(() => _reminders = v))
+        else
+          Text(
+            defaults == null
+                ? 'Set your defaults in Settings → Working hours & reminders.'
+                : defaults.isEmpty
+                ? 'No reminder'
+                : defaults.map(leadLabel).join(', '),
+            style: OrvText.muted(l),
+          ),
+      ],
     );
   }
 }

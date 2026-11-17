@@ -96,18 +96,21 @@ final projectNamesProvider = StreamProvider<Map<String, String>>((ref) {
       .map((rows) => {for (final r in rows) r.id: (r.data['name'] as String?) ?? ''});
 });
 
-final todayActionsProvider = Provider<TodayActions>((ref) => TodayActions(ref.watch(syncProvider)));
+final todayActionsProvider = Provider<TodayActions>(
+  (ref) => TodayActions(ref.watch(syncProvider), ref.watch(clockProvider)),
+);
 
 /// Writes land locally at once (offline-first) and sync in the background.
 class TodayActions {
-  TodayActions(this.sync);
+  TodayActions(this.sync, this.now);
   final SyncClient sync;
+  final DateTime Function() now;
 
   Future<String> add(String title, {String? dueDate, String source = 'typed'}) =>
       _then(sync.upsert(todayTask, {'title': title, 'dueDate': dueDate, 'source': source}));
 
   Future<void> complete(String id, bool done) =>
-      _then(sync.upsert(todayTask, {'completedAt': done ? DateTime.now().toUtc().toIso8601String() : null}, id: id));
+      _then(sync.upsert(todayTask, {'completedAt': done ? now().toUtc().toIso8601String() : null}, id: id));
 
   Future<void> update(String id, Map<String, dynamic> fields) => _then(sync.upsert(todayTask, fields, id: id));
 

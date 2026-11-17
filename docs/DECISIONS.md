@@ -4,13 +4,16 @@ The founder's choices (newest first). Technical consequences are recorded as ADR
 
 ## Decided — 2026-11-16 (second round)
 
-| #   | Topic   | Decision                                                                                                                                                                                        |
-| --- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D10 | Design  | **Aurora Glass approved** (design/principles.md and the linked canvas).                                                                                                                         |
-| D11 | Domain  | `orvyn.dubey.app` (web) and `api.orvyn.dubey.app` (API).                                                                                                                                        |
-| D12 | Sign-in | Passkeys + Google + email one-time code (ADR-0003 accepted).                                                                                                                                    |
-| D13 | AI      | Separate OpenRouter key and daily budget for ORVYN; Fable for Drop, Assistant and IPO analyst.                                                                                                  |
-| D14 | Hosting | Hetzner + Cloudflare + R2 accepted in principle; the account and keys come **after the foundation is built**. Until then everything runs and is tested locally/in CI; deploy scripts are ready. |
+| #   | Topic     | Decision                                                                                                                                                                                        |
+| --- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D10 | Design    | **Aurora Glass approved** (design/principles.md and the linked canvas).                                                                                                                         |
+| D11 | Domain    | `orvyn.dubey.app` (web) and `api.orvyn.dubey.app` (API).                                                                                                                                        |
+| D12 | Sign-in   | Passkeys + Google + email one-time code (ADR-0003 accepted).                                                                                                                                    |
+| D13 | AI        | Separate OpenRouter key and daily budget for ORVYN; Fable for Drop, Assistant and IPO analyst.                                                                                                  |
+| D14 | Hosting   | Hetzner + Cloudflare + R2 accepted in principle; the account and keys come **after the foundation is built**. Until then everything runs and is tested locally/in CI; deploy scripts are ready. |
+| D15 | Calendars | **Several Google accounts per person**, each with its own calendars switched on/off (Today spec Q1).                                                                                            |
+| D16 | Planning  | **Working hours are the person's own and change over time**: weekly patterns that start on a chosen date, plus one-off day overrides; nothing hard-coded (Q2).                                  |
+| D17 | Reminders | **Reminder defaults are settings the person controls** (timed items, date-only items, digest or not); every task can override them (Q3).                                                        |
 
 ## Decided — 2026-11-16
 

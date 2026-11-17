@@ -1,4 +1,4 @@
-import { Hlc, type SessionResponse } from '@orvyn/contracts';
+import { Hlc, type SessionResponse, STARTING_SETTINGS } from '@orvyn/contracts';
 import { v7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { call, type Harness, OWNER, signIn, startApp } from './harness';
@@ -140,5 +140,56 @@ describe('Today: projects and tasks over sync', () => {
     await push(phone, [task(id, { title: 'Back' })]);
     last = ((await pullAll(laptop)).changes as any[]).filter((c) => c.entityId === id).at(-1);
     expect([last.op, last.data.title]).toEqual(['upsert', 'Back']);
+  });
+});
+
+describe('Today settings: one record per person, theirs to change (D16, D17)', () => {
+  const settings = (s: SessionResponse, id: string, fields: Record<string, unknown>, clock = clockA) =>
+    push(s, [up('today.settings', id, fields, clock.tick())]);
+
+  it('saves the full settings once, then single fields', async () => {
+    const id = phone.user.id;
+    expect((await settings(phone, id, STARTING_SETTINGS)).body.rejected).toEqual([]);
+    const later = {
+      validFrom: '2026-12-01',
+      week: { mon: [{ start: '09:00', end: '17:00' }], tue: [], wed: [], thu: [], fri: [], sat: [], sun: [] },
+    };
+    await settings(phone, id, { patterns: [...STARTING_SETTINGS.patterns, later] });
+    await settings(
+      laptop,
+      id,
+      { reminders: { timed: [1440, 10], dateOnly: { mode: 'none' }, overdueInDigest: false } },
+      clockB,
+    );
+    const row = ((await pullAll(laptop)).changes as any[])
+      .filter((c) => c.entity === 'today.settings')
+      .at(-1).data;
+    expect(row.patterns).toHaveLength(2);
+    expect(row.reminders).toEqual({ timed: [1440, 10], dateOnly: { mode: 'none' }, overdueInDigest: false });
+    expect(row.bufferMin).toBe(15);
+  });
+
+  it('refuses a first save that is incomplete, and invalid values', async () => {
+    const r = await settings(friend, friend.user.id, { bufferMin: 10 }, clockF);
+    expect(r.body.rejected).toHaveLength(1);
+    const overlap = await settings(phone, phone.user.id, {
+      dayOverrides: [
+        {
+          date: '2026-12-24',
+          ranges: [
+            { start: '10:00', end: '13:00' },
+            { start: '12:00', end: '14:00' },
+          ],
+        },
+      ],
+    });
+    expect(overlap.body.rejected[0].reason).toMatch(/overlap/);
+  });
+
+  it("nobody can write someone else's settings", async () => {
+    const r = await settings(friend, phone.user.id, STARTING_SETTINGS, clockF);
+    expect(r.body.applied).toHaveLength(0);
+    const odd = await settings(friend, v7(), STARTING_SETTINGS, clockF);
+    expect(odd.body.rejected[0].reason).toBe('settings id must be your own id');
   });
 });

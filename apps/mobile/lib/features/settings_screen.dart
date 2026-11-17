@@ -6,6 +6,10 @@ import '../app/lock.dart';
 import '../app/platform.dart';
 import '../app/notifications.dart';
 import '../app/state.dart';
+import '../app/today_settings.dart';
+
+import 'package:go_router/go_router.dart';
+
 import '../core/models.dart';
 import '../design/controls.dart';
 import '../design/glass.dart';
@@ -36,6 +40,7 @@ class SettingsScreen extends ConsumerWidget {
         SizedBox(height: 14),
         _Notifications(),
         SizedBox(height: 14),
+        _TodayEntry(),
         _Security(),
       ],
     );
@@ -388,6 +393,58 @@ class _Security extends ConsumerWidget {
           onPressed: () => ref.read(sessionProvider.notifier).signOut(),
         ),
       ],
+    );
+  }
+}
+
+/// Settings → Today (only for people who have Today).
+class _TodayEntry extends ConsumerWidget {
+  const _TodayEntry();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(sessionProvider);
+    if (s is! SignedIn || !s.me.can('today')) return const SizedBox.shrink();
+    final l = context.orv;
+    final configured = ref.watch(todaySettingsProvider).value != null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: OrvModule(
+        module: 'today',
+        child: Builder(
+          builder: (context) {
+            return Semantics(
+              button: true,
+              label: 'Working hours and reminders',
+              excludeSemantics: true,
+              child: GestureDetector(
+                onTap: () => context.push('/settings/today'),
+                child: Glass(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Icon(LucideIcons.calendarClock, color: context.orv.accent),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Working hours & reminders', style: OrvText.heading(l)),
+                            Text(
+                              configured ? 'Yours — change them any time' : 'Not set up yet',
+                              style: OrvText.muted(l),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronRight, color: l.c.muted),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }

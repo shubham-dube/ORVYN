@@ -18,7 +18,7 @@ export function tableEntity(o: {
   schema: ZodObject<ZodRawShape>;
   timestamps?: readonly string[];
   /** cross-row checks (e.g. a referenced project must be yours); throw Rejected to refuse */
-  validate?: (tx: Tx, ownerId: string, fields: Row) => Promise<void>;
+  validate?: (tx: Tx, ownerId: string, fields: Row, id: string) => Promise<void>;
 }): SyncEntity {
   const fields = Object.keys(o.schema.shape);
   const tsFields = new Set(o.timestamps ?? []);
@@ -47,7 +47,7 @@ export function tableEntity(o: {
       return r ? toClient(r as Row) : null;
     },
     async write(tx, ownerId, id, f, isNew) {
-      await o.validate?.(tx, ownerId, f);
+      await o.validate?.(tx, ownerId, f, id);
       const values = toDb(f);
       if (isNew) {
         // a re-created (previously deleted) id is revived, never taken over from another owner

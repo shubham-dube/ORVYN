@@ -7,6 +7,7 @@ import '../features/gallery_screen.dart';
 import '../features/home_screen.dart';
 import '../features/settings_screen.dart';
 import '../features/today_screen.dart';
+import '../features/today_settings_screen.dart';
 import '../features/shell.dart';
 import '../features/sign_in_screen.dart';
 import 'state.dart';
@@ -47,6 +48,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/join/:token',
         builder: (_, s) => JoinScreen(token: s.pathParameters['token']!),
       ),
+      GoRoute(path: '/settings/today', builder: (_, _) => const TodaySettingsScreen()),
       GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
       ShellRoute(
         builder: (context, state, child) => Shell(location: state.matchedLocation, child: child),

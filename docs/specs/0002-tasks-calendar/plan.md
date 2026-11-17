@@ -25,7 +25,7 @@ without the package (Android uses it online; offline it saves the raw text as an
 
 ## Reminders
 
-A `today.reminder` scheduler in the worker: on every task/event change, (re)compute the next fire time and keep
+Reminder defaults come from the person's `today.settings` (D17), a task's own `reminders` override them. A `today.reminder` scheduler in the worker: on every task/event change, (re)compute the next fire time and keep
 one BullMQ delayed job per item (idempotent job id). Firing sends through notify with actions
 `done`, `snooze_10m`, `later_today`, `tomorrow_9`; actions arrive as API calls from any device and update the
 task through the sync engine, so every device converges (AC2). Morning digest for date-only tasks (Q3).

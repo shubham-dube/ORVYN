@@ -23,6 +23,8 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { enablePush, pushPermission, pushSupported } from '@/lib/push';
 import { useSession } from '@/lib/session';
+import { useTodayMaybe } from '@/lib/today';
+import { TodaySettings } from '@/components/today-settings';
 import type { ThemePreference } from '@/lib/theme';
 
 interface PasskeyView {
@@ -40,6 +42,7 @@ export default function SettingsPage() {
       <Profile />
       <Appearance />
       <Notifications />
+      <TodaySection />
       <Security />
     </div>
   );
@@ -402,4 +405,8 @@ function Row({
       ) : null}
     </div>
   );
+}
+
+function TodaySection() {
+  return useTodayMaybe() ? <TodaySettings /> : null;
 }

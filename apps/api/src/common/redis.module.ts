@@ -16,6 +16,11 @@ class RedisCloser implements OnApplicationShutdown {
 export class RateLimiter {
   constructor(@Inject(REDIS) private readonly redis: Redis) {}
 
+  /** True when `key` has already used up `limit` hits in its current window (does not count this call). */
+  async over(key: string, limit: number): Promise<boolean> {
+    return Number((await this.redis.get(`rl:${key}`)) ?? 0) >= limit;
+  }
+
   /** Fixed-window limit. Returns false when the caller is over the limit. */
   async hit(key: string, limit: number, windowSeconds: number): Promise<boolean> {
     const k = `rl:${key}`;

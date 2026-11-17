@@ -22,6 +22,20 @@
       "when": 1794853620289,
       "tag": "0002_today_tasks_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794920631105,
+      "tag": "0003_today_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794920789896,
+      "tag": "0004_task_reminders_nullable",
+      "breakpoints": true
     }
   ]
 }

@@ -42,7 +42,7 @@ export const todayTasks = pgTable(
     durationMin: integer('duration_min'),
     timeZone: text('time_zone').notNull().default('Asia/Kolkata'),
     rrule: text('rrule'),
-    reminders: jsonb('reminders').$type<unknown[]>().notNull().default([]),
+    reminders: jsonb('reminders').$type<unknown[] | null>(),
     completedAt: ts('completed_at'),
     source: text('source').notNull().default('typed'),
     createdAt: createdAt(),
@@ -56,3 +56,18 @@ export const todayTasks = pgTable(
     index('today_tasks_owner_sched_idx').on(t.ownerId, t.scheduledStart),
   ],
 );
+
+/** One row per person: id = the person's id (D16, D17). */
+export const todaySettings = pgTable('today_settings', {
+  id: uuid('id').primaryKey(),
+  ownerId: uuid('owner_id').notNull().unique(),
+  patterns: jsonb('patterns').$type<unknown[]>().notNull(),
+  dayOverrides: jsonb('day_overrides').$type<unknown[]>().notNull(),
+  bufferMin: integer('buffer_min').notNull(),
+  noPlanAfter: text('no_plan_after').notNull(),
+  timeZone: text('time_zone').notNull(),
+  reminders: jsonb('reminders').$type<Record<string, unknown>>().notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  deletedAt: ts('deleted_at'),
+});

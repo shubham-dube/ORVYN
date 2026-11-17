@@ -8,6 +8,12 @@
 - [x] mobile: Inbox + Today list, quick add from the Orb, task sheet, offline, haptics
 - [x] e2e: create on web → appears on phone (live API test) and vice versa; airplane-mode edit merges
 
+## M1.5 — the person's own settings (D15–D17)
+
+- [x] contracts + api: `today.settings` (one per person) with working patterns, day overrides, buffers, reminder defaults; tests
+- [x] pure helpers (TS + Dart, same cases): working ranges for a date, effective reminders for a task
+- [x] web + Android: Settings → Today (patterns from a date, day overrides, reminder defaults); per-task reminders in the task sheet
+
 ## M2 — natural language
 
 - [ ] packages/today-parse + 200 fixtures (≥ 97%), Indian conventions

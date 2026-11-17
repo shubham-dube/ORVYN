@@ -16,7 +16,7 @@ const base: Task = {
   durationMin: null,
   timeZone: 'Asia/Kolkata',
   rrule: null,
-  reminders: [],
+  reminders: null,
   completedAt: null,
   source: 'typed',
 };

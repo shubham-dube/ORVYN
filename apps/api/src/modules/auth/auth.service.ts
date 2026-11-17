@@ -82,7 +82,9 @@ export class AuthService {
     invite: string | undefined,
     client: ClientInfo,
   ) {
-    if (!(await this.limiter.hit(`verify:${email}:${client.ip}`, 10, 15 * 60))) throw tooMany();
+    // only wrong attempts count: signing in on several devices from one network must keep working
+    const guessKey = `verify:${email}:${client.ip}`;
+    if (await this.limiter.over(guessKey, 10)) throw tooMany();
     const [row] = await this.db
       .select()
       .from(emailCodes)
@@ -92,6 +94,7 @@ export class AuthService {
       .orderBy(desc(emailCodes.createdAt))
       .limit(1);
     const fail = async (reason: string) => {
+      await this.limiter.hit(guessKey, 10, 15 * 60);
       await this.audit.record('auth.sign_in_failed', {
         targetType: 'email',
         targetId: email,

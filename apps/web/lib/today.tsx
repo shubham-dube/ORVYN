@@ -7,7 +7,9 @@ import {
   type PushResult,
   type Task,
   TODAY_PROJECT,
+  TODAY_SETTINGS,
   TODAY_TASK,
+  type TodaySettingsFields,
 } from '@orvyn/contracts';
 import { SyncClient } from '@orvyn/sync-client';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -21,6 +23,9 @@ interface TodayCtx {
   tasks: Task[];
   projects: Project[];
   pending: number;
+  /** null until the person has saved their own (D16, D17) */
+  settings: TodaySettingsFields | null;
+  saveSettings(fields: Partial<TodaySettingsFields>): Promise<void>;
   addTask(fields: Partial<Task> & { title: string }): Promise<string>;
   updateTask(id: string, fields: Partial<Task>): Promise<void>;
   removeTask(id: string): Promise<void>;
@@ -35,6 +40,7 @@ export function TodayProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [pending, setPending] = useState(0);
+  const [settings, setSettings] = useState<TodaySettingsFields | null>(null);
   const [ready, setReady] = useState(false);
   const toast = useToast();
 
@@ -53,16 +59,18 @@ export function TodayProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     if (!client) return;
-    const [t, p, n] = await Promise.all([
+    const [t, p, n, st] = await Promise.all([
       client.list<Task>(TODAY_TASK),
       client.list<Project>(TODAY_PROJECT),
       client.pendingCount(),
+      me ? client.get<TodaySettingsFields>(TODAY_SETTINGS, me.id) : null,
     ]);
+    setSettings(st);
     setTasks(t);
     setProjects(p);
     setPending(n);
     setReady(true);
-  }, [client]);
+  }, [client, me]);
 
   useEffect(() => {
     if (!client) return;
@@ -101,12 +109,15 @@ export function TodayProvider({ children }: { children: ReactNode }) {
       tasks,
       projects,
       pending,
+      settings,
+      saveSettings: (fields) =>
+        write(async () => void (await client!.upsert(TODAY_SETTINGS, fields, me!.id))),
       addTask: (fields) => write(() => client!.upsert(TODAY_TASK, { ...fields })),
       updateTask: (id, fields) => write(async () => void (await client!.upsert(TODAY_TASK, fields, id))),
       removeTask: (id) => write(() => client!.remove(TODAY_TASK, id)),
       addProject: (name) => write(() => client!.upsert(TODAY_PROJECT, { name })),
     };
-  }, [client, ready, tasks, projects, pending]);
+  }, [client, me, ready, tasks, projects, pending, settings]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

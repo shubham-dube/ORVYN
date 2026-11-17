@@ -37,11 +37,19 @@ quick capture on all surfaces, offline.
 - [ ] AC5 Time River renders 60 fps on a mid-range Android; reduced-motion variant.
 - [ ] AC6 Auto-plan never moves fixed events, respects working hours and buffers; explains each placement.
 
-## Open questions (proposed defaults — founder to confirm; the code makes each one a setting)
+## Decisions (founder, 2026-11-17)
 
-- **Q1 Google Calendar accounts:** start with one Google account per person (multi-account later, same model);
-  show every calendar you own or have write access to; subscribed/read-only calendars off by default.
-- **Q2 Working hours for auto-plan:** Mon–Fri 10:00–19:00 (Asia/Kolkata), 15-minute buffers, nothing planned
-  after 22:00; editable per person.
-- **Q3 Default reminders:** timed tasks and events 10 minutes before; tasks with only a date get a 09:00
-  morning digest instead of one ping each; overdue tasks roll into the next digest.
+- **Q1 → D15 Several Google accounts.** Connect any number of Google accounts; each account's calendars are listed
+  and switched on/off one by one; a new event can be saved to any writable calendar; disconnecting one account
+  removes only its events. Default for newly found calendars: on if you own or can edit it, off if read-only.
+- **Q2 → D16 Working hours are yours, and they change.** A person keeps _working patterns_: each is a week
+  (per weekday, any number of ranges, or none) that applies **from a chosen date** until the next pattern starts —
+  so "from 1 Dec I work 9–5" is set once, ahead of time, and history stays correct. One-off **day overrides**
+  ("Sat 20 Dec 10–14", "Mon off") beat the pattern. Buffers and "don't plan after" are settings too. Auto-plan
+  always reads what applies on the day it plans. No defaults are assumed beyond an editable starting pattern.
+- **Q3 → D17 Reminders are settings.** Defaults for timed items (any number of lead times, e.g. 1 day + 10 min),
+  for date-only items (a digest at a time you choose, a ping at a time you choose, or nothing), and whether overdue
+  items roll into the digest. Every task can override with its own reminders.
+
+These live in one synced `today.settings` record per person (edited on any device, used by the server's reminder
+scheduler and auto-plan).

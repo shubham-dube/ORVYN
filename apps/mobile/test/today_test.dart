@@ -102,6 +102,42 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('working hours and reminders: nothing assumed until saved, then mine to change', (tester) async {
+    final h = AppHarness()..signedInAs(userJson(ent: ['today']));
+    final backend = FakeSyncBackend()..attach(h.server);
+    await h.pump(tester);
+    await tester.tap(find.bySemanticsLabel('Settings'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('Not set up yet'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.bySemanticsLabel('Working hours and reminders'));
+    await settle(tester);
+    expect(find.textContaining('nothing is used until you save'), findsOneWidget);
+    expect(backend.rows, isEmpty);
+
+    await tester.scrollUntilVisible(find.text('Use these settings'), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Use these settings'));
+    await settle(tester, 20);
+    final saved = backend.rows['today.settings/$ownerId']!;
+    expect(saved['bufferMin'], 15);
+    expect((saved['patterns'] as List), hasLength(1));
+    expect(saved['reminders'], containsPair('timed', [10]));
+
+    // change a default: no reminder for timed things
+    await tester.scrollUntilVisible(
+      find.byTooltip('Remove 10 min before'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byTooltip('Remove 10 min before'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('Save'), 400, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.text('Save'));
+    await settle(tester, 20);
+    expect((backend.rows['today.settings/$ownerId']!['reminders'] as Map)['timed'], isEmpty);
+    await tester.pump(const Duration(seconds: 6));
+    await finish(tester);
+  });
+
   testWidgets('no Today switch, no Today tab', (tester) async {
     final h = AppHarness()..signedInAs(userJson(ent: ['chat']));
     await h.pump(tester);

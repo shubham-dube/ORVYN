@@ -1,9 +1,16 @@
 import { Injectable, Module, type OnModuleInit } from '@nestjs/common';
-import { ProjectFields, TaskFields, TODAY_PROJECT, TODAY_TASK } from '@orvyn/contracts';
+import {
+  ProjectFields,
+  TaskFields,
+  TODAY_PROJECT,
+  TODAY_SETTINGS,
+  TODAY_TASK,
+  TodaySettingsFields,
+} from '@orvyn/contracts';
 import { and, eq, isNull } from 'drizzle-orm';
 import { Rejected, SyncRegistry } from '../sync/sync.registry';
 import { tableEntity } from '../sync/table-entity';
-import { todayProjects, todayTasks } from './today.schema';
+import { todayProjects, todaySettings, todayTasks } from './today.schema';
 
 /** Today (spec 0002): projects and tasks as synced entities behind the `today` feature switch. */
 @Injectable()
@@ -11,6 +18,18 @@ class TodayEntities implements OnModuleInit {
   constructor(private readonly registry: SyncRegistry) {}
 
   onModuleInit(): void {
+    this.registry.register(
+      tableEntity({
+        name: TODAY_SETTINGS,
+        entitlement: 'today',
+        table: todaySettings,
+        schema: TodaySettingsFields,
+        // exactly one record per person, addressed by their own id
+        validate: async (_tx, ownerId, _f, id) => {
+          if (id !== ownerId) throw new Rejected('settings id must be your own id');
+        },
+      }),
+    );
     this.registry.register(
       tableEntity({ name: TODAY_PROJECT, entitlement: 'today', table: todayProjects, schema: ProjectFields }),
     );
