@@ -9,3 +9,4 @@ packages/design-tokens/dist
 **/drizzle/meta
 test-results
 playwright-report
+apps/desktop/ui/tokens.css

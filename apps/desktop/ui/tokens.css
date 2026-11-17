@@ -64,22 +64,22 @@
   color-scheme: light;
   --orv-phase: day;
   --orv-base: #eaf3fb;
-  --orv-veil: rgba(245, 250, 255, 0.2);
+  --orv-veil: rgba(245,250,255,0.20);
   --orv-aurora-1: #9ad0ff;
   --orv-aurora-2: #a6f0d8;
   --orv-aurora-3: #c9d8ff;
   --orv-text: #0f1b2a;
   --orv-muted: #475569;
   --orv-faint: #64748b;
-  --orv-glass: rgba(255, 255, 255, 0.52);
-  --orv-glass-strong: rgba(255, 255, 255, 0.66);
-  --orv-field: rgba(255, 255, 255, 0.7);
-  --orv-edge: rgba(255, 255, 255, 0.75);
-  --orv-hairline: rgba(15, 27, 42, 0.1);
-  --orv-track: rgba(15, 27, 42, 0.08);
-  --orv-scrim: rgba(15, 23, 42, 0.18);
-  --orv-shadow: 0 10px 30px rgba(30, 41, 90, 0.12);
-  --orv-shadow-big: 0 24px 60px rgba(30, 41, 90, 0.25);
+  --orv-glass: rgba(255,255,255,0.52);
+  --orv-glass-strong: rgba(255,255,255,0.66);
+  --orv-field: rgba(255,255,255,0.70);
+  --orv-edge: rgba(255,255,255,0.75);
+  --orv-hairline: rgba(15,27,42,0.10);
+  --orv-track: rgba(15,27,42,0.08);
+  --orv-scrim: rgba(15,23,42,0.18);
+  --orv-shadow: 0 10px 30px rgba(30,41,90,0.12);
+  --orv-shadow-big: 0 24px 60px rgba(30,41,90,0.25);
   --orv-success: #047857;
   --orv-warning: #b45309;
   --orv-danger: #b91c1c;
@@ -100,22 +100,22 @@
   color-scheme: light;
   --orv-phase: dawn;
   --orv-base: #fdf0ea;
-  --orv-veil: rgba(255, 248, 244, 0.25);
+  --orv-veil: rgba(255,248,244,0.25);
   --orv-aurora-1: #ffb59e;
   --orv-aurora-2: #f7a1c4;
   --orv-aurora-3: #ffd98a;
   --orv-text: #0f1b2a;
   --orv-muted: #475569;
   --orv-faint: #64748b;
-  --orv-glass: rgba(255, 255, 255, 0.52);
-  --orv-glass-strong: rgba(255, 255, 255, 0.66);
-  --orv-field: rgba(255, 255, 255, 0.7);
-  --orv-edge: rgba(255, 255, 255, 0.75);
-  --orv-hairline: rgba(15, 27, 42, 0.1);
-  --orv-track: rgba(15, 27, 42, 0.08);
-  --orv-scrim: rgba(15, 23, 42, 0.18);
-  --orv-shadow: 0 10px 30px rgba(30, 41, 90, 0.12);
-  --orv-shadow-big: 0 24px 60px rgba(30, 41, 90, 0.25);
+  --orv-glass: rgba(255,255,255,0.52);
+  --orv-glass-strong: rgba(255,255,255,0.66);
+  --orv-field: rgba(255,255,255,0.70);
+  --orv-edge: rgba(255,255,255,0.75);
+  --orv-hairline: rgba(15,27,42,0.10);
+  --orv-track: rgba(15,27,42,0.08);
+  --orv-scrim: rgba(15,23,42,0.18);
+  --orv-shadow: 0 10px 30px rgba(30,41,90,0.12);
+  --orv-shadow-big: 0 24px 60px rgba(30,41,90,0.25);
   --orv-success: #047857;
   --orv-warning: #b45309;
   --orv-danger: #b91c1c;
@@ -136,22 +136,22 @@
   color-scheme: light;
   --orv-phase: day;
   --orv-base: #eaf3fb;
-  --orv-veil: rgba(245, 250, 255, 0.2);
+  --orv-veil: rgba(245,250,255,0.20);
   --orv-aurora-1: #9ad0ff;
   --orv-aurora-2: #a6f0d8;
   --orv-aurora-3: #c9d8ff;
   --orv-text: #0f1b2a;
   --orv-muted: #475569;
   --orv-faint: #64748b;
-  --orv-glass: rgba(255, 255, 255, 0.52);
-  --orv-glass-strong: rgba(255, 255, 255, 0.66);
-  --orv-field: rgba(255, 255, 255, 0.7);
-  --orv-edge: rgba(255, 255, 255, 0.75);
-  --orv-hairline: rgba(15, 27, 42, 0.1);
-  --orv-track: rgba(15, 27, 42, 0.08);
-  --orv-scrim: rgba(15, 23, 42, 0.18);
-  --orv-shadow: 0 10px 30px rgba(30, 41, 90, 0.12);
-  --orv-shadow-big: 0 24px 60px rgba(30, 41, 90, 0.25);
+  --orv-glass: rgba(255,255,255,0.52);
+  --orv-glass-strong: rgba(255,255,255,0.66);
+  --orv-field: rgba(255,255,255,0.70);
+  --orv-edge: rgba(255,255,255,0.75);
+  --orv-hairline: rgba(15,27,42,0.10);
+  --orv-track: rgba(15,27,42,0.08);
+  --orv-scrim: rgba(15,23,42,0.18);
+  --orv-shadow: 0 10px 30px rgba(30,41,90,0.12);
+  --orv-shadow-big: 0 24px 60px rgba(30,41,90,0.25);
   --orv-success: #047857;
   --orv-warning: #b45309;
   --orv-danger: #b91c1c;
@@ -172,22 +172,22 @@
   color-scheme: dark;
   --orv-phase: dusk;
   --orv-base: #1b1030;
-  --orv-veil: rgba(20, 10, 40, 0.35);
+  --orv-veil: rgba(20,10,40,0.35);
   --orv-aurora-1: #ff8a5b;
   --orv-aurora-2: #8e5bff;
   --orv-aurora-3: #ff5e8a;
   --orv-text: #f1f5ff;
   --orv-muted: #b6c0d8;
   --orv-faint: #94a3b8;
-  --orv-glass: rgba(20, 24, 44, 0.42);
-  --orv-glass-strong: rgba(22, 26, 48, 0.58);
-  --orv-field: rgba(255, 255, 255, 0.07);
-  --orv-edge: rgba(255, 255, 255, 0.12);
-  --orv-hairline: rgba(255, 255, 255, 0.1);
-  --orv-track: rgba(255, 255, 255, 0.1);
-  --orv-scrim: rgba(0, 0, 0, 0.35);
-  --orv-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --orv-shadow-big: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --orv-glass: rgba(20,24,44,0.42);
+  --orv-glass-strong: rgba(22,26,48,0.58);
+  --orv-field: rgba(255,255,255,0.07);
+  --orv-edge: rgba(255,255,255,0.12);
+  --orv-hairline: rgba(255,255,255,0.10);
+  --orv-track: rgba(255,255,255,0.10);
+  --orv-scrim: rgba(0,0,0,0.35);
+  --orv-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  --orv-shadow-big: 0 24px 60px rgba(0,0,0,0.55);
   --orv-success: #6ee7b7;
   --orv-warning: #fcd34d;
   --orv-danger: #fda4af;
@@ -208,22 +208,22 @@
   color-scheme: dark;
   --orv-phase: night;
   --orv-base: #05070f;
-  --orv-veil: rgba(3, 6, 16, 0.35);
+  --orv-veil: rgba(3,6,16,0.35);
   --orv-aurora-1: #1e3a8a;
   --orv-aurora-2: #0e7490;
   --orv-aurora-3: #3b1d7a;
   --orv-text: #f1f5ff;
   --orv-muted: #b6c0d8;
   --orv-faint: #94a3b8;
-  --orv-glass: rgba(20, 24, 44, 0.42);
-  --orv-glass-strong: rgba(22, 26, 48, 0.58);
-  --orv-field: rgba(255, 255, 255, 0.07);
-  --orv-edge: rgba(255, 255, 255, 0.12);
-  --orv-hairline: rgba(255, 255, 255, 0.1);
-  --orv-track: rgba(255, 255, 255, 0.1);
-  --orv-scrim: rgba(0, 0, 0, 0.35);
-  --orv-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  --orv-shadow-big: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --orv-glass: rgba(20,24,44,0.42);
+  --orv-glass-strong: rgba(22,26,48,0.58);
+  --orv-field: rgba(255,255,255,0.07);
+  --orv-edge: rgba(255,255,255,0.12);
+  --orv-hairline: rgba(255,255,255,0.10);
+  --orv-track: rgba(255,255,255,0.10);
+  --orv-scrim: rgba(0,0,0,0.35);
+  --orv-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  --orv-shadow-big: 0 24px 60px rgba(0,0,0,0.55);
   --orv-success: #6ee7b7;
   --orv-warning: #fcd34d;
   --orv-danger: #fda4af;
@@ -240,288 +240,246 @@
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='core'],
-[data-phase='dawn'][data-module='core'] {
+[data-phase='dawn'] [data-module='core'], [data-phase='dawn'][data-module='core'] {
   --orv-accent: #1a56c4;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='core'],
-[data-phase='day'][data-module='core'] {
+[data-phase='day'] [data-module='core'], [data-phase='day'][data-module='core'] {
   --orv-accent: #1a56c4;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='core'],
-[data-phase='dusk'][data-module='core'] {
+[data-phase='dusk'] [data-module='core'], [data-phase='dusk'][data-module='core'] {
   --orv-accent: #7cc4ff;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='core'],
-[data-phase='night'][data-module='core'] {
+[data-phase='night'] [data-module='core'], [data-phase='night'][data-module='core'] {
   --orv-accent: #7cc4ff;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='today'],
-[data-phase='dawn'][data-module='today'] {
+[data-phase='dawn'] [data-module='today'], [data-phase='dawn'][data-module='today'] {
   --orv-accent: #1a56c4;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='today'],
-[data-phase='day'][data-module='today'] {
+[data-phase='day'] [data-module='today'], [data-phase='day'][data-module='today'] {
   --orv-accent: #1a56c4;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='today'],
-[data-phase='dusk'][data-module='today'] {
+[data-phase='dusk'] [data-module='today'], [data-phase='dusk'][data-module='today'] {
   --orv-accent: #7cc4ff;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='today'],
-[data-phase='night'][data-module='today'] {
+[data-phase='night'] [data-module='today'], [data-phase='night'][data-module='today'] {
   --orv-accent: #7cc4ff;
   --orv-accent-from: #3b82f6;
   --orv-accent-to: #06b6d4;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='drop'],
-[data-phase='dawn'][data-module='drop'] {
+[data-phase='dawn'] [data-module='drop'], [data-phase='dawn'][data-module='drop'] {
   --orv-accent: #334155;
   --orv-accent-from: #94a3b8;
   --orv-accent-to: #475569;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='drop'],
-[data-phase='day'][data-module='drop'] {
+[data-phase='day'] [data-module='drop'], [data-phase='day'][data-module='drop'] {
   --orv-accent: #334155;
   --orv-accent-from: #94a3b8;
   --orv-accent-to: #475569;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='drop'],
-[data-phase='dusk'][data-module='drop'] {
+[data-phase='dusk'] [data-module='drop'], [data-phase='dusk'][data-module='drop'] {
   --orv-accent: #e2e8f0;
   --orv-accent-from: #94a3b8;
   --orv-accent-to: #475569;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='drop'],
-[data-phase='night'][data-module='drop'] {
+[data-phase='night'] [data-module='drop'], [data-phase='night'][data-module='drop'] {
   --orv-accent: #e2e8f0;
   --orv-accent-from: #94a3b8;
   --orv-accent-to: #475569;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='money'],
-[data-phase='dawn'][data-module='money'] {
+[data-phase='dawn'] [data-module='money'], [data-phase='dawn'][data-module='money'] {
   --orv-accent: #046c4e;
   --orv-accent-from: #10b981;
   --orv-accent-to: #0ea5e9;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='money'],
-[data-phase='day'][data-module='money'] {
+[data-phase='day'] [data-module='money'], [data-phase='day'][data-module='money'] {
   --orv-accent: #046c4e;
   --orv-accent-from: #10b981;
   --orv-accent-to: #0ea5e9;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='money'],
-[data-phase='dusk'][data-module='money'] {
+[data-phase='dusk'] [data-module='money'], [data-phase='dusk'][data-module='money'] {
   --orv-accent: #6ee7b7;
   --orv-accent-from: #10b981;
   --orv-accent-to: #0ea5e9;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='money'],
-[data-phase='night'][data-module='money'] {
+[data-phase='night'] [data-module='money'], [data-phase='night'][data-module='money'] {
   --orv-accent: #6ee7b7;
   --orv-accent-from: #10b981;
   --orv-accent-to: #0ea5e9;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='library'],
-[data-phase='dawn'][data-module='library'] {
+[data-phase='dawn'] [data-module='library'], [data-phase='dawn'][data-module='library'] {
   --orv-accent: #92400e;
   --orv-accent-from: #f59e0b;
   --orv-accent-to: #f97316;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='library'],
-[data-phase='day'][data-module='library'] {
+[data-phase='day'] [data-module='library'], [data-phase='day'][data-module='library'] {
   --orv-accent: #92400e;
   --orv-accent-from: #f59e0b;
   --orv-accent-to: #f97316;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='library'],
-[data-phase='dusk'][data-module='library'] {
+[data-phase='dusk'] [data-module='library'], [data-phase='dusk'][data-module='library'] {
   --orv-accent: #fcd34d;
   --orv-accent-from: #f59e0b;
   --orv-accent-to: #f97316;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='library'],
-[data-phase='night'][data-module='library'] {
+[data-phase='night'] [data-module='library'], [data-phase='night'][data-module='library'] {
   --orv-accent: #fcd34d;
   --orv-accent-from: #f59e0b;
   --orv-accent-to: #f97316;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='assistant'],
-[data-phase='dawn'][data-module='assistant'] {
+[data-phase='dawn'] [data-module='assistant'], [data-phase='dawn'][data-module='assistant'] {
   --orv-accent: #0d5f59;
   --orv-accent-from: #14b8a6;
   --orv-accent-to: #6366f1;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='assistant'],
-[data-phase='day'][data-module='assistant'] {
+[data-phase='day'] [data-module='assistant'], [data-phase='day'][data-module='assistant'] {
   --orv-accent: #0d5f59;
   --orv-accent-from: #14b8a6;
   --orv-accent-to: #6366f1;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='assistant'],
-[data-phase='dusk'][data-module='assistant'] {
+[data-phase='dusk'] [data-module='assistant'], [data-phase='dusk'][data-module='assistant'] {
   --orv-accent: #5eead4;
   --orv-accent-from: #14b8a6;
   --orv-accent-to: #6366f1;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='assistant'],
-[data-phase='night'][data-module='assistant'] {
+[data-phase='night'] [data-module='assistant'], [data-phase='night'][data-module='assistant'] {
   --orv-accent: #5eead4;
   --orv-accent-from: #14b8a6;
   --orv-accent-to: #6366f1;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='vault'],
-[data-phase='dawn'][data-module='vault'] {
+[data-phase='dawn'] [data-module='vault'], [data-phase='dawn'][data-module='vault'] {
   --orv-accent: #6d28d9;
   --orv-accent-from: #7c3aed;
   --orv-accent-to: #4f46e5;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='vault'],
-[data-phase='day'][data-module='vault'] {
+[data-phase='day'] [data-module='vault'], [data-phase='day'][data-module='vault'] {
   --orv-accent: #6d28d9;
   --orv-accent-from: #7c3aed;
   --orv-accent-to: #4f46e5;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='vault'],
-[data-phase='dusk'][data-module='vault'] {
+[data-phase='dusk'] [data-module='vault'], [data-phase='dusk'][data-module='vault'] {
   --orv-accent: #c4b5fd;
   --orv-accent-from: #7c3aed;
   --orv-accent-to: #4f46e5;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='vault'],
-[data-phase='night'][data-module='vault'] {
+[data-phase='night'] [data-module='vault'], [data-phase='night'][data-module='vault'] {
   --orv-accent: #c4b5fd;
   --orv-accent-from: #7c3aed;
   --orv-accent-to: #4f46e5;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='chat'],
-[data-phase='dawn'][data-module='chat'] {
+[data-phase='dawn'] [data-module='chat'], [data-phase='dawn'][data-module='chat'] {
   --orv-accent: #be123c;
   --orv-accent-from: #f43f5e;
   --orv-accent-to: #fb923c;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='chat'],
-[data-phase='day'][data-module='chat'] {
+[data-phase='day'] [data-module='chat'], [data-phase='day'][data-module='chat'] {
   --orv-accent: #be123c;
   --orv-accent-from: #f43f5e;
   --orv-accent-to: #fb923c;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='chat'],
-[data-phase='dusk'][data-module='chat'] {
+[data-phase='dusk'] [data-module='chat'], [data-phase='dusk'][data-module='chat'] {
   --orv-accent: #fda4af;
   --orv-accent-from: #f43f5e;
   --orv-accent-to: #fb923c;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='chat'],
-[data-phase='night'][data-module='chat'] {
+[data-phase='night'] [data-module='chat'], [data-phase='night'][data-module='chat'] {
   --orv-accent: #fda4af;
   --orv-accent-from: #f43f5e;
   --orv-accent-to: #fb923c;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='ipo'],
-[data-phase='dawn'][data-module='ipo'] {
+[data-phase='dawn'] [data-module='ipo'], [data-phase='dawn'][data-module='ipo'] {
   --orv-accent: #854d0e;
   --orv-accent-from: #eab308;
   --orv-accent-to: #f59e0b;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='ipo'],
-[data-phase='day'][data-module='ipo'] {
+[data-phase='day'] [data-module='ipo'], [data-phase='day'][data-module='ipo'] {
   --orv-accent: #854d0e;
   --orv-accent-from: #eab308;
   --orv-accent-to: #f59e0b;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='ipo'],
-[data-phase='dusk'][data-module='ipo'] {
+[data-phase='dusk'] [data-module='ipo'], [data-phase='dusk'][data-module='ipo'] {
   --orv-accent: #fde047;
   --orv-accent-from: #eab308;
   --orv-accent-to: #f59e0b;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='ipo'],
-[data-phase='night'][data-module='ipo'] {
+[data-phase='night'] [data-module='ipo'], [data-phase='night'][data-module='ipo'] {
   --orv-accent: #fde047;
   --orv-accent-from: #eab308;
   --orv-accent-to: #f59e0b;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dawn'] [data-module='jobs'],
-[data-phase='dawn'][data-module='jobs'] {
+[data-phase='dawn'] [data-module='jobs'], [data-phase='dawn'][data-module='jobs'] {
   --orv-accent: #0b6278;
   --orv-accent-from: #06b6d4;
   --orv-accent-to: #3b82f6;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='day'] [data-module='jobs'],
-[data-phase='day'][data-module='jobs'] {
+[data-phase='day'] [data-module='jobs'], [data-phase='day'][data-module='jobs'] {
   --orv-accent: #0b6278;
   --orv-accent-from: #06b6d4;
   --orv-accent-to: #3b82f6;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='dusk'] [data-module='jobs'],
-[data-phase='dusk'][data-module='jobs'] {
+[data-phase='dusk'] [data-module='jobs'], [data-phase='dusk'][data-module='jobs'] {
   --orv-accent: #67e8f9;
   --orv-accent-from: #06b6d4;
   --orv-accent-to: #3b82f6;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
-[data-phase='night'] [data-module='jobs'],
-[data-phase='night'][data-module='jobs'] {
+[data-phase='night'] [data-module='jobs'], [data-phase='night'][data-module='jobs'] {
   --orv-accent: #67e8f9;
   --orv-accent-from: #06b6d4;
   --orv-accent-to: #3b82f6;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --orv-duration-theme: 0ms;
-  }
+  :root { --orv-duration-theme: 0ms; }
 }

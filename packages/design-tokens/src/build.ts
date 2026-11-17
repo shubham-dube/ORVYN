@@ -5,7 +5,7 @@
  *   dist/tokens.js + tokens.d.ts — typed tokens + helpers for TS apps
  *   dist/orvyn_tokens.dart — the same tokens for Flutter (also written to apps/mobile/lib/design/tokens.g.dart)
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { toDartHex } from './color.js';
@@ -280,21 +280,28 @@ dart.push('}', '');
 writeFileSync(join(out, 'orvyn_tokens.dart'), dart.join('\n'));
 // The Flutter app builds without Node, so it gets a committed copy; CI fails if the copy drifts.
 const mobile = join(root, '..', '..', 'apps', 'mobile', 'lib', 'design');
-mkdirSync(mobile, { recursive: true });
-writeFileSync(join(mobile, 'tokens.g.dart'), dart.join('\n'));
+if (existsSync(join(root, '..', '..', 'apps', 'mobile'))) {
+  mkdirSync(mobile, { recursive: true });
+  writeFileSync(join(mobile, 'tokens.g.dart'), dart.join('\n'));
+}
 // The Windows app's small pages (quick add) are static files: they get a committed copy of the CSS variables.
-writeFileSync(
-  join(root, '..', '..', 'apps', 'desktop', 'ui', 'tokens.css'),
-  readFileSync(join(out, 'tokens.css'), 'utf8'),
-);
+// (Only where that app exists: container images build the web and API without the native apps.)
+const app = (name: string) => existsSync(join(root, '..', '..', 'apps', name));
+if (app('desktop'))
+  writeFileSync(
+    join(root, '..', '..', 'apps', 'desktop', 'ui', 'tokens.css'),
+    readFileSync(join(out, 'tokens.css'), 'utf8'),
+  );
 
 // Native Android views (the home-screen widget) read the same palette as resources: day = light, night = dark.
 const androidRes = join(root, '..', '..', 'apps', 'mobile', 'android', 'app', 'src', 'main', 'res');
 const ax = (c: string) => `#${toDartHex(c).slice(2)}`;
-for (const [dir, phase] of [
-  ['values', 'day'],
-  ['values-night', 'night'],
-] as const) {
+for (const [dir, phase] of !app('mobile')
+  ? []
+  : ([
+      ['values', 'day'],
+      ['values-night', 'night'],
+    ] as const)) {
   const p = T.phases[phase];
   const m = T.modes[p.mode as Mode];
   const a = T.modules.today;
