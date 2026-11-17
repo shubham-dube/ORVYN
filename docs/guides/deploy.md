@@ -59,6 +59,14 @@ Fill: `OWNER_EMAIL`, `POSTGRES_PASSWORD`, `JWT_SECRET`, `TOKEN_PEPPER`, `GLITCHT
 `BACKUP_AGE_RECIPIENT` (the `age1…` key), and VAPID keys (`npx web-push generate-vapid-keys` on your PC).
 Leave `SENTRY_DSN`, `*_HEARTBEAT_URL` empty for now.
 
+Google sign-in and Google Calendar (optional): in the OAuth client add the redirect URIs
+`https://api.orvyn.dubey.app/auth/google/callback` and `https://api.orvyn.dubey.app/calendar/google/callback`, enable
+the Google Calendar API, add the `calendar.events` and `calendar.calendarlist.readonly` scopes to the consent screen,
+then fill `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_WEB_CLIENT_SECRET`, `GOOGLE_CLIENT_IDS` and `CALENDAR_TOKEN_KEY`
+(`openssl rand -base64 32`; keep a copy with the backup key — without it, connected accounts must be reconnected).
+Google pushes calendar changes to `https://api.orvyn.dubey.app/calendar/google/webhook` through the tunnel; nothing
+else to open.
+
 ## 5. First deploy
 
 ```bash

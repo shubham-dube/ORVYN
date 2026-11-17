@@ -28,8 +28,17 @@
 
 ## M4 — events and the Time River
 
-- [ ] events + recurrence (RRULE + exceptions); Time River web + Android; week/month
+- [x] packages/today-plan: RFC 5545 occurrences in the person's zone (DST-safe), next occurrence never in the past, event expansion with cancelled and changed occurrences; tests
+- [x] api: `today.calendar` + `today.event` entities (migration 0007) with shape, ownership and read-only checks; repeating tasks roll forward when ticked off on any device (`lastDoneAt`, checklist reset); events remind with the person's timed defaults; tests
+- [x] web: List | Calendar; the day as a river (blocks, overlaps side by side, now line, free time from the person's hours, drag or Place a task, double-click for an event, all-day strip); week and month; event sheet with repeats and "only this one / all of them"; e2e
+- [x] Android: List | Calendar; river with hold-and-drag or Place, week agenda, event sheet with the same rules (rrule package for expansion); widget tests
+- [x] label palette in design tokens (contrast-tested) for calendars and projects
 
 ## M5 — Google Calendar, auto-plan, widgets
 
-- [ ] Google two-way sync; auto-plan with reasons; Android widget; Windows quick-add hotkey
+- [x] Google two-way sync (`calendar` module): several accounts per person (D15), OAuth code + PKCE, tokens encrypted with libsodium, calendars shown as Google shows them, incremental sync with sync tokens and paging, push channels + 5-minute poll, write-back with etags (insert, patch, one occurrence, delete), Google wins on conflict, reconnect needed → told once, disconnect revokes; tested against a fake Google
+- [x] Settings → Calendars on web and Android (connect another account, reconnect, sync now, show/hide, disconnect; colour on web)
+- [x] auto-plan with a reason per placement and an explanation for what didn't fit; local on web, `POST /today/plan` for Android; nothing changes until accepted; refuses to guess without working hours (D16)
+- [x] Android home-screen widget (home_widget + Kotlin provider; colours generated from tokens)
+- [x] Windows quick-add hotkey (shortcut chosen in the tray, or off; same parser and sync); live API test
+- [ ] needs from the owner: a Google OAuth client with the Calendar API enabled and `CALENDAR_TOKEN_KEY` in production (docs/guides/run-locally.md, deploy.md)
