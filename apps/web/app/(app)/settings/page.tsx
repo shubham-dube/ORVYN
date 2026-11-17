@@ -25,6 +25,7 @@ import { enablePush, pushPermission, pushSupported } from '@/lib/push';
 import { useSession } from '@/lib/session';
 import { useTodayMaybe } from '@/lib/today';
 import { TodaySettings } from '@/components/today-settings';
+import { CalendarAccounts } from '@/components/calendar-accounts';
 import type { ThemePreference } from '@/lib/theme';
 
 interface PasskeyView {
@@ -408,5 +409,10 @@ function Row({
 }
 
 function TodaySection() {
-  return useTodayMaybe() ? <TodaySettings /> : null;
+  return useTodayMaybe() ? (
+    <>
+      <TodaySettings />
+      <CalendarAccounts />
+    </>
+  ) : null;
 }

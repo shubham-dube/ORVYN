@@ -97,3 +97,18 @@ test('with working hours set, the river shows free time and plans the day with r
     await plan.getByRole('button', { name: 'Not now' }).click();
   }
 });
+
+test('calendars: the connect button explains when Google isn’t set up on this server', async ({ page }) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/settings');
+  const section = page.locator('section', { has: page.getByRole('heading', { name: 'Calendars' }) });
+  await expect(
+    section.getByText('Connect as many Google accounts as you use.', { exact: false }),
+  ).toBeVisible();
+  await section.getByRole('button', { name: 'Connect a Google account' }).click();
+  await expect(page.getByText('Google Calendar isn’t set up on this server yet')).toBeVisible();
+  // coming back from Google says how it went
+  await page.goto('/settings?calendar=cancelled');
+  await expect(page.getByText('Nothing was connected')).toBeVisible();
+  await expect(page).toHaveURL(/\/settings#calendars$/);
+});
