@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -64,7 +65,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                     ],
                   ),
                 ),
-                const _QuickAdd(),
+                // "+" on the home-screen widget opens Today ready to type
+                _QuickAdd(focus: GoRouterState.of(context).uri.queryParameters['add'] == '1'),
                 const SizedBox(height: 14),
                 if (_calendar)
                   TodayCalendar(onOpenTask: (t) => openTaskSheet(context, t))
@@ -84,7 +86,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 }
 
 class _QuickAdd extends ConsumerStatefulWidget {
-  const _QuickAdd();
+  const _QuickAdd({this.focus = false});
+  final bool focus;
   @override
   ConsumerState<_QuickAdd> createState() => _QuickAddState();
 }
@@ -175,6 +178,7 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
                 child: TextField(
                   key: const Key('quick-add'),
                   controller: _c,
+                  autofocus: widget.focus,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _add(),
                   style: OrvText.body(l).copyWith(fontSize: 16),

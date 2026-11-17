@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_title">Today</string>
+    <string name="widget_add">Add to Today</string>
+    <string name="widget_description">What\'s next today, and quick add</string>
+    <string name="widget_clear">Nothing left for today.</string>
+    <string name="widget_signed_out">Open ORVYN to sign in.</string>
+    <string name="widget_plus" translatable="false">+</string>
+    <string name="widget_more">+%1$d more</string>
+</resources>

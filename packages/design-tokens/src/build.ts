@@ -282,6 +282,36 @@ writeFileSync(join(out, 'orvyn_tokens.dart'), dart.join('\n'));
 const mobile = join(root, '..', '..', 'apps', 'mobile', 'lib', 'design');
 mkdirSync(mobile, { recursive: true });
 writeFileSync(join(mobile, 'tokens.g.dart'), dart.join('\n'));
+// Native Android views (the home-screen widget) read the same palette as resources: day = light, night = dark.
+const androidRes = join(root, '..', '..', 'apps', 'mobile', 'android', 'app', 'src', 'main', 'res');
+const ax = (c: string) => `#${toDartHex(c).slice(2)}`;
+for (const [dir, phase] of [
+  ['values', 'day'],
+  ['values-night', 'night'],
+] as const) {
+  const p = T.phases[phase];
+  const m = T.modes[p.mode as Mode];
+  const a = T.modules.today;
+  const xml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    '<!-- Generated from packages/design-tokens/tokens.json. Do not edit. -->',
+    '<resources>',
+    `    <color name="orvyn_surface">${ax(p.base)}</color>`,
+    `    <color name="orvyn_edge">${ax(m.hairline)}</color>`,
+    `    <color name="orvyn_text">${ax(m.text)}</color>`,
+    `    <color name="orvyn_muted">${ax(m.muted)}</color>`,
+    `    <color name="orvyn_faint">${ax(m.faint)}</color>`,
+    `    <color name="orvyn_danger">${ax(m.danger)}</color>`,
+    `    <color name="orvyn_accent">${ax(a[p.mode])}</color>`,
+    `    <color name="orvyn_accent_from">${ax(a.from)}</color>`,
+    `    <color name="orvyn_accent_to">${ax(a.to)}</color>`,
+    `    <dimen name="orvyn_radius">${T.radius.lg}dp</dimen>`,
+    '</resources>',
+    '',
+  ];
+  mkdirSync(join(androidRes, dir), { recursive: true });
+  writeFileSync(join(androidRes, dir, 'orvyn_colors.xml'), xml.join('\n'));
+}
 console.warn(
   `design-tokens: wrote ${['tokens.css', 'theme.css', 'tokens.js', 'tokens.d.ts', 'orvyn_tokens.dart'].join(', ')}`,
 );

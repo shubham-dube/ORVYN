@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/home_widget.dart';
 import '../app/notifications.dart';
 import '../app/state.dart';
 import '../core/models.dart';
@@ -27,6 +28,7 @@ class Shell extends ConsumerStatefulWidget {
 class _ShellState extends ConsumerState<Shell> {
   StreamSubscription<NotificationView>? _arrivals;
   StreamSubscription<Map<String, dynamic>>? _taps;
+  StreamSubscription<Uri?>? _widget;
 
   @override
   void initState() {
@@ -46,6 +48,11 @@ class _ShellState extends ConsumerState<Shell> {
       final url = t['url'] as String?;
       if (url != null && mounted) context.go(url);
     });
+    // the home-screen widget: the list opens Today, "+" opens it ready to type
+    _widget = ref.read(widgetClicksProvider).listen((u) {
+      final route = routeForWidgetUri(u);
+      if (route != null && mounted) context.go(route);
+    });
     _arrivals = ref.read(arrivalsProvider).stream.listen((n) {
       HapticFeedback.lightImpact();
       if (mounted) Toaster.of(context).show(n.title, body: n.body.isEmpty ? null : n.body);
@@ -55,6 +62,7 @@ class _ShellState extends ConsumerState<Shell> {
   @override
   void dispose() {
     _taps?.cancel();
+    _widget?.cancel();
     _arrivals?.cancel();
     super.dispose();
   }

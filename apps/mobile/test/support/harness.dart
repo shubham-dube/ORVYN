@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:orvyn/app/calendar.dart';
+import 'package:orvyn/app/home_widget.dart';
 import 'package:orvyn/app/app.dart';
 import 'package:orvyn/app/lock.dart';
 import 'package:orvyn/app/state.dart';
@@ -125,6 +126,8 @@ class AppHarness {
   final pusher = RecordingPusher();
   DateTime now = DateTime(2026, 11, 16, 9, 30);
   final opened = <Uri>[];
+  final widget = RecordingWidgetPublisher();
+  final widgetClicks = StreamController<Uri?>.broadcast();
 
   /// Starts already signed in (a stored refresh token the fake server accepts).
   void signedInAs(Map<String, dynamic> user) {
@@ -138,6 +141,8 @@ class AppHarness {
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
+    // the app keeps live queries open at its root (home-screen widget); unmount so their timers close
+    addTearDown(() => finish(tester));
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
     await tester.pumpWidget(
       ProviderScope(
@@ -149,6 +154,8 @@ class AppHarness {
           pusherProvider.overrideWithValue(pusher),
           authenticatorProvider.overrideWithValue(auth),
           clockProvider.overrideWithValue(() => now),
+          widgetPublisherProvider.overrideWithValue(widget),
+          widgetClicksProvider.overrideWithValue(widgetClicks.stream),
           urlOpenerProvider.overrideWithValue((u) async {
             opened.add(u);
             return true;
@@ -176,4 +183,11 @@ List<String?> texts(WidgetTester t) => [for (final e in find.byType(Text).evalua
 Future<void> finish(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(milliseconds: 10));
+}
+
+class RecordingWidgetPublisher implements WidgetPublisher {
+  final snapshots = <Map<String, dynamic>>[];
+  Map<String, dynamic>? get last => snapshots.isEmpty ? null : snapshots.last;
+  @override
+  Future<void> publish(Map<String, dynamic> snapshot) async => snapshots.add(snapshot);
 }

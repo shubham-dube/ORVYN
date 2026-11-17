@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from packages/design-tokens/tokens.json. Do not edit. -->
+<resources>
+    <color name="orvyn_surface">#FF05070F</color>
+    <color name="orvyn_edge">#1AFFFFFF</color>
+    <color name="orvyn_text">#FFF1F5FF</color>
+    <color name="orvyn_muted">#FFB6C0D8</color>
+    <color name="orvyn_faint">#FF94A3B8</color>
+    <color name="orvyn_danger">#FFFDA4AF</color>
+    <color name="orvyn_accent">#FF7CC4FF</color>
+    <color name="orvyn_accent_from">#FF3B82F6</color>
+    <color name="orvyn_accent_to">#FF06B6D4</color>
+    <dimen name="orvyn_radius">20dp</dimen>
+</resources>
