@@ -8,6 +8,10 @@ A tray companion: starts with Windows (optional), shows ORVYN notifications as W
 - Tray menu: status, Open ORVYN, Connect / Disconnect, Send a test notification, Pause notifications for 1 hour
   (urgent ones still come through), Start with Windows, Quit.
 - Sign it out from any device (Settings → Security) and it disconnects immediately.
+- Quick add from anywhere: press your shortcut (tray → _Quick add shortcut_: Ctrl+Shift+Space until you pick one,
+  or Off), type the way you would anywhere in ORVYN — “call mom tomorrow 6pm”, “pay rent every month on the 1st
+  !!!”, “buy milk @Errands” — Enter saves to Today, Esc closes. Same parser and sync as every device; tray →
+  _Add to Today…_ does the same without the shortcut.
 
 ## Build and run on your PC
 

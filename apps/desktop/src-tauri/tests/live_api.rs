@@ -5,6 +5,7 @@ use orvyn_desktop::api::{Client, DeviceInfo};
 use orvyn_desktop::live::{self, LiveEvent, ServerMessage};
 use orvyn_desktop::loopback::Loopback;
 use orvyn_desktop::pkce::Pkce;
+use orvyn_desktop::quickadd::{self, Hlc};
 use orvyn_desktop::store::{MemoryStore, TokenStore};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -99,6 +100,46 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
     // the same code can't be used twice
     let again = Client::new(&base, Arc::new(MemoryStore::default()));
     assert!(again.redeem(&code, &p.verifier, &device).await.is_err());
+
+    // 3b. quick add from the PC: the same parser and sync as every device
+    let hlc = std::sync::Mutex::new(Hlc::new("wtestpc"));
+    let title = quickadd::add(&client, "Pay rent tomorrow 6pm !!!", &hlc, "2030-01-01")
+        .await
+        .unwrap();
+    assert_eq!(title, "Pay rent");
+    let made = quickadd::add(&client, "buy milk @Errands", &hlc, "2030-01-01")
+        .await
+        .unwrap();
+    assert_eq!(made, "Buy milk");
+    let pulled: Value = http
+        .get(format!("{base}/sync/pull?cursor=0"))
+        .bearer_auth(&owner)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let changes = pulled["changes"].as_array().unwrap();
+    let task = |t: &str| {
+        changes
+            .iter()
+            .rev()
+            .find(|c| c["entity"] == "today.task" && c["data"]["title"] == t)
+            .unwrap()["data"]
+            .clone()
+    };
+    let rent = task("Pay rent");
+    assert!(rent["dueAt"].is_string() && rent["dueDate"].is_null());
+    assert_eq!(rent["priority"], 3);
+    assert_eq!(rent["source"], "desktop");
+    let milk = task("Buy milk");
+    assert_eq!(milk["dueDate"], "2030-01-01", "no day named: lands in Today");
+    let project = changes
+        .iter()
+        .find(|c| c["entity"] == "today.project" && c["data"]["name"] == "Errands")
+        .unwrap();
+    assert_eq!(milk["projectId"], project["entityId"]);
 
     // 4. live: a notification sent from the phone arrives on the PC
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);

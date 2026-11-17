@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "quick-add",
+  "description": "The quick-add box: a local page that only listens for being opened (it calls the app's own commands).",
+  "windows": ["quick-add"],
+  "permissions": ["core:event:default"]
+}

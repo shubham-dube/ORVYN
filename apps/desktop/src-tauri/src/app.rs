@@ -3,10 +3,11 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Manager, Wry};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::{mpsc, Mutex};
 
@@ -15,6 +16,7 @@ use crate::live::{self, LiveEvent, ServerMessage};
 use crate::loopback::Loopback;
 use crate::notify::{self, Choice};
 use crate::pkce::Pkce;
+use crate::quickadd::{self, Hlc, Prefs, SHORTCUTS};
 use crate::store::{KeyringStore, MemoryStore, TokenStore};
 
 pub const API_URL: &str = match option_env!("ORVYN_API_URL") {
@@ -34,6 +36,8 @@ struct State {
     /// unix seconds until which toasts are held back ("pause for an hour")
     paused_until: AtomicI64,
     items: Items,
+    hlc: std::sync::Mutex<Hlc>,
+    prefs_path: std::path::PathBuf,
 }
 
 struct Items {
@@ -42,6 +46,8 @@ struct Items {
     test: MenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
     autostart: CheckMenuItem<Wry>,
+    /// one per suggested shortcut, then "Off"
+    shortcuts: Vec<CheckMenuItem<Wry>>,
 }
 
 fn now() -> i64 {
@@ -81,12 +87,48 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        show_quick_add(app);
+                    }
+                })
+                .build(),
+        )
+        .invoke_handler(tauri::generate_handler![quick_add, quick_add_hide])
         .setup(|app| {
             let store: Arc<dyn TokenStore> = match KeyringStore::new("default") {
                 Ok(s) => Arc::new(s),
                 Err(_) => Arc::new(MemoryStore::default()), // no keychain: works until quit, never written to disk
             };
             let h = app.handle();
+            let prefs_path = app
+                .path()
+                .app_config_dir()
+                .map(|d| d.join("prefs.json"))
+                .unwrap_or_default();
+            let prefs = Prefs::load(&prefs_path);
+            let current = prefs.shortcut().map(str::to_owned);
+            let mut shortcuts = vec![];
+            for (i, sc) in SHORTCUTS.iter().enumerate() {
+                shortcuts.push(CheckMenuItem::with_id(
+                    h,
+                    format!("sc:{i}"),
+                    sc,
+                    true,
+                    current.as_deref() == Some(*sc),
+                    None::<&str>,
+                )?);
+            }
+            shortcuts.push(CheckMenuItem::with_id(
+                h,
+                "sc:off",
+                "Off",
+                true,
+                current.is_none(),
+                None::<&str>,
+            )?);
             let items = Items {
                 status: MenuItem::with_id(h, "status", "Not connected", false, None::<&str>)?,
                 connect: MenuItem::with_id(h, "connect", "Connect to ORVYN…", true, None::<&str>)?,
@@ -100,8 +142,16 @@ pub fn run() {
                     app.autolaunch().is_enabled().unwrap_or(false),
                     None::<&str>,
                 )?,
+                shortcuts,
             };
             let open = MenuItem::with_id(h, "open", "Open ORVYN", true, None::<&str>)?;
+            let add = MenuItem::with_id(h, "add", "Add to Today…", true, None::<&str>)?;
+            let shortcut_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = items
+                .shortcuts
+                .iter()
+                .map(|i| i as &dyn tauri::menu::IsMenuItem<Wry>)
+                .collect();
+            let shortcut_menu = Submenu::with_items(h, "Quick add shortcut", true, &shortcut_refs)?;
             let quit = MenuItem::with_id(h, "quit", "Quit", true, None::<&str>)?;
             let sep = || PredefinedMenuItem::separator(h);
             let menu = Menu::with_items(
@@ -110,6 +160,8 @@ pub fn run() {
                     &items.status,
                     &sep()?,
                     &open,
+                    &add,
+                    &shortcut_menu,
                     &items.connect,
                     &items.test,
                     &sep()?,
@@ -134,8 +186,33 @@ pub fn run() {
                 live: AtomicBool::new(false),
                 paused_until: AtomicI64::new(0),
                 items,
+                hlc: std::sync::Mutex::new(Hlc::new(&format!("win{}", std::process::id()))),
+                prefs_path,
             });
             app.manage(state.clone());
+
+            // the quick-add box: made once, hidden until the shortcut (or the tray) asks for it
+            let qa = WebviewWindowBuilder::new(app, "quick-add", WebviewUrl::App("quick-add.html".into()))
+                .title("Add to Today")
+                .inner_size(560.0, 132.0)
+                .resizable(false)
+                .decorations(false)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .visible(false)
+                .center()
+                .build()?;
+            let qa2 = qa.clone();
+            qa.on_window_event(move |e| {
+                if let WindowEvent::Focused(false) = e {
+                    let _ = qa2.hide(); // clicking away closes it, like a launcher
+                }
+            });
+            if let Some(sc) = current {
+                if let Err(e) = app.global_shortcut().register(sc.as_str()) {
+                    eprintln!("quick add shortcut {sc} unavailable: {e}"); // taken by another app: pick another
+                }
+            }
             if state.client.has_session() {
                 start_live(app.handle().clone(), state);
             } else {
@@ -201,7 +278,80 @@ fn on_menu(app: AppHandle, id: &str) {
             let _ = s.items.autostart.set_checked(al.is_enabled().unwrap_or(false));
         }
         "quit" => app.exit(0),
+        "add" => show_quick_add(&app),
+        id if id.starts_with("sc:") => set_shortcut(&app, &s, id),
         _ => {}
+    }
+}
+
+fn show_quick_add(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("quick-add") {
+        let _ = w.center();
+        let _ = w.show();
+        let _ = w.set_focus();
+        let _ = w.emit("quick-add:open", ());
+    }
+}
+
+/// The person picks the shortcut (or Off) from the tray; it's remembered for next time.
+fn set_shortcut(app: &AppHandle, s: &State, id: &str) {
+    let choice = id
+        .strip_prefix("sc:")
+        .and_then(|i| i.parse::<usize>().ok())
+        .and_then(|i| SHORTCUTS.get(i));
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    let mut ok = true;
+    if let Some(sc) = choice {
+        ok = gs.register(*sc).is_ok();
+    }
+    let chosen = if ok { choice.map(|c| c.to_string()) } else { None };
+    let _ = (Prefs {
+        quick_add_shortcut: Some(chosen.clone().unwrap_or_default()),
+    })
+    .save(&s.prefs_path);
+    for (i, item) in s.items.shortcuts.iter().enumerate() {
+        let on = match &chosen {
+            Some(c) => SHORTCUTS.get(i) == Some(&c.as_str()),
+            None => i == SHORTCUTS.len(),
+        };
+        let _ = item.set_checked(on);
+    }
+    if !ok {
+        let _ = s
+            .items
+            .status
+            .set_text("That shortcut is taken by another app — pick another");
+    }
+}
+
+/// From the quick-add box: parse and save; the box shows the answer.
+#[tauri::command]
+async fn quick_add(app: AppHandle, text: String) -> Result<String, String> {
+    let s = state(&app);
+    let text = text.trim().to_owned();
+    if text.is_empty() {
+        return Err("Type something first".into());
+    }
+    if !s.client.has_session() {
+        return Err("Connect ORVYN first (tray menu)".into());
+    }
+    quickadd::add(&s.client, &text, &s.hlc, &quickadd::local_day())
+        .await
+        .map_err(|e| match e {
+            crate::api::ApiError::Offline => "Couldn’t reach ORVYN — check your connection".to_owned(),
+            crate::api::ApiError::SignedOut => "Connect ORVYN again (tray menu)".to_owned(),
+            crate::api::ApiError::Http { code, .. } if code == "forbidden" || code.contains("not_enabled") => {
+                "Today isn’t switched on for you".to_owned()
+            }
+            _ => "That didn’t save — try again".to_owned(),
+        })
+}
+
+#[tauri::command]
+fn quick_add_hide(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("quick-add") {
+        let _ = w.hide();
     }
 }
 

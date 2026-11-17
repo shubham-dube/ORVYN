@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-module="today">
+  <head>
+    <meta charset="utf-8" />
+    <title>Add to Today</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="quick-add.css" />
+  </head>
+  <body>
+    <form id="form" autocomplete="off">
+      <label for="text" class="sr-only">Add to Today</label>
+      <span class="orb" aria-hidden="true"></span>
+      <input
+        id="text"
+        name="text"
+        maxlength="500"
+        placeholder="Add to Today… “call mom tomorrow 6pm”"
+        autofocus
+      />
+      <kbd>Enter</kbd>
+    </form>
+    <p id="status" role="status" aria-live="polite">
+      Esc to close · same words as everywhere: dates, times, repeats, !!! for priority, #tags, @projects
+    </p>
+    <script src="quick-add.js"></script>
+  </body>
+</html>

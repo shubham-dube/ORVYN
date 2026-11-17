@@ -282,6 +282,12 @@ writeFileSync(join(out, 'orvyn_tokens.dart'), dart.join('\n'));
 const mobile = join(root, '..', '..', 'apps', 'mobile', 'lib', 'design');
 mkdirSync(mobile, { recursive: true });
 writeFileSync(join(mobile, 'tokens.g.dart'), dart.join('\n'));
+// The Windows app's small pages (quick add) are static files: they get a committed copy of the CSS variables.
+writeFileSync(
+  join(root, '..', '..', 'apps', 'desktop', 'ui', 'tokens.css'),
+  readFileSync(join(out, 'tokens.css'), 'utf8'),
+);
+
 // Native Android views (the home-screen widget) read the same palette as resources: day = light, night = dark.
 const androidRes = join(root, '..', '..', 'apps', 'mobile', 'android', 'app', 'src', 'main', 'res');
 const ax = (c: string) => `#${toDartHex(c).slice(2)}`;

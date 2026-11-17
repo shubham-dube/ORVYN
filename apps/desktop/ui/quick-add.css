@@ -1,0 +1,82 @@
+/* Quick add on Windows: one field on Aurora Glass. Colours, radii and fonts come only from tokens.css. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  font-family: var(--orv-font-sans);
+  color: var(--orv-text);
+  overflow: hidden;
+}
+body {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--orv-space-2);
+  padding: var(--orv-space-4);
+  background: var(--orv-base);
+  border: 1px solid var(--orv-edge);
+  border-radius: var(--orv-radius-lg);
+}
+form {
+  display: flex;
+  align-items: center;
+  gap: var(--orv-space-3);
+  padding: 0 var(--orv-space-3);
+  height: 52px;
+  background: var(--orv-field);
+  border: 1px solid var(--orv-edge);
+  border-radius: var(--orv-radius-md);
+}
+form:focus-within {
+  outline: 2px solid var(--orv-accent);
+}
+.orb {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--orv-radius-full);
+  background: var(--orv-accent-grad);
+  flex: none;
+}
+input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--orv-text);
+  font: inherit;
+  font-size: var(--orv-type-heading-size);
+}
+input::placeholder {
+  color: var(--orv-faint);
+}
+kbd {
+  font-family: var(--orv-font-mono);
+  font-size: var(--orv-type-label-size);
+  color: var(--orv-faint);
+  border: 1px solid var(--orv-edge);
+  border-radius: var(--orv-radius-xs);
+  padding: 2px 6px;
+}
+#status {
+  margin: 0;
+  font-size: var(--orv-type-small-size);
+  color: var(--orv-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#status.ok {
+  color: var(--orv-success);
+}
+#status.error {
+  color: var(--orv-danger);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
