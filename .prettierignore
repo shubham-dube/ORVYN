@@ -4,6 +4,7 @@ dist
 coverage
 apps/mobile
 apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
 packages/design-tokens/dist
 **/drizzle/meta
 test-results
