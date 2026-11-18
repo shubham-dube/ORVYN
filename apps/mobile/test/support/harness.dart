@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:orvyn/app/calendar.dart';
 import 'package:orvyn/app/home_widget.dart';
 import 'package:orvyn/money/capture.dart';
+import 'package:orvyn/drop/drop.dart';
 import 'package:orvyn/app/app.dart';
 import 'package:orvyn/app/lock.dart';
 import 'package:orvyn/app/state.dart';
@@ -129,6 +130,9 @@ class AppHarness {
   final opened = <Uri>[];
   final widget = RecordingWidgetPublisher();
   final capture = FakeCaptureChannel();
+  final share = FakeShareChannel();
+  PickedFile? photo;
+  String? spoken;
   final widgetClicks = StreamController<Uri?>.broadcast();
 
   /// Starts already signed in (a stored refresh token the fake server accepts).
@@ -158,6 +162,9 @@ class AppHarness {
           clockProvider.overrideWithValue(() => now),
           widgetPublisherProvider.overrideWithValue(widget),
           captureChannelProvider.overrideWithValue(capture),
+          shareChannelProvider.overrideWithValue(share),
+          photoPickerProvider.overrideWithValue(({required bool camera}) async => photo),
+          speechProvider.overrideWithValue(FakeSpeech(() => spoken)),
           widgetClicksProvider.overrideWithValue(widgetClicks.stream),
           urlOpenerProvider.overrideWithValue((u) async {
             opened.add(u);
@@ -216,4 +223,29 @@ class FakeCaptureChannel implements CaptureChannel {
   Future<List<Captured>> pending() async => [...items];
   @override
   Future<void> ack(int count) async => items.removeRange(0, count.clamp(0, items.length));
+}
+
+class FakeShareChannel implements ShareChannel {
+  Shared? next;
+  final _arrived = StreamController<void>.broadcast();
+  void deliver(Shared s) {
+    next = s;
+    _arrived.add(null);
+  }
+
+  @override
+  Stream<void> get arrived => _arrived.stream;
+  @override
+  Future<Shared?> take() async {
+    final s = next;
+    next = null;
+    return s;
+  }
+}
+
+class FakeSpeech implements Speech {
+  FakeSpeech(this.words);
+  final String? Function() words;
+  @override
+  Future<String?> listen() async => words();
 }

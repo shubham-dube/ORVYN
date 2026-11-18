@@ -3,6 +3,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
+    <!-- Drop: speech is turned into words by Android's recogniser; only the words reach ORVYN -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <!-- No cloud backup: tokens and the local database must not leave the phone readable (ADR-0004). -->
     <application
@@ -40,6 +42,17 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https" android:host="orvyn.dubey.app" android:pathPrefix="/join/"/>
             </intent-filter>
+            <!-- Drop: share text, links and photos to ORVYN from any app -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
             <meta-data android:name="flutter_deeplinking_enabled" android:value="true"/>
         </activity>
         <!-- Money capture (spec 0003, ADR-0012): only with the notification access the person turns on -->
@@ -71,6 +84,9 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

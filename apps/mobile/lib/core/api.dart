@@ -120,6 +120,38 @@ class Api {
     return r.data as T;
   }
 
+  /// Uploads a file's bytes (files module, ADR-0011); returns `{id, name, …}`.
+  Future<Map<String, dynamic>> upload(List<int> bytes, {required String name, required String mime}) async {
+    Future<Response<dynamic>> send() => dio.post<dynamic>(
+      '/files',
+      data: Stream.fromIterable([bytes]),
+      options: Options(
+        contentType: mime,
+        headers: {
+          'content-length': bytes.length,
+          'x-file-name': Uri.encodeComponent(name),
+          if (_access != null) 'authorization': 'Bearer $_access',
+        },
+      ),
+    );
+    Response<dynamic> r;
+    try {
+      r = await send();
+      if (r.statusCode == 401 && await refresh() != null) r = await send();
+    } on DioException catch (e) {
+      throw ApiError(0, 'offline', e.message ?? 'Network unavailable');
+    }
+    if ((r.statusCode ?? 0) >= 400) {
+      final err = (r.data is Map ? (r.data as Map)['error'] : null) as Map?;
+      throw ApiError(
+        r.statusCode ?? 0,
+        (err?['code'] as String?) ?? 'upload_failed',
+        (err?['message'] as String?) ?? 'Upload failed',
+      );
+    }
+    return Map<String, dynamic>.from(r.data as Map);
+  }
+
   Future<T> get<T>(String path, {Map<String, dynamic>? query}) => call<T>('GET', path, query: query);
   Future<T> post<T>(String path, [Object? body]) => call<T>('POST', path, body: body ?? const <String, dynamic>{});
   Future<T> put<T>(String path, Object body) => call<T>('PUT', path, body: body);

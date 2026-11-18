@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app/home_widget.dart';
+import '../drop/drop.dart';
 import '../app/notifications.dart';
 import '../app/state.dart';
 import '../core/models.dart';
@@ -29,6 +30,7 @@ class _ShellState extends ConsumerState<Shell> {
   StreamSubscription<NotificationView>? _arrivals;
   StreamSubscription<Map<String, dynamic>>? _taps;
   StreamSubscription<Uri?>? _widget;
+  StreamSubscription<void>? _shares;
 
   @override
   void initState() {
@@ -53,6 +55,22 @@ class _ShellState extends ConsumerState<Shell> {
       final route = routeForWidgetUri(u);
       if (route != null && mounted) context.go(route);
     });
+    // shared to ORVYN from another app: it becomes a Drop item
+    Future<void> takeShare() async {
+      final s = ref.read(sessionProvider);
+      if (s is! SignedIn || !s.me.can('drop')) return;
+      final shared = await ref.read(shareChannelProvider).take();
+      if (shared == null || !mounted) return;
+      final toaster = Toaster.of(context);
+      try {
+        if (await dropShared(ref.read(dropActionsProvider), shared) && mounted) context.go('/drop');
+      } catch (_) {
+        toaster.show('That couldn’t be dropped', tone: ToastTone.danger);
+      }
+    }
+
+    unawaited(takeShare());
+    _shares = ref.read(shareChannelProvider).arrived.listen((_) => unawaited(takeShare()));
     _arrivals = ref.read(arrivalsProvider).stream.listen((n) {
       HapticFeedback.lightImpact();
       if (mounted) Toaster.of(context).show(n.title, body: n.body.isEmpty ? null : n.body);
@@ -63,6 +81,7 @@ class _ShellState extends ConsumerState<Shell> {
   void dispose() {
     _taps?.cancel();
     _widget?.cancel();
+    _shares?.cancel();
     _arrivals?.cancel();
     super.dispose();
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app/notifications.dart';
@@ -129,36 +130,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       builder: (context) {
                         final ml = context.orv;
                         final (name, line) = moduleInfo[k]!;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  gradient: ml.accentGradient,
-                                  borderRadius: BorderRadius.circular(10),
+                        const routes = {'today': '/today', 'drop': '/drop', 'money': '/money'};
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: routes[k] == null ? null : () => context.go(routes[k]!),
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    gradient: ml.accentGradient,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(name, style: OrvText.body(ml).copyWith(fontWeight: FontWeight.w600)),
-                                        const SizedBox(width: 8),
-                                        const OrvBadge('soon'),
-                                      ],
-                                    ),
-                                    Text(line, style: OrvText.muted(ml)),
-                                  ],
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(name, style: OrvText.body(ml).copyWith(fontWeight: FontWeight.w600)),
+                                          const SizedBox(width: 8),
+                                          const OrvBadge('soon'),
+                                        ],
+                                      ),
+                                      Text(line, style: OrvText.muted(ml)),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         );
                       },

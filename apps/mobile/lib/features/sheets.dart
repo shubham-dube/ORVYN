@@ -7,6 +7,7 @@ import '../app/notifications.dart';
 import '../app/state.dart';
 import '../app/smart_add.dart';
 import '../app/today.dart';
+import '../drop/drop.dart';
 import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
@@ -215,6 +216,10 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     final commands = <_Command>[
       _Command('Go to Home', LucideIcons.house, () async => router.go('/')),
       _Command('Open Settings', LucideIcons.settings, () async => router.go('/settings')),
+      if (ref.read(sessionProvider) case SignedIn(:final me) when me.can('drop'))
+        _Command('Open Drop', LucideIcons.arrowDownToLine, () async => router.go('/drop')),
+      if (ref.read(sessionProvider) case SignedIn(:final me) when me.can('money'))
+        _Command('Open Money', LucideIcons.wallet, () async => router.go('/money')),
       _Command(
         'Send me a test notification',
         LucideIcons.bell,
@@ -232,6 +237,15 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     // anything typed can become a task (natural-language dates arrive with the parser, spec 0002 M2)
     final session = ref.read(sessionProvider);
     final typed = _q.text.trim();
+    if (typed.length > 1 && session is SignedIn && session.me.can('drop')) {
+      shown.add(
+        _Command('Drop “$typed”', LucideIcons.arrowDownToLine, () async {
+          await ref.read(dropActionsProvider).dropText(typed);
+          toaster.show('Dropped', body: 'A suggestion is on its way in Drop.', tone: ToastTone.success);
+          router.go('/drop');
+        }, hint: 'Drop'),
+      );
+    }
     if (typed.length > 1 && session is SignedIn && session.me.can('today')) {
       shown.add(
         _Command('Add “$typed” to Today', LucideIcons.circlePlus, () async {
