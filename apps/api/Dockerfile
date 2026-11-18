@@ -24,6 +24,8 @@ FROM ${NODE_IMAGE}
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build --chown=node:node /out ./
+# local file store (FILES_STORE=local): a volume mounted here inherits this ownership
+RUN mkdir -p /data/files && chown node:node /data/files
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
