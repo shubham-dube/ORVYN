@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- one colour, for Android's status bar (white on transparent) and monochrome icons -->
+  <defs>
+    <mask id="cut">
+      <rect width="512" height="512" fill="#fff"/>
+      <g transform="rotate(-22 256 256)">
+        <ellipse cx="256" cy="256" rx="198" ry="66" fill="none" stroke="#000" stroke-width="64"/>
+      </g>
+    </mask>
+    <clipPath id="front"><rect x="-200" y="256" width="912" height="400"/></clipPath>
+    <clipPath id="back"><rect x="-200" y="-200" width="912" height="456"/></clipPath>
+  </defs>
+  <g mask="url(#cut)"><circle cx="256" cy="256" r="118" fill="#fff"/></g>
+  <g transform="rotate(-22 256 256)">
+    <ellipse cx="256" cy="256" rx="198" ry="66" fill="none" stroke="#fff" stroke-width="26" clip-path="url(#front)"/>
+    <ellipse cx="256" cy="256" rx="198" ry="66" fill="none" stroke="#fff" stroke-width="18" clip-path="url(#back)" opacity="0.55"/>
+    <circle cx="434" cy="286" r="26" fill="#fff"/>
+  </g>
+</svg>

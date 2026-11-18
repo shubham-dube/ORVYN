@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
+import { Logo } from '@/components/logo';
 
 export function Glass({
   level = 'pane',
@@ -179,10 +180,7 @@ export function Empty({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-      <span
-        aria-hidden
-        className="h-14 w-14 rounded-full opacity-90 [background:radial-gradient(circle_at_35%_30%,white,var(--orv-accent-from)_45%,var(--orv-accent-to))]"
-      />
+      <Logo size={56} glyph className="opacity-90" />
       <p className="text-heading font-semibold">{title}</p>
       {children ? <p className="max-w-sm text-small text-orv-muted">{children}</p> : null}
       {action}

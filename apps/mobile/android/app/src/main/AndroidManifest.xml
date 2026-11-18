@@ -19,6 +19,9 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- FCM shows this small icon (white silhouette) when the system draws a push itself -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_orvyn"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/orvyn_accent"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

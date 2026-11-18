@@ -29,6 +29,7 @@ import { useSession } from '@/lib/session';
 import { chipLabel, smartParse, taskFields } from '@/lib/smart-task';
 import { useDropMaybe } from '@/lib/drop';
 import { localDay, useTodayMaybe } from '@/lib/today';
+import { Logo } from '@/components/logo';
 
 interface Command {
   id: string;
@@ -201,10 +202,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
             className="glass-halo edge-light relative w-full max-w-xl overflow-hidden"
           >
             <div className="flex items-center gap-3 border-b border-orv-hairline px-4">
-              <span
-                aria-hidden
-                className="h-5 w-5 shrink-0 rounded-full [background:radial-gradient(circle_at_35%_30%,white,var(--orv-accent-from)_45%,var(--orv-accent-to))]"
-              />
+              <Logo size={20} glyph />
               <input
                 ref={input}
                 value={q}

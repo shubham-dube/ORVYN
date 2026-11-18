@@ -113,7 +113,7 @@ class AndroidShade implements NotificationShade {
 
 Future<void> initShade() async {
   await _plugin.initialize(
-    settings: const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+    settings: const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_stat_orvyn')),
     onDidReceiveNotificationResponse: (r) {
       final p = r.payload == null ? <String, dynamic>{} : jsonDecode(r.payload!) as Map<String, dynamic>;
       notificationTaps.add({...p, 'action': r.actionId});

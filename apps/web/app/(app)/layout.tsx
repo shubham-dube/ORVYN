@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { CommandBar } from '@/components/command-bar';
+import { Wordmark } from '@/components/logo';
 import { NotificationCenter } from '@/components/notification-center';
 import { Avatar } from '@/components/ui/bits';
 import { Orb } from '@/components/ui/orb';
@@ -151,11 +152,7 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="mx-auto flex min-h-dvh max-w-[1440px] gap-4 p-3 pb-28 sm:p-5 lg:pb-5">
       <aside className="glass-pane sticky top-5 hidden h-[calc(100dvh-40px)] w-60 shrink-0 flex-col p-3 lg:flex">
         <div className="mb-6 flex items-center gap-2.5 px-2 pt-2">
-          <span
-            aria-hidden
-            className="h-7 w-7 rounded-full shadow-[0_0_24px_color-mix(in_srgb,var(--orv-accent-from)_60%,transparent)] [background:radial-gradient(circle_at_35%_30%,white,var(--orv-accent-from)_45%,var(--orv-accent-to))]"
-          />
-          <span className="text-[17px] font-semibold tracking-[0.14em]">ORVYN</span>
+          <Wordmark />
         </div>
         <nav aria-label="Main" className="flex flex-col gap-1">
           {nav.map((i) => (
