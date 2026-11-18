@@ -1,6 +1,7 @@
 'use client';
 
 import { AiUsage } from '@/components/ai-usage';
+import { StorageHealth } from '@/components/storage-health';
 import type { ContactChannels, DeviceView, NotifySettings } from '@orvyn/contracts';
 import {
   Bell,
@@ -49,8 +50,19 @@ export default function SettingsPage() {
       <Notifications />
       <TodaySection />
       <AiSection />
+      <StorageSection />
       <Security />
     </div>
+  );
+}
+
+function StorageSection() {
+  const { me } = useSession();
+  if (me?.role !== 'owner') return null;
+  return (
+    <Section id="storage" title="Storage" line="Where files are kept, encrypted. Owner only.">
+      <StorageHealth />
+    </Section>
   );
 }
 

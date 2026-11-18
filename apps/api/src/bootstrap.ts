@@ -40,16 +40,15 @@ export async function configureApp(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
-  // uploads (files module): raw bytes for images, PDFs and plain octet streams, up to 15 MB
+  // uploads (files module): any non-JSON body arrives as raw bytes, up to 25 MB (the files service decides what it
+  // keeps). Plain text is a built-in string parser in Fastify; swap it so a .txt file arrives as bytes too.
   const fastify = app.getHttpAdapter().getInstance();
-  // (plain text is a built-in string parser in Fastify; swap it so a .txt file arrives as bytes too)
   fastify.removeContentTypeParser('text/plain');
-  for (const type of [/^image\/.*/, 'application/pdf', 'application/octet-stream', 'text/plain'])
-    fastify.addContentTypeParser(
-      type,
-      { parseAs: 'buffer', bodyLimit: 15 * 1024 * 1024 + 1 },
-      (_req, body, done) => done(null, body),
-    );
+  fastify.addContentTypeParser(
+    '*',
+    { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 + 1 },
+    (_req, body, done) => done(null, body),
+  );
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks();
 }

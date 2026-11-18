@@ -12,6 +12,7 @@ import {
 } from '@orvyn/contracts';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { uploadFile } from './api';
+import { voiceFileName } from './voice';
 import { useSync } from './sync';
 
 interface DropCtx {
@@ -21,6 +22,8 @@ interface DropCtx {
     o?: { kind?: 'text' | 'voice' | 'link'; source?: DropItem['source'] },
   ): Promise<string>;
   dropFile(file: File, caption?: string): Promise<string>;
+  /** a voice note: the recording is kept as a file, the words are what the AI reads */
+  dropVoice(recording: Blob, words: string): Promise<string>;
   /** create what the (possibly edited) proposal describes, then mark the item done; edits are kept as a correction */
   confirm(item: DropItem, p: DropProposal): Promise<void>;
   keep(item: DropItem): Promise<void>;
@@ -59,6 +62,23 @@ export function DropProvider({ children }: { children: ReactNode }) {
             status: 'new',
           }),
         ),
+      dropVoice: async (recording, words) => {
+        const name = voiceFileName(recording);
+        const f = await uploadFile(
+          new File([recording], name, { type: recording.type || 'audio/webm' }),
+          'voice',
+        );
+        return write((c) =>
+          c.upsert(DROP_ITEM, {
+            kind: 'voice',
+            fileId: f.id,
+            fileName: name,
+            text: words.trim(),
+            source: 'web',
+            status: 'new',
+          }),
+        );
+      },
       dropFile: async (file, caption = '') => {
         const f = await uploadFile(file);
         return write((c) =>

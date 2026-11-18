@@ -143,7 +143,7 @@ describe('files encrypted at rest (ADR-0011)', () => {
     const big = await fetch(`${h.url}/files`, {
       method: 'POST',
       headers: { authorization: `Bearer ${me.accessToken}`, 'content-type': 'image/jpeg' },
-      body: Buffer.alloc(15 * 1024 * 1024 + 10),
+      body: Buffer.alloc(25 * 1024 * 1024 + 10),
     });
     expect([400, 413]).toContain(big.status);
   });

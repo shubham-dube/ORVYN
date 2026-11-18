@@ -21,6 +21,9 @@ import { Button, Spinner } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
 import { useDrop } from '@/lib/drop';
+import { useVoice } from '@/lib/voice';
+import { FileViewer } from '@/components/file-viewer';
+import { mimeFromName } from '@/lib/files';
 import { useMoneyMaybe } from '@/lib/money';
 import { spring } from '@/lib/motion';
 import { useSession } from '@/lib/session';
@@ -40,41 +43,51 @@ export default function DropPage() {
 
 // ------------------------------------------------------------------ dropping
 
-type Recognition = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: (e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
-  onend: () => void;
-  onerror: () => void;
-  start(): void;
-  stop(): void;
-};
-
 function Composer() {
-  const { dropText, dropFile } = useDrop();
+  const { dropText, dropFile, dropVoice } = useDrop();
   const toast = useToast();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const [listening, setListening] = useState(false);
   const [voice, setVoice] = useState(false);
-  const rec = useRef<Recognition | null>(null);
+  const [keepAudio, setKeepAudio] = useState(true);
+  const [recording, setRecording] = useState<{ blob: Blob; url: string } | null>(null);
   const file = useRef<HTMLInputElement>(null);
+  // words are made by the browser on this device; the recording is kept only if asked (spec 0007 A2)
+  const mic = useVoice({ onText: (t) => setText(t), record: true });
 
-  // voice is turned into words by the browser, on this device; only the words are dropped (spec 0003)
-  const Speech =
-    typeof window !== 'undefined'
-      ? ((window as unknown as Record<string, unknown>).SpeechRecognition ??
-        (window as unknown as Record<string, unknown>).webkitSpeechRecognition)
-      : undefined;
+  const clearRecording = () => {
+    if (recording) URL.revokeObjectURL(recording.url);
+    setRecording(null);
+  };
+  const toggleMic = async () => {
+    if (mic.listening) {
+      const blob = await mic.stop();
+      if (blob && blob.size > 1000) {
+        clearRecording();
+        setRecording({ blob, url: URL.createObjectURL(blob) });
+      }
+      setVoice(true);
+    } else {
+      clearRecording();
+      await mic.start(text);
+    }
+  };
 
   const send = async () => {
-    if (!text.trim()) return;
+    if (mic.listening) await toggleMic();
+    if (!text.trim() && !recording) return;
     setBusy(true);
-    await dropText(text, { kind: voice ? 'voice' : undefined });
-    setText('');
-    setVoice(false);
-    setBusy(false);
+    try {
+      if (recording && keepAudio) await dropVoice(recording.blob, text);
+      else await dropText(text, { kind: voice ? 'voice' : undefined });
+      setText('');
+      setVoice(false);
+      clearRecording();
+    } catch (e) {
+      toast({ title: 'That couldn’t be dropped', body: (e as Error).message, tone: 'danger' });
+    } finally {
+      setBusy(false);
+    }
   };
   const sendFile = async (f: File) => {
     setBusy(true);
@@ -143,42 +156,50 @@ function Composer() {
             if (f) void sendFile(f);
           }}
         />
-        {Speech ? (
+        {mic.supported ? (
           <Button
             size="sm"
-            variant={listening ? 'secondary' : 'ghost'}
-            aria-label={listening ? 'Stop listening' : 'Speak'}
-            onClick={() => {
-              if (listening) return rec.current?.stop();
-              const r = new (Speech as new () => Recognition)();
-              r.lang = 'en-IN';
-              r.interimResults = false;
-              r.continuous = false;
-              r.onresult = (e) => {
-                const words = Array.from(e.results)
-                  .map((x) => x[0]?.transcript ?? '')
-                  .join(' ');
-                setText((t) => (t ? `${t} ${words}` : words));
-                setVoice(true);
-              };
-              r.onend = () => setListening(false);
-              r.onerror = () => setListening(false);
-              rec.current = r;
-              setListening(true);
-              r.start();
-            }}
+            variant={mic.listening ? 'secondary' : 'ghost'}
+            aria-label={mic.listening ? 'Stop listening' : 'Speak'}
+            onClick={() => void toggleMic()}
           >
-            {listening ? <MicOff size={16} /> : <Mic size={16} />}
+            {mic.listening ? <MicOff size={16} /> : <Mic size={16} />}
           </Button>
         ) : null}
-        {listening ? <span className="text-small text-orv-accent">Listening…</span> : null}
+        {mic.listening ? (
+          <span className="flex items-center gap-2 text-small text-orv-accent" aria-live="polite">
+            <span className="flex h-4 items-end gap-0.5" aria-hidden>
+              {[0.6, 1, 0.75, 0.9, 0.5].map((k, i) => (
+                <span
+                  key={i}
+                  className="w-0.5 rounded-full bg-orv-accent transition-[height]"
+                  style={{ height: `${Math.max(15, mic.level * k * 100)}%` }}
+                />
+              ))}
+            </span>
+            Listening…{mic.interim ? <span className="text-orv-faint">{mic.interim}</span> : null}
+          </span>
+        ) : null}
+        {mic.error ? <span className="text-small text-orv-danger">{mic.error}</span> : null}
+        {recording && !mic.listening ? (
+          <span className="flex items-center gap-2 rounded-full bg-orv-track px-2 py-1 text-[12px]">
+            <audio src={recording.url} controls className="h-7 w-44" aria-label="Your recording" />
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={keepAudio} onChange={(e) => setKeepAudio(e.target.checked)} />
+              Keep the recording
+            </label>
+            <button aria-label="Discard the recording" onClick={clearRecording}>
+              <X size={13} />
+            </button>
+          </span>
+        ) : null}
         <span className="ml-auto text-[11px] text-orv-faint">
           Enter to drop · the AI suggests, you decide
         </span>
         <Button
           size="sm"
           variant="primary"
-          disabled={!text.trim()}
+          disabled={!text.trim() && !recording}
           loading={busy}
           onClick={() => void send()}
         >
@@ -254,14 +275,33 @@ const summary = (i: DropItem) =>
 function ItemCard({ item }: { item: DropItem }) {
   const { confirm, keep, dismiss, retry } = useDrop();
   const toast = useToast();
+  const [viewing, setViewing] = useState(false);
   const Icon =
     item.kind === 'link' ? Link2 : item.kind === 'photo' || item.kind === 'file' ? FileText : StickyNote;
   return (
     <Glass className="flex flex-col gap-3 p-4" aria-label={`Dropped: ${summary(item)}`}>
+      <FileViewer
+        file={
+          viewing && item.fileId
+            ? { id: item.fileId, name: item.fileName ?? 'file', mime: mimeFromName(item.fileName ?? '') }
+            : null
+        }
+        onClose={() => setViewing(false)}
+      />
       <div className="flex items-start gap-2">
         <Icon size={16} className="mt-0.5 shrink-0 text-orv-muted" aria-hidden />
         <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[14px]">{summary(item)}</p>
         {item.kind === 'voice' ? <Badge>voice</Badge> : null}
+        {item.fileId ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setViewing(true)}
+            aria-label={`Open ${item.fileName ?? 'the file'}`}
+          >
+            <Paperclip size={14} /> {item.kind === 'voice' ? 'Play' : 'Open'}
+          </Button>
+        ) : null}
         <button
           aria-label="Dismiss"
           onClick={() => void dismiss(item)}

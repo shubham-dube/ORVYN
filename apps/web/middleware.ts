@@ -11,10 +11,14 @@ export function middleware(req: NextRequest) {
   const dev = process.env.NODE_ENV !== 'production';
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ''}`,
+    // 'wasm-unsafe-eval' lets WebAssembly compile (the Vault's libsodium) without allowing eval() of scripts
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'wasm-unsafe-eval'${dev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://lh3.googleusercontent.com",
     "font-src 'self'",
+    // the in-app viewer plays voice notes and videos, and shows PDFs, from in-memory (blob:) copies
+    "media-src 'self' blob:",
+    "frame-src 'self' blob:",
     `connect-src 'self' ${api} ${ws}`,
     "worker-src 'self'",
     "manifest-src 'self'",

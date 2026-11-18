@@ -1,8 +1,8 @@
 import { Controller, Delete, Get, Headers, Param, ParseUUIDPipe, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { badRequest } from '../../common/errors';
-import { Auth, type AuthContext } from '../auth/auth.decorators';
-import { FilesService } from './files.service';
+import { Auth, type AuthContext, OwnerOnly } from '../auth/auth.decorators';
+import { FilesService, INLINE_MIME } from './files.service';
 
 /**
  * Upload: the raw bytes as the body, the content type as usual, the name in `x-file-name` (URI-encoded).
@@ -29,20 +29,32 @@ export class FilesController {
     } catch {
       /* keep the default */
     }
+    const allowed = ['money', 'library', 'drop', 'voice'];
     return this.files.put(a.userId, {
       name: decoded,
       mime: (type ?? '').split(';')[0]!.trim().toLowerCase(),
       bytes: new Uint8Array(body),
-      purpose: purpose === 'money' || purpose === 'library' ? purpose : 'drop',
+      purpose: purpose && allowed.includes(purpose) ? purpose : 'drop',
     });
+  }
+
+  /** Owner only: does storage (local disk or R2/S3) work end to end right now? */
+  @OwnerOnly()
+  @Get('health')
+  health() {
+    return this.files.health();
   }
 
   @Get(':id')
   async download(@Auth() a: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Res() res: FastifyReply) {
     const f = await this.files.read(a.userId, id);
     return res
-      .header('content-type', f.mime)
-      .header('content-disposition', `inline; filename*=UTF-8''${encodeURIComponent(f.name)}`)
+      .header('content-type', INLINE_MIME.test(f.mime) ? f.mime : 'application/octet-stream')
+      .header(
+        'content-disposition',
+        `${INLINE_MIME.test(f.mime) ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(f.name)}`,
+      )
+      .header('x-content-type-options', 'nosniff')
       .header('cache-control', 'private, max-age=3600')
       .header('content-security-policy', "sandbox; default-src 'none'; img-src 'self'")
       .send(Buffer.from(f.bytes));

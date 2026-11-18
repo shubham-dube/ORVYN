@@ -22,7 +22,8 @@ import { Badge, Glass, Label, Sheet, Switch, useToast } from '@/components/ui/bi
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
-import { downloadFile } from '@/lib/api';
+import { FileViewer } from '@/components/file-viewer';
+import { mimeFromName } from '@/lib/files';
 import { useLibrary } from '@/lib/library';
 import { useMoneyMaybe } from '@/lib/money';
 import { localDay } from '@/lib/today';
@@ -92,7 +93,7 @@ function LibraryView() {
             multiple
             hidden
             aria-label="Add documents"
-            accept="image/*,application/pdf,text/plain"
+            accept="image/*,application/pdf,text/*,audio/*,video/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.csv,.json,.zip"
             onChange={(e) => void upload(e.target.files)}
           />
         </div>
@@ -236,6 +237,7 @@ function DocSheet({ doc, onClose }: { doc: LibraryDoc | null; onClose(): void })
   const toast = useToast();
   const [d, setD] = useState<LibraryDoc | null>(doc);
   const [shown, setShown] = useState<string | null>(null);
+  const [viewing, setViewing] = useState(false);
   if (doc && shown !== doc.id) {
     setShown(doc.id);
     setD(doc);
@@ -260,17 +262,6 @@ function DocSheet({ doc, onClose }: { doc: LibraryDoc | null; onClose(): void })
     });
     onClose();
   };
-  const open = async () => {
-    if (!d.fileId) return;
-    try {
-      const blob = await downloadFile(d.fileId);
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank', 'noopener');
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (e) {
-      toast({ title: 'Couldn’t open it', body: (e as Error).message, tone: 'danger' });
-    }
-  };
   const addToMoney = async (i: number) => {
     const a = d.amounts[i];
     if (!a || !money) return;
@@ -293,6 +284,18 @@ function DocSheet({ doc, onClose }: { doc: LibraryDoc | null; onClose(): void })
   const e = expiry(d.expiresOn, today);
   return (
     <Sheet open onClose={onClose} title="Document">
+      <FileViewer
+        file={
+          viewing && d.fileId
+            ? {
+                id: d.fileId,
+                name: d.fileName || d.title || 'file',
+                mime: d.mime || mimeFromName(d.fileName),
+              }
+            : null
+        }
+        onClose={() => setViewing(false)}
+      />
       <form
         className="flex flex-col gap-3"
         onSubmit={(ev) => {
@@ -456,7 +459,7 @@ function DocSheet({ doc, onClose }: { doc: LibraryDoc | null; onClose(): void })
               <Trash2 size={14} /> Delete
             </Button>
             {d.fileId ? (
-              <Button type="button" variant="secondary" size="sm" onClick={() => void open()}>
+              <Button type="button" variant="secondary" size="sm" onClick={() => setViewing(true)}>
                 <Download size={14} /> Open original
               </Button>
             ) : null}
