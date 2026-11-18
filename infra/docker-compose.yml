@@ -25,6 +25,15 @@ x-app-env: &app-env
   GOOGLE_WEB_CLIENT_ID: ${GOOGLE_WEB_CLIENT_ID:-}
   GOOGLE_WEB_CLIENT_SECRET: ${GOOGLE_WEB_CLIENT_SECRET:-}
   CALENDAR_TOKEN_KEY: ${CALENDAR_TOKEN_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  AI_DAILY_BUDGET_USD: ${AI_DAILY_BUDGET_USD:-1}
+  FILES_MASTER_KEY: ${FILES_MASTER_KEY:-}
+  FILES_STORE: ${FILES_STORE:-local}
+  FILES_DIR: /data/files
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
+  S3_BUCKET: ${S3_BUCKET:-}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-}
   EXTENSION_IDS: ${EXTENSION_IDS:-}
   SENTRY_DSN: ${SENTRY_DSN:-}
   RELEASE: ${RELEASE:-unknown}
@@ -79,6 +88,7 @@ services:
     build: { context: .., dockerfile: apps/api/Dockerfile }
     restart: unless-stopped
     environment: { <<: *app-env, PROCESS_ROLE: api }
+    volumes: [files:/data/files] # only used when FILES_STORE=local; production keeps files in R2
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
@@ -88,6 +98,7 @@ services:
     image: orvyn-api:${RELEASE:-latest}
     restart: unless-stopped
     environment: { <<: *app-env, PROCESS_ROLE: worker }
+    volumes: [files:/data/files]
     depends_on:
       postgres: { condition: service_healthy }
       valkey: { condition: service_healthy }
@@ -190,5 +201,6 @@ services:
 
 volumes:
   pg:
+  files:
   valkey:
   kuma:

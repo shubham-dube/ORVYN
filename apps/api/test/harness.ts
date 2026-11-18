@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import 'reflect-metadata';
 import { type DynamicModule } from '@nestjs/common';
 import { type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -33,6 +35,8 @@ export function testEnv(over: Record<string, string> = {}): Env {
     GOOGLE_CLIENT_IDS: 'test-client',
     LOG_LEVEL: 'error',
     AUTH_CODE_LIMIT: '20',
+    AI_PROVIDER: 'fake',
+    FILES_DIR: join(tmpdir(), `orvyn-files-${process.pid}`),
     ...over,
   });
 }

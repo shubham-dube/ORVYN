@@ -8,6 +8,8 @@ import { AccessModule } from './modules/access/access.module';
 import { logSerializers } from './common/log-serializers';
 import { TodayModule } from './modules/today/today.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
+import { AiModule } from './modules/ai/ai.module';
+import { FilesModule } from './modules/files/files.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthController } from './modules/health/health.controller';
@@ -45,6 +47,8 @@ export class AppModule {
         AuthModule,
         RealtimeModule,
         SyncModule,
+        AiModule,
+        FilesModule,
         NotifyModule,
         TodayModule,
         CalendarModule,

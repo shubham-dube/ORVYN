@@ -40,6 +40,14 @@ export async function configureApp(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
+  // uploads (files module): raw bytes for images, PDFs and plain octet streams, up to 15 MB
+  const fastify = app.getHttpAdapter().getInstance();
+  for (const type of [/^image\/.*/, 'application/pdf', 'application/octet-stream'])
+    fastify.addContentTypeParser(
+      type,
+      { parseAs: 'buffer', bodyLimit: 15 * 1024 * 1024 + 1 },
+      (_req, body, done) => done(null, body),
+    );
   app.useWebSocketAdapter(new WsAdapter(app));
   app.enableShutdownHooks();
 }

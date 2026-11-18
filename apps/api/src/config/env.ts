@@ -56,6 +56,26 @@ export const EnvSchema = z.object({
   GOOGLE_REVOKE_URL: z.string().url().default('https://oauth2.googleapis.com/revoke'),
   GOOGLE_USERINFO_URL: z.string().url().default('https://openidconnect.googleapis.com/v1/userinfo'),
   GOOGLE_CALENDAR_API: z.string().url().default('https://www.googleapis.com/calendar/v3'),
+  /**
+   * AI (ADR-0010, D13, D19): OpenRouter with ORVYN's own key, routes per task, one daily cap in USD.
+   * AI_PROVIDER "fake" answers deterministically (tests, e2e, offline development); "off" refuses.
+   */
+  AI_PROVIDER: z.enum(['openrouter', 'fake', 'off']).optional(),
+  OPENROUTER_API_KEY: z.string().default(''),
+  OPENROUTER_URL: z.string().url().default('https://openrouter.ai/api/v1'),
+  AI_DAILY_BUDGET_USD: z.coerce.number().min(0).default(1),
+  /** the day the cap resets in */
+  AI_BUDGET_TZ: z.string().default('Asia/Kolkata'),
+  /** JSON {task: model}; unknown tasks use "default" */
+  AI_ROUTES: z.string().default(''),
+  /** Files (ADR-0011): FILES_MASTER_KEY base64 32 bytes; storage "local" (FILES_DIR) or "s3" (R2). */
+  FILES_MASTER_KEY: z.string().default(''),
+  FILES_STORE: z.enum(['local', 's3']).default('local'),
+  FILES_DIR: z.string().default('./.data/files'),
+  S3_ENDPOINT: z.string().default(''),
+  S3_BUCKET: z.string().default(''),
+  S3_ACCESS_KEY_ID: z.string().default(''),
+  S3_SECRET_ACCESS_KEY: z.string().default(''),
   /** Email (Resend). Without a key, mail goes to the dev outbox (never in production). */
   RESEND_API_KEY: z.string().default(''),
   MAIL_FROM: z.string().default('ORVYN <orvyn@dubey.app>'),
@@ -86,6 +106,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (env.NODE_ENV === 'production') {
     if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is required in production');
     if (env.API_URL.startsWith('http://')) throw new Error('API_URL must be https in production');
+    if (!env.FILES_MASTER_KEY) throw new Error('FILES_MASTER_KEY is required in production');
     if (env.GOOGLE_WEB_CLIENT_ID && !env.CALENDAR_TOKEN_KEY)
       throw new Error('CALENDAR_TOKEN_KEY is required in production when Google is configured');
   }
