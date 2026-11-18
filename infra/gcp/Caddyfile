@@ -1,0 +1,4 @@
+# Automatic HTTPS for the API host; WebSockets (/ws) are proxied transparently.
+{$API_HOST} {
+	reverse_proxy api:4000
+}

@@ -1,0 +1,46 @@
+# ORVYN API + Redis + Caddy (TLS) on one Compute Engine e2-micro. Run from /opt/orvyn with:
+#   docker compose --env-file .env.prod up -d
+name: orvyn
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # BullMQ needs noeviction; the box has 1 GB RAM so cap Redis low
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory', '128mb', '--maxmemory-policy', 'noeviction']
+    volumes: [redis:/data]
+    healthcheck: { test: ['CMD', 'redis-cli', 'ping'], interval: 10s }
+    mem_limit: 192m
+
+  migrate:
+    image: ${IMAGE}
+    env_file: .env.prod
+    command: ['node', 'dist/db/migrate.js']
+    profiles: [tools]
+
+  api:
+    image: ${IMAGE}
+    restart: unless-stopped
+    env_file: .env.prod
+    environment: # these win over .env.prod
+      NODE_ENV: production
+      PROCESS_ROLE: all
+      PORT: '4000'
+      REDIS_URL: redis://redis:6379
+    depends_on: { redis: { condition: service_healthy } }
+    mem_limit: 450m
+    # V8 heap cap so it stays inside mem_limit
+    command: ['node', '--max-old-space-size=320', '--enable-source-maps', 'dist/main.js']
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment: { API_HOST: '${API_HOST}' }
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+    depends_on: [api]
+    mem_limit: 64m
+volumes:
+  redis:
+  caddy:
