@@ -42,11 +42,12 @@ class ParsedTask {
 }
 
 /// Parse on the server (same rules as web); null when offline — the app then saves the words as typed.
-Future<ParsedTask?> parseOnline(WidgetRef ref, String text, List<List<int>> literal) async {
+Future<ParsedTask?> parseOnline(WidgetRef ref, String text, List<List<int>> literal, {bool ai = false}) async {
   try {
     final r = await ref.read(apiProvider).post<Map<String, dynamic>>('/today/parse', {
       'text': text,
       if (literal.isNotEmpty) 'literal': literal,
+      if (ai) 'ai': true,
     });
     return ParsedTask(r);
   } catch (_) {
@@ -103,3 +104,14 @@ String chipLabel(ParsedSpan s, ParsedTask p, String Function(DateTime) day, Stri
       return s.text;
   }
 }
+
+final _unread = RegExp(
+  r'\b(\d{1,2}(:\d{2})?\s*(am|pm|baje|bje)|\d{1,2}:\d{2}|\d{1,2}(st|nd|rd|th)|\d{1,2}[/.-]\d{1,2}([/.-]\d{2,4})?|'
+  r'jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|'
+  r'dec(ember)?|mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|tomorrow|tmrw|'
+  r'tonight|kal|parso|subah|shaam|raat|morning|evening|afternoon|weekend|fortnight|every|har|next|after|before|end of)\b',
+  caseSensitive: false,
+);
+
+/// Same rule as `looksUnread` in packages/today-parse: date/time-looking words the rules left in the title.
+bool looksUnread(ParsedTask p) => !(p.dueAt != null && p.rrule != null) && _unread.hasMatch(p.title);

@@ -231,6 +231,8 @@ export const ParseRequest = z.object({
     .array(z.tuple([z.number().int().min(0).max(500), z.number().int().min(0).max(500)]))
     .max(20)
     .optional(),
+  /** on submit: let the AI read date/time words the rules left (only then, ADR-0010) */
+  ai: z.boolean().optional(),
 });
 export type ParseRequest = z.infer<typeof ParseRequest>;
 

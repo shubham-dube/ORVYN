@@ -82,3 +82,24 @@ describe('removing a chip', () => {
     });
   });
 });
+
+describe('when to ask the AI', () => {
+  it('only when date/time-looking words were left unread', async () => {
+    const { looksUnread } = await import('../src/index');
+    expect(looksUnread({ title: 'Buy milk', dueDate: null, dueAt: null, rrule: null })).toBe(false);
+    expect(
+      looksUnread({
+        title: 'Dentist on the second tuesday of next month',
+        dueDate: null,
+        dueAt: null,
+        rrule: null,
+      }),
+    ).toBe(true);
+    expect(looksUnread({ title: 'email at 9:30', dueDate: '2026-11-16', dueAt: null, rrule: null })).toBe(
+      true,
+    );
+    expect(
+      looksUnread({ title: 'Standup', dueDate: null, dueAt: '2026-11-16T04:30:00Z', rrule: 'FREQ=DAILY' }),
+    ).toBe(false);
+  });
+});

@@ -32,4 +32,13 @@ void main() {
     expect(timed.fields('2026-11-20'), containsPair('dueDate', null));
     expect(timed.fields('2026-11-20'), containsPair('priority', 2));
   });
+
+  test('asks the AI only when date/time words were left unread (same cases as TypeScript)', () {
+    ParsedTask t(String title, {String? dueAt, String? rrule}) =>
+        ParsedTask({'title': title, 'dueAt': dueAt, 'rrule': rrule, 'spans': []});
+    expect(looksUnread(t('Buy milk')), isFalse);
+    expect(looksUnread(t('Dentist on the second tuesday of next month')), isTrue);
+    expect(looksUnread(t('email at 9:30')), isTrue);
+    expect(looksUnread(t('Standup', dueAt: '2026-11-16T04:30:00Z', rrule: 'FREQ=DAILY')), isFalse);
+  });
 }

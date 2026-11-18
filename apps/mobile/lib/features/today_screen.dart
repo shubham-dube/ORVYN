@@ -147,7 +147,9 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
       _When.someday => null,
     };
     unawaited(HapticFeedback.lightImpact());
-    final p = _parsedFor == _c.text ? _parsed : null; // offline or not parsed yet: the words as typed
+    var p = _parsedFor == _c.text ? _parsed : null; // offline or not parsed yet: the words as typed
+    // date/time words the rules couldn't read: the server's AI has a look (on submit only)
+    if (p != null && looksUnread(p)) p = await parseOnline(ref, _c.text, [..._literal], ai: true) ?? p;
     if (p != null) {
       await ref.read(todayActionsProvider).addParsed(p.fields(fallback), newProject: p.projectName);
     } else {

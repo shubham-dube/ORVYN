@@ -12,6 +12,8 @@ import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
 import { TaskChips } from '@/components/task-chips';
 import { LeadTimes, leadLabel } from '@/components/today-settings';
+import { looksUnread, type Parsed } from '@orvyn/today-parse';
+import { api } from '@/lib/api';
 import { smartParse, taskFields } from '@/lib/smart-task';
 import { groupTasks, localDay, taskMoment, useToday } from '@/lib/today';
 
@@ -144,10 +146,18 @@ function QuickAdd() {
   const hasDay = !!(parsed?.dueAt || parsed?.dueDate);
   const submit = async () => {
     if (!parsed) return;
+    // date/time words the rules couldn't read: let the server's AI have a look (online only; else as typed)
+    let read: Parsed = parsed;
+    if (looksUnread(parsed) && navigator.onLine) {
+      read = await api<Parsed>('/today/parse', {
+        method: 'POST',
+        body: { text: title, ai: true, literal: JSON.parse(liveKey) as [number, number][] },
+      }).catch(() => parsed);
+    }
     const d = new Date();
     if (when === 'tomorrow') d.setDate(d.getDate() + 1);
-    const fields = taskFields(parsed, when === 'inbox' ? null : localDay(d));
-    if (parsed.projectName) fields.projectId = await addProject(parsed.projectName);
+    const fields = taskFields(read, when === 'inbox' ? null : localDay(d));
+    if (read.projectName) fields.projectId = await addProject(read.projectName);
     await addTask({ ...fields, source: 'typed' });
     setTitle('');
     setLiteral([]);

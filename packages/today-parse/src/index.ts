@@ -619,3 +619,15 @@ function cleanTitle(t: string): string {
 }
 
 export { addDays, instantAt, wallIn } from './time';
+
+const UNREAD =
+  /\b(\d{1,2}(:\d{2})?\s*(am|pm|baje|bje)|\d{1,2}:\d{2}|\d{1,2}(st|nd|rd|th)|\d{1,2}[/.-]\d{1,2}([/.-]\d{2,4})?|jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|mon(day)?|tue(s(day)?)?|wed(nesday)?|thu(rs(day)?)?|fri(day)?|sat(urday)?|sun(day)?|tomorrow|tmrw|tonight|kal|parso|subah|shaam|raat|morning|evening|afternoon|weekend|fortnight|every|har|next|after|before|end of)\b/i;
+
+/**
+ * Words that look like a date, time or repeat the rules didn't use (they're still in the title): the only case where
+ * asking the AI is worth its cost (spec 0002, M2 fallback).
+ */
+export function looksUnread(p: Pick<Parsed, 'title' | 'dueDate' | 'dueAt' | 'rrule'>): boolean {
+  if (p.dueAt && p.rrule) return false;
+  return UNREAD.test(p.title);
+}

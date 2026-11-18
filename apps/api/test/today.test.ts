@@ -229,3 +229,50 @@ describe('POST /today/parse (for Android)', () => {
     ).toBe(400);
   });
 });
+
+describe('the AI reads what the rules could not (only on submit, only when needed)', () => {
+  it('asks only when date/time words were left; keeps the rules when the AI is unavailable', async () => {
+    const { AiService } = await import('../src/modules/ai/ai.service');
+    const ai = h.app.get(AiService);
+    const fake = ai.model as any;
+    fake.handlers['today.parse'] = () => ({
+      title: 'Dentist',
+      date: '2030-02-12',
+      time: '11:00',
+      durationMin: 45,
+      rrule: null,
+    });
+    const before = fake.calls.length;
+    const plain = await call<any>(h, 'POST', '/today/parse', {
+      token: phone.accessToken,
+      body: { text: 'buy milk tomorrow', ai: true },
+    });
+    expect(plain.body.by).toBeUndefined();
+    expect(fake.calls.length).toBe(before); // the rules understood it: no AI call
+
+    const odd = await call<any>(h, 'POST', '/today/parse', {
+      token: phone.accessToken,
+      body: { text: 'dentist second tuesday of feb 11ish for 45m', ai: true },
+    });
+    expect(odd.body).toMatchObject({
+      by: 'ai',
+      title: 'Dentist',
+      dueAt: '2030-02-12T05:30:00.000Z',
+      durationMin: 45,
+    });
+
+    const typing = await call<any>(h, 'POST', '/today/parse', {
+      token: phone.accessToken,
+      body: { text: 'dentist second tuesday of feb 11ish' },
+    });
+    expect(typing.body.by).toBeUndefined(); // while typing: rules only
+
+    fake.handlers['today.parse'] = () => 'not json';
+    const bad = await call<any>(h, 'POST', '/today/parse', {
+      token: phone.accessToken,
+      body: { text: 'dentist second tuesday of feb', ai: true },
+    });
+    expect(bad.status).toBe(200);
+    expect(bad.body.by).toBeUndefined();
+  });
+});

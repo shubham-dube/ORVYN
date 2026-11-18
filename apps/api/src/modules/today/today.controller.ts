@@ -1,7 +1,9 @@
 import { Body, Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import { type CalEvent, ParseRequest, PlanRequest, type TodaySettingsFields } from '@orvyn/contracts';
 import { type Plan, planFromRecords } from '@orvyn/today-plan';
-import { type Parsed, parseTask } from '@orvyn/today-parse';
+import { instantAt, looksUnread, type Parsed, parseTask } from '@orvyn/today-parse';
+import { z } from 'zod';
+import { AiService } from '../ai/ai.service';
 import { and, eq, isNull } from 'drizzle-orm';
 import { type PgColumn } from 'drizzle-orm/pg-core';
 import { AppError } from '../../common/errors';
@@ -13,7 +15,10 @@ import { todayCalendars, todayEvents, todayProjects, todaySettings, todayTasks }
 @Controller('today')
 @RequireEntitlement('today')
 export class TodayController {
-  constructor(@Inject(DB) private readonly db: Db) {}
+  constructor(
+    @Inject(DB) private readonly db: Db,
+    private readonly ai: AiService,
+  ) {}
 
   /** For clients without the parser package (Android): same rules, the person's zone and projects. */
   @Post('parse')
@@ -27,12 +32,57 @@ export class TodayController {
       .select({ id: todayProjects.id, name: todayProjects.name })
       .from(todayProjects)
       .where(and(eq(todayProjects.ownerId, a.userId), isNull(todayProjects.deletedAt)));
-    return parseTask(body.text, {
-      now: new Date(),
-      timeZone: body.timeZone ?? settings?.timeZone ?? 'Asia/Kolkata',
-      projects,
-      literal: body.literal,
-    });
+    const timeZone = body.timeZone ?? settings?.timeZone ?? 'Asia/Kolkata';
+    const now = new Date();
+    const parsed = parseTask(body.text, { now, timeZone, projects, literal: body.literal });
+    if (!body.ai || !this.ai.available || !looksUnread(parsed)) return parsed;
+    return this.aiRead(a.userId, body.text, parsed, now, timeZone);
+  }
+
+  /** The rules left date/time words unread: ask the AI for just those fields; on any trouble keep the rules' answer. */
+  private async aiRead(
+    ownerId: string,
+    text: string,
+    parsed: Parsed,
+    now: Date,
+    timeZone: string,
+  ): Promise<Parsed & { by?: 'ai' }> {
+    const wall = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      dateStyle: 'full',
+      timeStyle: 'short',
+    }).format(now);
+    try {
+      const r = await this.ai.complete({
+        ownerId,
+        task: 'today.parse',
+        system: `You read one to-do written by a person in India. It is now ${wall} (${timeZone}).
+Return {"title": the task without the date/time words, "date": "YYYY-MM-DD" or null, "time": "HH:MM" (24h) or null,
+"durationMin": minutes or null, "rrule": an RFC 5545 RRULE body like "FREQ=WEEKLY;BYDAY=MO" or null}.
+Hinglish is common: kal = tomorrow (or yesterday by context), parso = in two days, subah = morning, shaam = evening.`,
+        data: [{ type: 'text', text }],
+        schema: AiParse,
+        maxTokens: 200,
+      });
+      let dueAt: string | null = null;
+      if (r.date && r.time) {
+        const [y, m, d] = r.date.split('-').map(Number) as [number, number, number];
+        const [hh, mm] = r.time.split(':').map(Number) as [number, number];
+        dueAt = instantAt(y, m, d, hh, mm, timeZone).toISOString();
+      }
+      return {
+        ...parsed,
+        title: r.title.trim() || parsed.title,
+        dueAt: dueAt ?? parsed.dueAt,
+        dueDate: dueAt ? null : (r.date ?? parsed.dueDate),
+        durationMin: r.durationMin ?? parsed.durationMin,
+        rrule: r.rrule ?? parsed.rrule,
+        spans: [],
+        by: 'ai',
+      };
+    } catch {
+      return parsed; // paused, off or a bad answer: the rules' reading stands
+    }
   }
 
   /**
@@ -80,3 +130,17 @@ export class TodayController {
     });
   }
 }
+
+const AiParse = z.object({
+  title: z.string().max(500),
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable(),
+  time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .nullable(),
+  durationMin: z.number().int().min(5).max(1440).nullable().default(null),
+  rrule: z.string().max(200).nullable().default(null),
+});
