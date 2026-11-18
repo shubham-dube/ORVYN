@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { matchCategory, merchantKey, myShare, readReply, suggestCategories, type ReviewCategory } from '../src/review';
+import {
+  matchCategory,
+  merchantKey,
+  myShare,
+  readReply,
+  suggestCategories,
+  type ReviewCategory,
+} from '../src/review';
 
 const cats: ReviewCategory[] = [
   { id: 'food', name: 'Food & dining', slug: 'food', kind: 'expense' },
@@ -22,7 +29,10 @@ describe('reading a reply', () => {
     ['dog food for bruno', { kind: 'category', categoryId: 'food', always: false, note: '' }],
     ['always groceries', { kind: 'category', categoryId: 'gro', always: true, note: '' }],
     ['groceries always', { kind: 'category', categoryId: 'gro', always: true, note: '' }],
-    ['food - dinner with Raj', { kind: 'category', categoryId: 'food', always: false, note: 'dinner with Raj' }],
+    [
+      'food - dinner with Raj',
+      { kind: 'category', categoryId: 'food', always: false, note: 'dinner with Raj' },
+    ],
     ['split 3 food', { kind: 'category', categoryId: 'food', always: false, note: '', ways: 3 }],
     ['food split in two', { kind: 'category', categoryId: 'food', always: false, note: '', ways: 2 }],
     ['split 4', { kind: 'split', ways: 4, note: '' }],
@@ -53,17 +63,17 @@ describe('suggestions', () => {
       { merchantKey: 'uber', categoryId: 'tr' },
       { merchantKey: 'ola', categoryId: 'tr' },
     ];
-    expect(suggestCategories({ merchant: 'SWIGGY', direction: 'debit' }, cats, history).map((c) => c.id)).toEqual([
-      'food',
-      'gro',
-      'tr',
-    ]);
     expect(
-      suggestCategories({ merchant: 'Indian Oil', direction: 'debit', guessSlug: 'fuel' }, cats, []).map((c) => c.id),
+      suggestCategories({ merchant: 'SWIGGY', direction: 'debit' }, cats, history).map((c) => c.id),
+    ).toEqual(['food', 'gro', 'tr']);
+    expect(
+      suggestCategories({ merchant: 'Indian Oil', direction: 'debit', guessSlug: 'fuel' }, cats, []).map(
+        (c) => c.id,
+      ),
     ).toEqual(['fuel', 'food', 'gro']);
-    expect(suggestCategories({ merchant: 'ACME', direction: 'credit' }, cats, history).map((c) => c.id)).toEqual([
-      'sal',
-    ]);
+    expect(
+      suggestCategories({ merchant: 'ACME', direction: 'credit' }, cats, history).map((c) => c.id),
+    ).toEqual(['sal']);
   });
 
   it('merchant keys ignore case, punctuation and long numbers', () => {

@@ -112,7 +112,11 @@ void main() {
         'kind': 'review',
         'actions': [
           {'id': 'c.food', 'label': 'Food & dining'},
-          {'id': 'reply', 'label': 'Reply', 'reply': {'placeholder': 'food · split 3 · not mine'}},
+          {
+            'id': 'reply',
+            'label': 'Reply',
+            'reply': {'placeholder': 'food · split 3 · not mine'},
+          },
           {'id': 'ignore', 'label': 'Not mine'},
         ],
       },

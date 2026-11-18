@@ -43,14 +43,19 @@ export function matchCategory(text: string, cats: ReviewCategory[]): ReviewCateg
   // 2. a name that starts with what was typed ("food" → "Food & dining", "bill" → "Bills & utilities")
   for (const c of cats) {
     const n = norm(c.name);
-    if (t.length >= 3 && (n.startsWith(t) || n.split(' ').some((w) => w.length >= 3 && w.startsWith(t)))) return c;
+    if (t.length >= 3 && (n.startsWith(t) || n.split(' ').some((w) => w.length >= 3 && w.startsWith(t))))
+      return c;
   }
   // 3. any typed word that is a word of a name or a slug
   for (const w of words) {
     if (w.length < 3 || ['and', 'the', 'for', 'was', 'with'].includes(w)) continue;
     for (const c of cats) {
       if (c.slug === w) return c;
-      if (norm(c.name).split(' ').some((n) => n.length >= 3 && (n === w || n.startsWith(w) || w.startsWith(n))))
+      if (
+        norm(c.name)
+          .split(' ')
+          .some((n) => n.length >= 3 && (n === w || n.startsWith(w) || w.startsWith(n)))
+      )
         return c;
     }
   }
@@ -134,7 +139,9 @@ export function suggestCategories(
   if (tx.guessSlug) add(usable.find((c) => c.slug === tx.guessSlug));
   add(matchCategory(tx.merchant, usable));
   for (const c of count(history)) add(c);
-  for (const slug of want === 'income' ? ['salary', 'refunds'] : ['food', 'groceries', 'shopping', 'transport'])
+  for (const slug of want === 'income'
+    ? ['salary', 'refunds']
+    : ['food', 'groceries', 'shopping', 'transport'])
     add(usable.find((c) => c.slug === slug));
   return out.slice(0, n);
 }
