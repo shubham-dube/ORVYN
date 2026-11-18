@@ -2,6 +2,15 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-18 (step 3: Drop + Money)
+
+| #   | Topic        | Decision                                                                                                                                                                       |
+| --- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D18 | Banks (O7)   | Readers built and tested first for **HDFC, ICICI, SBI, Axis**, **credit cards of any bank**, and **GPay, PhonePe, Paytm** notifications; other banks get a general reader.     |
+| D19 | AI budget    | ORVYN's AI (OpenRouter, D13) has a **$1 per day** cap. When reached it pauses and says so; waiting items continue the next day. Raising it needs the founder.                  |
+| D20 | Auto-capture | Transactions read from bank/UPI messages are **added directly** (rules, not AI; the amount comes from the bank's message), shown in a "new" strip with one-tap fix or delete.  |
+| D21 | Photos       | Dropped photos and receipts **may be sent to the AI model** to read them. Anything the AI proposes from them still needs one tap to confirm (AI never acts silently on money). |
+
 ## Decided — 2026-11-16 (second round)
 
 | #   | Topic     | Decision                                                                                                                                                                                        |
@@ -34,5 +43,4 @@ The founder's choices (newest first). Technical consequences are recorded as ADR
 | #   | Question                                     | Needed for                                     | Recommendation                                |
 | --- | -------------------------------------------- | ---------------------------------------------- | --------------------------------------------- |
 | O3  | Google Play developer account ($25 one-time) | First Android release (internal testing track) | Create when the Tasks + Calendar MVP is ready |
-| O7  | Banks and UPI apps used                      | Money                                          | —                                             |
 | O8  | Chat encryption library (licences differ)    | Chat                                           | decide in Chat spec                           |
