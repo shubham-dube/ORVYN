@@ -1,3 +1,4 @@
+import { findDate, findTime, todayIn, ymdString } from './dates';
 import { cleanMerchant } from './merchants';
 
 /**
@@ -10,6 +11,10 @@ export interface SpendEntry {
   merchant: string;
   category: string | null;
   note: string;
+  /** the day it happened ("yesterday", "on 12 nov") as YYYY-MM-DD, or null = today */
+  date: string | null;
+  /** HH:MM when said ("at 3pm"), else null */
+  time: string | null;
 }
 
 const HINTS: [RegExp, string][] = [
@@ -26,8 +31,14 @@ const HINTS: [RegExp, string][] = [
   [/\b(flight|hotel|trip)\b/i, 'travel'],
 ];
 
-export function parseSpend(text: string): SpendEntry | null {
-  const t = text.trim();
+export function parseSpend(text: string, o: { now?: Date; timeZone?: string } = {}): SpendEntry | null {
+  let t = text.trim();
+  // the date and time first, so their numbers aren't mistaken for the amount
+  const today = todayIn(o.timeZone ?? 'Asia/Kolkata', o.now ?? new Date());
+  const day = findDate(t, today);
+  if (day) t = `${t.slice(0, day.span[0])} ${t.slice(day.span[1])}`.replace(/\s{2,}/g, ' ').trim();
+  const clock = findTime(t);
+  if (clock) t = `${t.slice(0, clock.span[0])} ${t.slice(clock.span[1])}`.replace(/\s{2,}/g, ' ').trim();
   const m = /(?:₹|rs\.?\s*|inr\s*)?(\d[\d,]*(?:\.\d{1,2})?)\s*(k|thousand)?\b/i.exec(t);
   if (!m) return null;
   let amount = Number(m[1]!.replace(/,/g, ''));
@@ -61,5 +72,7 @@ export function parseSpend(text: string): SpendEntry | null {
             .replace(/\bat\b/i, '')
             .trim()
         : rest,
+    date: day ? ymdString(day.date) : null,
+    time: clock?.time ?? null,
   };
 }

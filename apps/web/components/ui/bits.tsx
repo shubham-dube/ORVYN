@@ -230,7 +230,7 @@ export function Sheet({
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 30, opacity: 0 }}
             transition={spring.smooth}
-            className="glass-halo edge-light relative w-full max-w-lg p-5"
+            className="glass-halo edge-light relative max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto overscroll-contain p-5"
           >
             <h2 className="mb-4 text-heading font-semibold">{title}</h2>
             {children}

@@ -5,6 +5,8 @@ import {
   CategoryFields,
   MONEY_ACCOUNT,
   MONEY_BUDGET,
+  MONEY_RECURRING,
+  RecurringFields,
   MONEY_CATEGORY,
   MONEY_TRANSACTION,
   TransactionFields,
@@ -15,7 +17,15 @@ import { Rejected, SyncRegistry, type Tx } from '../sync/sync.registry';
 import { SyncModule } from '../sync/sync.module';
 import { tableEntity } from '../sync/table-entity';
 import { MoneyController } from './money.controller';
-import { moneyAccounts, moneyBudgets, moneyCategories, moneyTransactions } from './money.schema';
+import {
+  moneyAccounts,
+  moneyBudgets,
+  moneyCategories,
+  moneyRecurring,
+  moneyTransactions,
+} from './money.schema';
+import { RecurringService } from './recurring.service';
+import { serverOrigin } from '../sync/sync.service';
 
 type Owned = PgTable & { id: PgColumn; ownerId: PgColumn; deletedAt: PgColumn };
 
@@ -56,6 +66,22 @@ class MoneyEntities implements OnModuleInit {
     );
     this.registry.register(
       tableEntity({
+        name: MONEY_RECURRING,
+        entitlement: 'money',
+        table: moneyRecurring,
+        schema: RecurringFields,
+        validate: async (tx, ownerId, f) => {
+          await mine(tx, moneyCategories, ownerId, f.categoryId, 'category');
+          await mine(tx, moneyAccounts, ownerId, f.accountId, 'account');
+          if (!serverOrigin.getStore() && 'lastRunOn' in f && f.lastRunOn !== null)
+            throw new Rejected('lastRunOn is the server’s');
+          if (typeof f.rrule === 'string' && !/^(RRULE:)?FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)\b/i.test(f.rrule))
+            throw new Rejected('not a repeat rule');
+        },
+      }),
+    );
+    this.registry.register(
+      tableEntity({
         name: MONEY_TRANSACTION,
         entitlement: 'money',
         table: moneyTransactions,
@@ -84,5 +110,9 @@ class MoneyEntities implements OnModuleInit {
   }
 }
 
-@Module({ imports: [SyncModule], providers: [MoneyEntities], controllers: [MoneyController] })
+@Module({
+  imports: [SyncModule],
+  providers: [MoneyEntities, RecurringService],
+  controllers: [MoneyController],
+})
 export class MoneyModule {}

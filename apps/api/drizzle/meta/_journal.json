@@ -92,6 +92,13 @@
       "when": 1794993398490,
       "tag": "0012_reminder_ways",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794994292478,
+      "tag": "0013_money_recurring",
+      "breakpoints": true
     }
   ]
 }

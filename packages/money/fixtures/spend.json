@@ -1,0 +1,216 @@
+{
+  "$comment": "Reference now: Wednesday 18 Nov 2026 10:00 in Asia/Kolkata. 'expect' lists only the fields that matter; the rest are not checked. Shared by TypeScript and Dart.",
+  "now": "2026-11-18T10:00:00+05:30",
+  "timeZone": "Asia/Kolkata",
+  "cases": [
+    {
+      "text": "spent 240 on lunch at swiggy",
+      "expect": {
+        "amountMinor": 24000,
+        "direction": "debit",
+        "merchant": "Swiggy",
+        "category": "food",
+        "date": null,
+        "time": null
+      }
+    },
+    {
+      "text": "spent 240 on lunch yesterday",
+      "expect": {
+        "amountMinor": 24000,
+        "direction": "debit",
+        "category": "food",
+        "date": "2026-11-17"
+      }
+    },
+    {
+      "text": "uber 180 yesterday",
+      "expect": {
+        "amountMinor": 18000,
+        "merchant": "Uber",
+        "category": "transport",
+        "date": "2026-11-17"
+      }
+    },
+    {
+      "text": "kal 350 petrol",
+      "expect": {
+        "amountMinor": 35000,
+        "category": "fuel",
+        "date": "2026-11-17"
+      }
+    },
+    {
+      "text": "parso 99 chai",
+      "expect": {
+        "amountMinor": 9900,
+        "category": "food",
+        "date": "2026-11-16"
+      }
+    },
+    {
+      "text": "day before yesterday 1200 groceries",
+      "expect": {
+        "amountMinor": 120000,
+        "category": "groceries",
+        "date": "2026-11-16"
+      }
+    },
+    {
+      "text": "500 for gift 3 days ago",
+      "expect": {
+        "amountMinor": 50000,
+        "category": "gifts",
+        "date": "2026-11-15"
+      }
+    },
+    {
+      "text": "two weeks ago 2000 rent",
+      "expect": {
+        "amountMinor": 200000,
+        "category": "rent",
+        "date": "2026-11-04"
+      }
+    },
+    {
+      "text": "spent 450 on friday dinner",
+      "expect": {
+        "amountMinor": 45000,
+        "category": "food",
+        "date": "2026-11-13"
+      }
+    },
+    {
+      "text": "last wednesday 300 taxi",
+      "expect": {
+        "amountMinor": 30000,
+        "category": "transport",
+        "date": "2026-11-11"
+      }
+    },
+    {
+      "text": "wednesday 80 coffee",
+      "expect": {
+        "amountMinor": 8000,
+        "category": "food",
+        "date": "2026-11-18"
+      }
+    },
+    {
+      "text": "spent 799 on netflix on 12 nov",
+      "expect": {
+        "amountMinor": 79900,
+        "merchant": "Netflix",
+        "category": "subscriptions",
+        "date": "2026-11-12"
+      }
+    },
+    {
+      "text": "12th nov 640 lunch",
+      "expect": {
+        "amountMinor": 64000,
+        "category": "food",
+        "date": "2026-11-12"
+      }
+    },
+    {
+      "text": "nov 3 groceries 1,850",
+      "expect": {
+        "amountMinor": 185000,
+        "category": "groceries",
+        "date": "2026-11-03"
+      }
+    },
+    {
+      "text": "paid 5000 on 25 dec",
+      "expect": {
+        "amountMinor": 500000,
+        "date": "2025-12-25"
+      }
+    },
+    {
+      "text": "2999 shoes 15/10",
+      "expect": {
+        "amountMinor": 299900,
+        "category": "shopping",
+        "date": "2026-10-15"
+      }
+    },
+    {
+      "text": "spent 75 on tea 14-11-26",
+      "expect": {
+        "amountMinor": 7500,
+        "category": "food",
+        "date": "2026-11-14"
+      }
+    },
+    {
+      "text": "rent 22000 on the 5th",
+      "expect": {
+        "amountMinor": 2200000,
+        "category": "rent",
+        "date": "2026-11-05"
+      }
+    },
+    {
+      "text": "paid 300 for auto on the 25th",
+      "expect": {
+        "amountMinor": 30000,
+        "category": "transport",
+        "date": "2026-10-25"
+      }
+    },
+    {
+      "text": "lunch 220 at 2:30 pm yesterday",
+      "expect": {
+        "amountMinor": 22000,
+        "category": "food",
+        "date": "2026-11-17",
+        "time": "14:30"
+      }
+    },
+    {
+      "text": "coffee 150 at 9am",
+      "expect": {
+        "amountMinor": 15000,
+        "category": "food",
+        "date": null,
+        "time": "09:00"
+      }
+    },
+    {
+      "text": "got 500 from rahul on 10 nov",
+      "expect": {
+        "amountMinor": 50000,
+        "direction": "credit",
+        "merchant": "Rahul",
+        "date": "2026-11-10"
+      }
+    },
+    {
+      "text": "salary 85,000 yesterday",
+      "expect": {
+        "amountMinor": 8500000,
+        "direction": "credit",
+        "category": "salary",
+        "date": "2026-11-17"
+      }
+    },
+    {
+      "text": "1.2k groceries last friday",
+      "expect": {
+        "amountMinor": 120000,
+        "category": "groceries",
+        "date": "2026-11-13"
+      }
+    },
+    {
+      "text": "bought clothes 3500 on 31 nov",
+      "expect": {
+        "amountMinor": 350000,
+        "category": "shopping",
+        "date": null
+      }
+    }
+  ]
+}

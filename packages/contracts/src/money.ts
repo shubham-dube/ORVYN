@@ -10,6 +10,7 @@ export const MONEY_ACCOUNT = 'money.account';
 export const MONEY_CATEGORY = 'money.category';
 export const MONEY_TRANSACTION = 'money.transaction';
 export const MONEY_BUDGET = 'money.budget';
+export const MONEY_RECURRING = 'money.recurring';
 
 export const AccountFields = z.object({
   name: z.string().trim().min(1).max(80),
@@ -41,7 +42,16 @@ export const CategoryFields = z.object({
 export type CategoryFields = z.infer<typeof CategoryFields>;
 export type Category = CategoryFields & { id: string };
 
-export const TX_SOURCES = ['sms', 'notification', 'manual', 'drop', 'receipt', 'statement', 'voice'] as const;
+export const TX_SOURCES = [
+  'sms',
+  'notification',
+  'manual',
+  'drop',
+  'receipt',
+  'statement',
+  'voice',
+  'recurring',
+] as const;
 
 export const TransactionFields = z.object({
   amountMinor: z.number().int().positive().max(1_000_000_000_00),
@@ -80,6 +90,44 @@ export const BudgetFields = z.object({
 });
 export type BudgetFields = z.infer<typeof BudgetFields>;
 export type Budget = BudgetFields & { id: string };
+
+/**
+ * Money that comes on a schedule (rent, subscriptions, salary, an SIP). Each day it's due the server adds it ('add': it
+ * shows in the "new" strip like captured payments) or only reminds ('remind': you enter the real amount when it happens).
+ */
+export const RecurringFields = z.object({
+  title: z.string().trim().min(1).max(80),
+  amountMinor: z.number().int().positive().max(1_000_000_000_00),
+  currency: currency.default('INR'),
+  direction: z.enum(['debit', 'credit']).default('debit'),
+  merchant: z.string().trim().max(120).default(''),
+  categoryId: z.string().uuid().nullable().default(null),
+  accountId: z.string().uuid().nullable().default(null),
+  note: z.string().max(2000).default(''),
+  /** RFC 5545 RRULE body, e.g. FREQ=MONTHLY;BYMONTHDAY=1 */
+  rrule: z.string().min(5).max(300),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .default(null),
+  time: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .default('09:00'),
+  timeZone: z.string().min(1).max(64).default('Asia/Kolkata'),
+  mode: z.enum(['add', 'remind']).default('add'),
+  paused: z.boolean().default(false),
+  /** written by the server: the last day handled, so nothing is added twice */
+  lastRunOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .default(null),
+});
+export type RecurringFields = z.infer<typeof RecurringFields>;
+export type Recurring = RecurringFields & { id: string };
 
 /** Starting categories, created once per person (they can rename, recolour, hide or add). */
 export const DEFAULT_CATEGORIES: {

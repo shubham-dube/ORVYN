@@ -1,0 +1,42 @@
+{
+  "$comment": "Shared by TypeScript (packages/today-plan/test/repeat.test.ts) and Dart (apps/mobile/test/repeat_test.dart): a rule must read back, say the same words, and give the same dates in both.",
+  "summaries": [
+    { "rrule": "FREQ=DAILY", "text": "Every day" },
+    { "rrule": "FREQ=DAILY;INTERVAL=3", "text": "Every 3 days" },
+    { "rrule": "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", "text": "Every weekday" },
+    { "rrule": "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE", "text": "Every 2 weeks on Mon, Wed" },
+    { "rrule": "FREQ=MONTHLY;BYMONTHDAY=22", "text": "Every month on the 22nd" },
+    { "rrule": "FREQ=MONTHLY;BYMONTHDAY=11", "text": "Every month on the 11th" },
+    { "rrule": "FREQ=MONTHLY;BYMONTHDAY=-1", "text": "Every month on the last day" },
+    { "rrule": "FREQ=MONTHLY;BYDAY=-1FR;COUNT=1", "text": "Every month on the last Friday · 1 time" },
+    { "rrule": "FREQ=MONTHLY;BYDAY=2TU", "text": "Every month on the 2nd Tuesday" },
+    { "rrule": "FREQ=YEARLY;UNTIL=20301231T235959Z", "text": "Every year · until 31 Dec 2030" }
+  ],
+  "unreadable": ["FREQ=HOURLY", "FREQ=YEARLY;BYMONTH=3", "FREQ=WEEKLY;BYDAY=5MO", "nonsense"],
+  "previews": [
+    {
+      "rrule": "FREQ=MONTHLY;BYMONTHDAY=31",
+      "start": "2026-01-31",
+      "n": 4,
+      "dates": ["2026-01-31", "2026-03-31", "2026-05-31", "2026-07-31"]
+    },
+    {
+      "rrule": "FREQ=WEEKLY;BYDAY=MO,WE;COUNT=3",
+      "start": "2026-11-18",
+      "n": 9,
+      "dates": ["2026-11-18", "2026-11-23", "2026-11-25"]
+    },
+    {
+      "rrule": "FREQ=DAILY;UNTIL=20261120T235959Z",
+      "start": "2026-11-18",
+      "n": 9,
+      "dates": ["2026-11-18", "2026-11-19", "2026-11-20"]
+    },
+    {
+      "rrule": "FREQ=MONTHLY;BYDAY=2FR",
+      "start": "2026-11-01",
+      "n": 3,
+      "dates": ["2026-11-13", "2026-12-11", "2027-01-08"]
+    }
+  ]
+}

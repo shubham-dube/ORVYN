@@ -28,6 +28,17 @@ picker; edit date later); accounts and categories management; recurring expenses
 salary) that appear on their day; search and filters (text, category, account, amount, dates, direction); CSV export;
 split an expense into parts (category split); tags; "show the whole year" view.
 
+**Built (web, Android, API):** any date/time in quick entry (`parseSpend` + shared `fixtures/spend.json`, 25 cases, same
+reader in TypeScript and Dart) and in the full form (day chips, date picker, optional time; a future day is refused
+unless it repeats); scheduled entries (`money.recurring`, server job adds each due day once via a per-day dedupe key,
+catches up at most 62 days, or only reminds) with the shared repeat builder (`packages/today-plan/src/repeat.ts`,
+`apps/mobile/lib/app/repeat.dart`, shared `fixtures/repeat.json`); accounts and categories management (add, rename,
+archive); search and filters (text, category, account, direction, all time); export as CSV (web download, Android
+copy-as-text).
+
+**Not yet:** splitting one expense across categories, tags UI, a whole-year view, amount and date-range filters. They
+are small follow-ups once the dashboard is done; nothing else depends on them.
+
 ## Dashboard
 
 Home becomes a real dashboard on web and Android: a greeting with the day's shape, what's next (events and tasks), a

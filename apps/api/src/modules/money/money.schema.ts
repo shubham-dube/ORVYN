@@ -93,3 +93,32 @@ export const moneyBudgets = pgTable(
   },
   (t) => [index('money_budgets_owner_idx').on(t.ownerId)],
 );
+
+/** Scheduled money (rent, subscriptions, salary…): the server adds each occurrence on its day, once. */
+export const moneyRecurring = pgTable(
+  'money_recurring',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id').notNull(),
+    title: text('title').notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    currency: text('currency').notNull().default('INR'),
+    direction: text('direction').notNull().default('debit'),
+    merchant: text('merchant').notNull().default(''),
+    categoryId: uuid('category_id'),
+    accountId: uuid('account_id'),
+    note: text('note').notNull().default(''),
+    rrule: text('rrule').notNull(),
+    startDate: text('start_date').notNull(),
+    endDate: text('end_date'),
+    time: text('time').notNull().default('09:00'),
+    timeZone: text('time_zone').notNull().default('Asia/Kolkata'),
+    mode: text('mode').notNull().default('add'),
+    paused: boolean('paused').notNull().default(false),
+    lastRunOn: text('last_run_on'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [index('money_recurring_owner_idx').on(t.ownerId)],
+);

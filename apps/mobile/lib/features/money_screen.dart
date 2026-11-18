@@ -12,6 +12,8 @@ import '../design/theme.dart';
 import '../design/toast.dart';
 import '../money/capture.dart';
 import '../money/money.dart';
+import '../money/spend_date.dart';
+import 'money_manage.dart';
 import 'common.dart';
 import 'sheets.dart';
 import 'today_calendar.dart' show labelColour;
@@ -26,6 +28,24 @@ class MoneyScreen extends ConsumerStatefulWidget {
 
 class _MoneyScreenState extends ConsumerState<MoneyScreen> {
   late String _month = monthKey(ref.read(clockProvider)());
+  final _search = TextEditingController();
+  String? _categoryFilter;
+  String? _accountFilter;
+  String? _directionFilter;
+  bool _allTime = false;
+
+  bool get _filtering =>
+      _search.text.trim().isNotEmpty ||
+      _categoryFilter != null ||
+      _accountFilter != null ||
+      _directionFilter != null ||
+      _allTime;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -48,7 +68,31 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
     final loc = MaterialLocalizations.of(context);
     final s = summarise(txs, _month);
     final fresh = txs.where((t) => !t.reviewed).toList();
-    final inMonth = txs.where((t) => monthKey(t.occurredAt) == _month).toList();
+    final accounts = ref.watch(accountsProvider).value ?? const <AccountItem>[];
+    String catName(String? id) => cats.where((c) => c.id == id).firstOrNull?.name ?? '';
+    final inMonth = txs
+        .where(
+          (t) =>
+              (_allTime || monthKey(t.occurredAt) == _month) &&
+              txMatches(
+                t,
+                q: _search.text,
+                categoryId: _categoryFilter,
+                accountId: _accountFilter,
+                direction: _directionFilter,
+                categoryName: catName,
+              ),
+        )
+        .toList();
+    var shownOut = 0, shownIn = 0;
+    for (final t in inMonth) {
+      if (t.transfer) continue;
+      if (t.credit) {
+        shownIn += t.amountMinor;
+      } else {
+        shownOut += t.amountMinor;
+      }
+    }
     final thisMonth = monthKey(ref.watch(clockProvider)());
     CategoryItem? cat(String? id) => cats.where((c) => c.id == id).firstOrNull;
     return OrvModule(
@@ -78,6 +122,32 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                       tooltip: 'Next month',
                       icon: Icon(LucideIcons.chevronRight, color: l.c.muted),
                       onPressed: _month.compareTo(thisMonth) >= 0 ? null : () => setState(() => _month = _shift(1)),
+                    ),
+                    const Spacer(),
+                    PopupMenuButton<String>(
+                      tooltip: 'More',
+                      icon: Icon(LucideIcons.ellipsis, color: l.c.muted),
+                      onSelected: (v) async {
+                        if (v == 'copy') {
+                          final toaster = Toaster.of(context);
+                          await Clipboard.setData(ClipboardData(text: transactionsCsv(inMonth, cats, accounts)));
+                          toaster.show('Copied ${inMonth.length} rows', body: 'Paste them into Sheets or Excel.');
+                        } else if (context.mounted) {
+                          await showGlassSheet<void>(context, (_) => const ManageSheet());
+                        }
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'copy', child: Text('Copy as spreadsheet text')),
+                        PopupMenuItem(value: 'manage', child: Text('Accounts, categories, repeating')),
+                      ],
+                    ),
+                    OrvButton(
+                      key: const Key('money-open-add'),
+                      label: 'Add',
+                      small: true,
+                      variant: ButtonVariant.primary,
+                      icon: LucideIcons.plus,
+                      onPressed: () => showAddTransaction(context),
                     ),
                   ],
                 ),
@@ -158,8 +228,50 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                Text(loc.formatMonthYear(DateTime.parse('$_month-01')), style: OrvText.label(l)),
-                if (inMonth.isEmpty)
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _allTime ? 'All time' : loc.formatMonthYear(DateTime.parse('$_month-01')),
+                        style: OrvText.label(l),
+                      ),
+                    ),
+                    if (_filtering)
+                      Text(
+                        '${inMonth.length} found · ${formatMoney(shownOut)} spent${shownIn > 0 ? ' · ${formatMoney(shownIn)} came in' : ''}',
+                        style: OrvText.muted(l).copyWith(fontSize: 12),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                _FilterBar(
+                  search: _search,
+                  cats: cats.where((c) => !c.archived).toList(),
+                  accounts: accounts.where((a) => a.data['archived'] != true).toList(),
+                  category: _categoryFilter,
+                  account: _accountFilter,
+                  direction: _directionFilter,
+                  allTime: _allTime,
+                  dirty: _filtering,
+                  onChanged: (f) => setState(() {
+                    _categoryFilter = f.category;
+                    _accountFilter = f.account;
+                    _directionFilter = f.direction;
+                    _allTime = f.allTime;
+                  }),
+                  onSearch: () => setState(() {}),
+                  onClear: () => setState(() {
+                    _search.clear();
+                    _categoryFilter = _accountFilter = _directionFilter = null;
+                    _allTime = false;
+                  }),
+                ),
+                if (inMonth.isEmpty && _filtering)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text('Nothing matches. Clear a filter to see more.', style: OrvText.muted(l)),
+                  ),
+                if (inMonth.isEmpty && !_filtering)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     child: Text(
@@ -202,6 +314,127 @@ class _Stat extends StatelessWidget {
   }
 }
 
+/// "yesterday" / "12 Nov" for a typed day (null for today).
+String? _dayLabel(String? date, DateTime now) {
+  if (date == null) return null;
+  final today = ymdString(todayOn(now));
+  if (date == today) return null;
+  if (date == ymdString(addDays(todayOn(now), -1))) return 'yesterday';
+  final d = DateTime.parse(date);
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${d.day} ${m[d.month - 1]}';
+}
+
+typedef _Filters = ({String? category, String? account, String? direction, bool allTime});
+
+class _FilterBar extends StatelessWidget {
+  const _FilterBar({
+    required this.search,
+    required this.cats,
+    required this.accounts,
+    required this.category,
+    required this.account,
+    required this.direction,
+    required this.allTime,
+    required this.dirty,
+    required this.onChanged,
+    required this.onSearch,
+    required this.onClear,
+  });
+  final TextEditingController search;
+  final List<CategoryItem> cats;
+  final List<AccountItem> accounts;
+  final String? category;
+  final String? account;
+  final String? direction;
+  final bool allTime;
+  final bool dirty;
+  final ValueChanged<_Filters> onChanged;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    _Filters f({Object? cat = _keep, Object? acct = _keep, Object? dir = _keep, bool? all}) => (
+      category: cat == _keep ? category : cat as String?,
+      account: acct == _keep ? account : acct as String?,
+      direction: dir == _keep ? direction : dir as String?,
+      allTime: all ?? allTime,
+    );
+    Widget menu(String label, String? value, List<(String?, String)> options, ValueChanged<String?> pick) =>
+        PopupMenuButton<String?>(
+          tooltip: label,
+          onSelected: pick,
+          itemBuilder: (_) => [for (final (v, t) in options) PopupMenuItem<String?>(value: v, child: Text(t))],
+          child: Chip(
+            label: Text(options.where((o) => o.$1 == value).firstOrNull?.$2 ?? label),
+            side: BorderSide(color: value == null ? l.c.edge : l.accent),
+            backgroundColor: value == null ? Colors.transparent : l.accent.withValues(alpha: 0.12),
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          key: const Key('money-search'),
+          controller: search,
+          onChanged: (_) => onSearch(),
+          style: OrvText.body(l),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+            hintText: 'Search merchant, note, amount',
+            hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: l.c.edge),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: l.c.edge),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          runSpacing: 0,
+          children: [
+            menu('All categories', category, [
+              (null, 'All categories'),
+              ('none', 'Uncategorised'),
+              for (final c in cats) (c.id, c.name),
+            ], (v) => onChanged(f(cat: v))),
+            if (accounts.isNotEmpty)
+              menu('All accounts', account, [
+                (null, 'All accounts'),
+                for (final a in accounts) (a.id, a.name),
+              ], (v) => onChanged(f(acct: v))),
+            menu('Spent & came in', direction, const [
+              (null, 'Spent & came in'),
+              ('debit', 'Spent'),
+              ('credit', 'Came in'),
+            ], (v) => onChanged(f(dir: v))),
+            FilterChip(
+              label: const Text('All time'),
+              selected: allTime,
+              showCheckmark: false,
+              onSelected: (v) => onChanged(f(all: v)),
+              selectedColor: l.accent.withValues(alpha: 0.16),
+              side: BorderSide(color: allTime ? l.accent : l.c.edge),
+              backgroundColor: Colors.transparent,
+            ),
+            if (dirty) ActionChip(label: const Text('Clear'), onPressed: onClear, backgroundColor: Colors.transparent),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+const Object _keep = Object();
+
 class _QuickEntry extends ConsumerStatefulWidget {
   const _QuickEntry();
   @override
@@ -218,7 +451,8 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
   }
 
   Future<void> _add() async {
-    final p = parseSpend(_c.text);
+    final now = ref.read(clockProvider)();
+    final p = parseSpend(_c.text, now: now);
     if (p == null) return;
     final cats = ref.read(categoriesProvider).value ?? const <CategoryItem>[];
     final category = cats.where((c) => c.slug != null && c.slug == p.category).firstOrNull;
@@ -230,12 +464,12 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
       'merchant': p.merchant,
       'note': p.note,
       'categoryId': category?.id,
-      'occurredAt': ref.read(clockProvider)().toUtc().toIso8601String(),
+      'occurredAt': occurredAtFor(date: p.date, time: p.time, now: now).toUtc().toIso8601String(),
     });
     _c.clear();
     setState(() {});
     toaster.show(
-      '${p.direction == 'credit' ? 'Received' : 'Spent'} ${formatMoney(p.amountMinor)}',
+      '${p.direction == 'credit' ? 'Received' : 'Spent'} ${formatMoney(p.amountMinor)}${_dayLabel(p.date, now) == null ? '' : ' · ${_dayLabel(p.date, now)}'}',
       tone: ToastTone.success,
     );
   }
@@ -243,7 +477,8 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
-    final p = _c.text.trim().isEmpty ? null : parseSpend(_c.text);
+    final now = ref.watch(clockProvider)();
+    final p = _c.text.trim().isEmpty ? null : parseSpend(_c.text, now: now);
     final cats = ref.watch(categoriesProvider).value ?? const <CategoryItem>[];
     final category = p == null ? null : cats.where((c) => c.slug != null && c.slug == p.category).firstOrNull;
     return Glass(
@@ -265,7 +500,7 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
                   textInputAction: TextInputAction.done,
                   style: OrvText.body(l).copyWith(fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: 'Add… “spent 240 on lunch”',
+                    hintText: 'Add… “spent 240 on lunch yesterday”',
                     hintStyle: OrvText.body(l).copyWith(color: l.c.faint, fontSize: 16),
                     border: InputBorder.none,
                   ),
@@ -280,6 +515,8 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
                 '${p.direction == 'credit' ? '+' : ''}${formatMoney(p.amountMinor)}',
                 if (p.merchant.isNotEmpty) p.merchant,
                 if (category != null) category.name,
+                if (_dayLabel(p.date, now) != null) _dayLabel(p.date, now)!,
+                if (p.time != null) p.time!,
               ].join(' · '),
               style: OrvText.muted(l).copyWith(color: l.accent),
             ),

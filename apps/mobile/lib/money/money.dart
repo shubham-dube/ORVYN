@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/state.dart';
 import '../sync/sync_client.dart';
 import 'parse.dart';
+import 'spend_date.dart';
 
 const moneyAccount = 'money.account';
 const moneyCategory = 'money.category';
 const moneyTransaction = 'money.transaction';
 const moneyBudget = 'money.budget';
+const moneyRecurring = 'money.recurring';
 
 class TxItem {
   TxItem(this.id, this.data);
@@ -71,6 +73,26 @@ class BudgetItem {
   bool get archived => data['archived'] == true;
 }
 
+/// Money that comes on a schedule (rent, subscriptions, salary): the server adds each occurrence on its day, once.
+class RecurringItem {
+  RecurringItem(this.id, this.data);
+  final String id;
+  final Map<String, dynamic> data;
+  String get title => (data['title'] as String?) ?? '';
+  int get amountMinor => (data['amountMinor'] as num?)?.toInt() ?? 0;
+  String get currency => (data['currency'] as String?) ?? 'INR';
+  bool get credit => data['direction'] == 'credit';
+  String get merchant => (data['merchant'] as String?) ?? '';
+  String? get categoryId => data['categoryId'] as String?;
+  String? get accountId => data['accountId'] as String?;
+  String get note => (data['note'] as String?) ?? '';
+  String get rrule => (data['rrule'] as String?) ?? 'FREQ=MONTHLY';
+  String get startDate => (data['startDate'] as String?) ?? '2026-01-01';
+  String get time => (data['time'] as String?) ?? '09:00';
+  String get mode => (data['mode'] as String?) ?? 'add';
+  bool get paused => data['paused'] == true;
+}
+
 Stream<List<T>> _watch<T>(Ref ref, String entity, T Function(String, Map<String, dynamic>) make) =>
     ref.watch(syncProvider).watch(entity).map((rows) => [for (final r in rows) make(r.id, r.data)]);
 
@@ -83,6 +105,7 @@ final categoriesProvider = StreamProvider<List<CategoryItem>>(
 );
 final accountsProvider = StreamProvider<List<AccountItem>>((ref) => _watch(ref, moneyAccount, AccountItem.new));
 final budgetsProvider = StreamProvider<List<BudgetItem>>((ref) => _watch(ref, moneyBudget, BudgetItem.new));
+final recurringProvider = StreamProvider<List<RecurringItem>>((ref) => _watch(ref, moneyRecurring, RecurringItem.new));
 
 String monthKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
 
@@ -150,9 +173,18 @@ String formatMoney(int minor, {String currency = 'INR'}) {
   return '${neg ? '−' : ''}$sym$grouped${paise == 0 ? '' : '.${paise.toString().padLeft(2, '0')}'}';
 }
 
-/// A typed entry ("spent 240 on lunch", "uber 180", "got 500 from rahul") — same rules as parseSpend in TypeScript.
-({int amountMinor, String direction, String merchant, String? category, String note})? parseSpend(String text) {
-  final t = text.trim();
+/// A typed entry ("spent 240 on lunch", "uber 180 yesterday", "got 500 from rahul") — same rules as parseSpend in
+/// TypeScript, and the same fixtures (packages/money/fixtures/spend.json).
+({int amountMinor, String direction, String merchant, String? category, String note, String? date, String? time})?
+parseSpend(String text, {DateTime? now}) {
+  var t = text.trim();
+  // the date and time first, so their numbers aren't mistaken for the amount
+  final day = findDate(t, todayOn(now ?? DateTime.now()));
+  if (day != null) t = '${t.substring(0, day.start)} ${t.substring(day.end)}'.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  final clock = findTime(t);
+  if (clock != null) {
+    t = '${t.substring(0, clock.start)} ${t.substring(clock.end)}'.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
   final m = RegExp(
     r'(?:₹|rs\.?\s*|inr\s*)?(\d[\d,]*(?:\.\d{1,2})?)\s*(k|thousand)?\b',
     caseSensitive: false,
@@ -197,6 +229,12 @@ String formatMoney(int minor, {String currency = 'INR'}) {
       break;
     }
   }
+  final String note = known.category != null || who.isNotEmpty
+      ? rest
+            .replaceFirst(RegExp(RegExp.escape(who), caseSensitive: false), '')
+            .replaceFirst(RegExp(r'\bat\b', caseSensitive: false), '')
+            .trim()
+      : rest;
   return (
     amountMinor: (amount * 100).round(),
     direction: credit ? 'credit' : 'debit',
@@ -208,7 +246,9 @@ String formatMoney(int minor, {String currency = 'INR'}) {
               ? 'refunds'
               : null)
         : (known.category ?? hint),
-    note: rest,
+    note: note,
+    date: day == null ? null : ymdString(day.date),
+    time: clock?.time,
   );
 }
 
@@ -235,10 +275,73 @@ class MoneyActions {
   Future<void> remove(String id) => _then(sync.remove(moneyTransaction, id));
   Future<String> saveBudget(String? id, Map<String, dynamic> fields) => _then(sync.upsert(moneyBudget, fields, id: id));
   Future<void> removeBudget(String id) => _then(sync.remove(moneyBudget, id));
+  Future<String> saveRecurring(String? id, Map<String, dynamic> fields) =>
+      _then(sync.upsert(moneyRecurring, fields, id: id));
+  Future<void> removeRecurring(String id) => _then(sync.remove(moneyRecurring, id));
+  Future<String> saveAccount(String? id, Map<String, dynamic> fields) =>
+      _then(sync.upsert(moneyAccount, fields, id: id));
+  Future<String> saveCategory(String? id, Map<String, dynamic> fields) =>
+      _then(sync.upsert(moneyCategory, fields, id: id));
 
   Future<T> _then<T>(Future<T> f) async {
     final r = await f;
     unawaited(sync.sync().catchError((Object _) {}));
     return r;
   }
+}
+
+/// What the search box and filters keep: a word in the merchant, note, category or amount, plus kind, category, account.
+bool txMatches(
+  TxItem t, {
+  String q = '',
+  String? categoryId,
+  String? accountId,
+  String? direction,
+  String Function(String?)? categoryName,
+}) {
+  if (direction != null && (t.credit ? 'credit' : 'debit') != direction) return false;
+  if (categoryId != null && (categoryId == 'none' ? t.categoryId != null : t.categoryId != categoryId)) return false;
+  if (accountId != null && t.accountId != accountId) return false;
+  final w = q.trim().toLowerCase().replaceFirst('₹', '');
+  if (w.isEmpty) return true;
+  final amount = (t.amountMinor / 100).toString().replaceFirst(RegExp(r'\.0$'), '');
+  return [
+    t.merchant,
+    t.rawMerchant,
+    t.note,
+    categoryName?.call(t.categoryId) ?? '',
+    amount,
+  ].any((x) => x.toLowerCase().contains(w));
+}
+
+String _csv(String v) {
+  var s = v;
+  if (RegExp(r'^[=+\-@\t\r]').hasMatch(s)) s = "'$s"; // a spreadsheet must not run a note as a formula
+  return RegExp(r'[",\n]').hasMatch(s) ? '"${s.replaceAll('"', '""')}"' : s;
+}
+
+/// Transactions as spreadsheet text (CSV): day, time, type, amount, merchant, category, account, note.
+String transactionsCsv(List<TxItem> list, List<CategoryItem> cats, List<AccountItem> accounts) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final rows = <List<String>>[
+    ['Date', 'Time', 'Type', 'Amount', 'Currency', 'Merchant', 'Category', 'Account', 'Note', 'Transfer', 'Source'],
+  ];
+  final sorted = [...list]..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
+  for (final t in sorted) {
+    final at = t.occurredAt;
+    rows.add([
+      '${at.year}-${two(at.month)}-${two(at.day)}',
+      '${two(at.hour)}:${two(at.minute)}',
+      t.credit ? 'Came in' : 'Spent',
+      (t.amountMinor / 100).toStringAsFixed(2),
+      t.currency,
+      t.merchant,
+      cats.where((c) => c.id == t.categoryId).firstOrNull?.name ?? '',
+      accounts.where((a) => a.id == t.accountId).firstOrNull?.name ?? '',
+      t.note,
+      t.transfer ? 'yes' : '',
+      t.source,
+    ]);
+  }
+  return '${rows.map((r) => r.map(_csv).join(',')).join('\n')}\n';
 }

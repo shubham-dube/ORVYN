@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   budgetProgress,
@@ -7,6 +8,7 @@ import {
   summarise,
   type Tx,
 } from '../src/insights';
+import { occurredAtFor } from '../src/dates';
 import { narrationPayee, parseStatement, statementDate } from '../src/csv';
 import { dedupeKeyOf, findDuplicate } from '../src/parse';
 import { parseSpend } from '../src/spend';
@@ -176,5 +178,48 @@ describe('the month', () => {
       { ...t('x', 500000, '2026-11-06T10:04:00Z', null, { direction: 'credit' }), accountId: 'hdfc' },
     ]);
     expect(pairs.map(([a, b]) => [a.id, b.id])).toEqual([['d', 'c']]);
+  });
+});
+
+describe('typed entries with dates, shared with the Dart reader', () => {
+  const f = JSON.parse(readFileSync(`${__dirname}/../fixtures/spend.json`, 'utf8')) as {
+    now: string;
+    timeZone: string;
+    cases: { text: string; expect: Record<string, unknown> }[];
+  };
+  for (const c of f.cases)
+    it(c.text, () => {
+      const got = parseSpend(c.text, { now: new Date(f.now), timeZone: f.timeZone });
+      expect(got).toMatchObject(c.expect);
+      if (!('date' in c.expect)) return;
+      expect(got!.date).toBe(c.expect.date ?? null);
+    });
+});
+
+describe('when an entry happened', () => {
+  const now = new Date('2026-11-18T10:00:00+05:30');
+  it('is right now when no day is given, and the given time otherwise', () => {
+    expect(occurredAtFor({ date: null, time: null }, now, 'Asia/Kolkata').toISOString()).toBe(
+      now.toISOString(),
+    );
+    expect(occurredAtFor({ date: null, time: '08:15' }, now, 'Asia/Kolkata').toISOString()).toBe(
+      '2026-11-18T02:45:00.000Z',
+    );
+    expect(occurredAtFor({ date: '2026-11-17', time: '14:30' }, now, 'Asia/Kolkata').toISOString()).toBe(
+      '2026-11-17T09:00:00.000Z',
+    );
+  });
+  it('is noon on another day with no time, so it stays on that day anywhere', () => {
+    expect(occurredAtFor({ date: '2026-11-12', time: null }, now, 'Asia/Kolkata').toISOString()).toBe(
+      '2026-11-12T06:30:00.000Z',
+    );
+    expect(occurredAtFor({ date: '2026-11-12', time: null }, now, 'America/Los_Angeles').toISOString()).toBe(
+      '2026-11-12T20:00:00.000Z',
+    );
+  });
+  it('a day given as today with no time is still right now', () => {
+    expect(occurredAtFor({ date: '2026-11-18', time: null }, now, 'Asia/Kolkata').toISOString()).toBe(
+      now.toISOString(),
+    );
   });
 });
