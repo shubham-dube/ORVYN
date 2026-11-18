@@ -10,6 +10,6 @@ import { TokenBox } from './token-box';
   imports: [SyncModule],
   providers: [CalendarService, GoogleCalendarClient, TokenBox],
   controllers: [CalendarController],
-  exports: [CalendarService],
+  exports: [CalendarService, TokenBox],
 })
 export class CalendarModule {}

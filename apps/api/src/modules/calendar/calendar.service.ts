@@ -27,6 +27,7 @@ import {
   GoogleHttpError,
   ReconnectNeeded,
   SyncTokenGone,
+  GMAIL_SCOPE,
 } from './google.client';
 import { eventIdFor, fromGoogle, instanceId, toGoogle } from './google-map';
 import { TokenBox } from './token-box';
@@ -128,11 +129,16 @@ export class CalendarService implements OnModuleInit, OnModuleDestroy {
 
   // ------------------------------------------------------------------ connecting an account
 
-  async start(ownerId: string, loginHint?: string): Promise<string> {
+  async start(ownerId: string, loginHint?: string, o: { gmail?: boolean } = {}): Promise<string> {
     const state = randomBytes(24).toString('base64url');
     const verifier = randomBytes(32).toString('base64url');
     await this.redis.set(`cal:state:${state}`, JSON.stringify({ ownerId, verifier }), 'EX', 600);
-    return this.google.authUrl(state, createHash('sha256').update(verifier).digest('base64url'), loginHint);
+    return this.google.authUrl(
+      state,
+      createHash('sha256').update(verifier).digest('base64url'),
+      loginHint,
+      o.gmail ? [GMAIL_SCOPE] : [],
+    );
   }
 
   /** The OAuth callback: returns where to send the browser. */
@@ -163,6 +169,8 @@ export class CalendarService implements OnModuleInit, OnModuleDestroy {
         accessExpiresAt: new Date(this.now() + t.expires_in * 1000),
         status: 'active',
         lastError: null,
+        // Google adds what was granted before (include_granted_scopes), so this is everything the account allows
+        scopes: (t.scope ?? '').split(' ').filter(Boolean),
       };
       let account: Account;
       if (existing) {
@@ -199,7 +207,51 @@ export class CalendarService implements OnModuleInit, OnModuleDestroy {
       email: a.email,
       status: a.status,
       lastSyncedAt: a.lastSyncedAt?.toISOString() ?? null,
+      gmail: a.scopes.includes(GMAIL_SCOPE),
     }));
+  }
+
+  // ------------------------------------------------------------------ meetings and mail (spec 0007 C2)
+
+  /**
+   * Schedules a meeting on one of the person's Google accounts: an event on its main calendar with a Meet link and the
+   * attendees. Google itself emails the invitations (and updates them if the event changes). The event then comes
+   * into ORVYN's calendar with the next sync, which runs right away.
+   */
+  async scheduleMeeting(
+    ownerId: string,
+    m: {
+      accountId: string;
+      title: string;
+      start: string;
+      end: string;
+      timeZone: string;
+      attendees: string[];
+      notes: string;
+      meet: boolean;
+    },
+  ) {
+    const a = await this.account(ownerId, m.accountId);
+    if (!a) return null;
+    const at = await this.accessToken(a);
+    const e = await this.google.meeting(at, 'primary', {
+      summary: m.title,
+      description: m.notes || undefined,
+      start: { dateTime: m.start, timeZone: m.timeZone },
+      end: { dateTime: m.end, timeZone: m.timeZone },
+      attendees: [...new Set(m.attendees.map((x) => x.trim().toLowerCase()))].map((email) => ({ email })),
+      meet: m.meet,
+      requestId: randomUUID(),
+    });
+    await this.queue.add('poll', { kind: 'poll', ownerId, accountId: a.id });
+    return { eventId: e.id, meetUrl: e.hangoutLink ?? null, htmlLink: e.htmlLink ?? null, account: a.email };
+  }
+
+  /** Unread mail on an account that has Gmail added; null when it doesn't. */
+  async inbox(ownerId: string, accountId: string) {
+    const a = await this.account(ownerId, accountId);
+    if (!a || !a.scopes.includes(GMAIL_SCOPE)) return null;
+    return this.google.inbox(await this.accessToken(a));
   }
 
   private async account(ownerId: string, accountId: string): Promise<Account | null> {

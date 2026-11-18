@@ -5,8 +5,11 @@ export const CALENDAR_SCOPES = [
   'openid',
   'email',
   'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  // also what creates Meet links and sends invitations (spec 0007 C2)
   'https://www.googleapis.com/auth/calendar.events',
 ];
+/** Asked only when the person adds Gmail to an account. Read-only. */
+export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
 /** Google's representation, only the fields ORVYN reads or writes. */
 export interface GEventTime {
@@ -65,13 +68,13 @@ export class GoogleCalendarClient {
     return `${this.env.API_URL}/calendar/google/callback`;
   }
 
-  authUrl(state: string, challenge: string, loginHint?: string): string {
+  authUrl(state: string, challenge: string, loginHint?: string, extraScopes: string[] = []): string {
     const u = new URL(this.env.GOOGLE_AUTH_URL);
     u.search = new URLSearchParams({
       client_id: this.env.GOOGLE_WEB_CLIENT_ID,
       redirect_uri: this.redirectUri,
       response_type: 'code',
-      scope: CALENDAR_SCOPES.join(' '),
+      scope: [...CALENDAR_SCOPES, ...extraScopes].join(' '),
       access_type: 'offline',
       // always ask, so Google returns a refresh token even for an account connected before
       prompt: 'consent select_account',
@@ -192,6 +195,74 @@ export class GoogleCalendarClient {
 
   insert(at: string, calendarId: string, e: Partial<GEvent>) {
     return this.call<GEvent>(at, 'POST', `/calendars/${encodeURIComponent(calendarId)}/events`, { body: e });
+  }
+
+  /**
+   * A meeting: the event with a Google Meet link and the attendees; Google emails the invitations (sendUpdates=all).
+   */
+  meeting(
+    at: string,
+    calendarId: string,
+    e: Partial<GEvent> & { attendees: { email: string }[]; meet: boolean; requestId: string },
+  ) {
+    const { meet, requestId, ...event } = e;
+    return this.call<GEvent & { hangoutLink?: string; htmlLink?: string }>(
+      at,
+      'POST',
+      `/calendars/${encodeURIComponent(calendarId)}/events`,
+      {
+        query: { conferenceDataVersion: meet ? '1' : undefined, sendUpdates: 'all' },
+        body: {
+          ...event,
+          ...(meet
+            ? {
+                conferenceData: {
+                  createRequest: { requestId, conferenceSolutionKey: { type: 'hangoutsMeet' } },
+                },
+              }
+            : {}),
+        },
+      },
+    );
+  }
+
+  /** Unread mail in the primary inbox from the last week: sender, subject, a snippet (read-only). */
+  async inbox(at: string, max = 10) {
+    const base = this.env.GOOGLE_GMAIL_API;
+    const list = await this.call<{ messages?: { id: string }[]; resultSizeEstimate?: number }>(
+      at,
+      'GET',
+      `${base}/users/me/messages`,
+      { query: { q: 'is:unread category:primary newer_than:7d', maxResults: String(max) } },
+    );
+    const items = await Promise.all(
+      (list.messages ?? []).map((m) =>
+        this.call<{
+          id: string;
+          threadId: string;
+          snippet?: string;
+          internalDate?: string;
+          payload?: { headers?: { name: string; value: string }[] };
+        }>(
+          at,
+          'GET',
+          `${base}/users/me/messages/${m.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+        ),
+      ),
+    );
+    const header = (r: (typeof items)[number], n: string) =>
+      r.payload?.headers?.find((h) => h.name.toLowerCase() === n.toLowerCase())?.value ?? '';
+    return {
+      unread: list.resultSizeEstimate ?? items.length,
+      items: items.map((r) => ({
+        id: r.id,
+        from: header(r, 'From'),
+        subject: header(r, 'Subject') || '(no subject)',
+        snippet: (r.snippet ?? '').slice(0, 200),
+        at: r.internalDate ? new Date(Number(r.internalDate)).toISOString() : null,
+        url: `https://mail.google.com/mail/u/0/#inbox/${r.threadId}`,
+      })),
+    };
   }
 
   patch(at: string, calendarId: string, eventId: string, e: Partial<GEvent>, etag?: string | null) {

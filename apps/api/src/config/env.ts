@@ -56,6 +56,10 @@ export const EnvSchema = z.object({
   GOOGLE_REVOKE_URL: z.string().url().default('https://oauth2.googleapis.com/revoke'),
   GOOGLE_USERINFO_URL: z.string().url().default('https://openidconnect.googleapis.com/v1/userinfo'),
   GOOGLE_CALENDAR_API: z.string().url().default('https://www.googleapis.com/calendar/v3'),
+  /** Gmail (optional per account, read-only: spec 0007 C2) */
+  GOOGLE_GMAIL_API: z.string().url().default('https://gmail.googleapis.com/gmail/v1'),
+  /** ClickUp (personal API tokens: spec 0007 C2) */
+  CLICKUP_API: z.string().url().default('https://api.clickup.com/api/v2'),
   /**
    * AI (ADR-0010, D13, D19): OpenRouter with ORVYN's own key, routes per task, one daily cap in USD.
    * AI_PROVIDER "fake" answers deterministically (tests, e2e, offline development); "off" refuses.

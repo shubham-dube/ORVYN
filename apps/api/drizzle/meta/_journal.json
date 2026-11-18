@@ -134,6 +134,13 @@
       "when": 1795019237729,
       "tag": "0018_ai_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1795046081452,
+      "tag": "0019_connections",
+      "breakpoints": true
     }
   ]
 }

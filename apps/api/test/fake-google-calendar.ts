@@ -34,7 +34,19 @@ export class FakeGoogleCalendar {
   seq = 0;
   accounts = new Map<string, FCal[]>(); // email → calendars
   revoked = new Set<string>(); // refresh tokens
-  requests: { method: string; path: string; ifMatch?: string; body?: unknown }[] = [];
+  requests: {
+    method: string;
+    path: string;
+    ifMatch?: string;
+    body?: unknown;
+    query?: Record<string, string>;
+  }[] = [];
+  /** accounts that granted Gmail (read-only) */
+  gmail = new Set<string>();
+  mail = new Map<
+    string,
+    { id: string; threadId: string; from: string; subject: string; snippet: string }[]
+  >();
   watches = 0;
   private tokens = new Map<string, string>(); // access token → email
   private n = 0;
@@ -84,6 +96,7 @@ export class FakeGoogleCalendar {
       GOOGLE_REVOKE_URL: `${this.url}/revoke`,
       GOOGLE_USERINFO_URL: `${this.url}/userinfo`,
       GOOGLE_CALENDAR_API: `${this.url}/calendar/v3`,
+      GOOGLE_GMAIL_API: `${this.url}/gmail/v1`,
     };
   }
 
@@ -109,7 +122,13 @@ export class FakeGoogleCalendar {
       }
     })();
     const ifMatch = req.headers['if-match'] as string | undefined;
-    this.requests.push({ method: req.method!, path: u.pathname, ifMatch, body: json });
+    this.requests.push({
+      method: req.method!,
+      path: u.pathname,
+      ifMatch,
+      body: json,
+      query: Object.fromEntries(u.searchParams),
+    });
 
     if (u.pathname === '/token') {
       const f = new URLSearchParams(raw);
@@ -119,7 +138,14 @@ export class FakeGoogleCalendar {
         if (!f.get('code_verifier')) return this.send(res, 400, { error: 'invalid_request' });
         const at = `at-${email}-${++this.n}`;
         this.tokens.set(at, email);
-        return this.send(res, 200, { access_token: at, refresh_token: `rt-${email}`, expires_in: 3600 });
+        const scope = ['openid', 'email', 'https://www.googleapis.com/auth/calendar.events'];
+        if (this.gmail.has(email)) scope.push('https://www.googleapis.com/auth/gmail.readonly');
+        return this.send(res, 200, {
+          access_token: at,
+          refresh_token: `rt-${email}`,
+          expires_in: 3600,
+          scope: scope.join(' '),
+        });
       }
       const rt = f.get('refresh_token')!;
       if (this.revoked.has(rt)) return this.send(res, 400, { error: 'invalid_grant' });
@@ -135,6 +161,30 @@ export class FakeGoogleCalendar {
     if (!email) return this.send(res, 401, { error: 'unauthorized' });
     if (u.pathname === '/userinfo') return this.send(res, 200, { email, email_verified: true });
 
+    const gm = /^\/gmail\/v1\/users\/me\/messages(?:\/([^/]+))?$/.exec(u.pathname);
+    if (gm) {
+      if (!this.gmail.has(email)) return this.send(res, 403, {});
+      const box = this.mail.get(email) ?? [];
+      if (!gm[1])
+        return this.send(res, 200, {
+          messages: box.map((m) => ({ id: m.id })),
+          resultSizeEstimate: box.length,
+        });
+      const m = box.find((x) => x.id === gm[1]);
+      if (!m) return this.send(res, 404, {});
+      return this.send(res, 200, {
+        id: m.id,
+        threadId: m.threadId,
+        snippet: m.snippet,
+        internalDate: String(Date.UTC(2030, 0, 6, 9)),
+        payload: {
+          headers: [
+            { name: 'From', value: m.from },
+            { name: 'Subject', value: m.subject },
+          ],
+        },
+      });
+    }
     const cals = this.accounts.get(email) ?? [];
     if (u.pathname === '/calendar/v3/users/me/calendarList') {
       return this.send(res, 200, {
@@ -144,7 +194,8 @@ export class FakeGoogleCalendar {
     if (u.pathname === '/calendar/v3/channels/stop') return this.send(res, 204);
 
     const m = /^\/calendar\/v3\/calendars\/([^/]+)\/events(?:\/([^/]+))?$/.exec(u.pathname);
-    const cal = m ? cals.find((c) => c.id === decodeURIComponent(m[1]!)) : undefined;
+    const calId = m ? decodeURIComponent(m[1]!) : '';
+    const cal = m ? cals.find((c) => c.id === calId || (calId === 'primary' && c.primary)) : undefined;
     if (!m || !cal) return this.send(res, 404, {});
     const eventId = m[2] ? decodeURIComponent(m[2]) : undefined;
 
@@ -174,9 +225,16 @@ export class FakeGoogleCalendar {
 
     if (req.method === 'POST' && !eventId) {
       const id = `g${++this.n}`;
-      const e = this.put(email, cal.id, { ...(json as Partial<FEvent>), id });
+      const body = { ...(json as Partial<FEvent> & { conferenceData?: unknown; attendees?: unknown }) };
+      const meet = u.searchParams.get('conferenceDataVersion') === '1' && body.conferenceData;
+      delete body.conferenceData;
+      const e = this.put(email, cal.id, { ...body, id } as Partial<FEvent> & { id: string });
       const { seq: _s, ...out } = e;
-      return this.send(res, 200, out);
+      return this.send(res, 200, {
+        ...out,
+        htmlLink: `https://calendar.google.com/event?eid=${id}`,
+        ...(meet ? { hangoutLink: `https://meet.google.com/${id}-meet` } : {}),
+      });
     }
 
     if (eventId && (req.method === 'PATCH' || req.method === 'DELETE')) {

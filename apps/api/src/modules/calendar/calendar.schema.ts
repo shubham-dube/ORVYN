@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { index, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, ts, updatedAt } from '../../db/columns';
 
@@ -17,6 +18,11 @@ export const calendarAccounts = pgTable(
     accessExpiresAt: ts('access_expires_at'),
     /** active · needs_reconnect (Google refused the refresh token) */
     status: text('status').notNull().default('active'),
+    /** what Google granted (spec 0007 C2: Gmail is an optional add-on per account) */
+    scopes: text('scopes')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     lastSyncedAt: ts('last_synced_at'),
     lastError: text('last_error'),
     createdAt: createdAt(),
