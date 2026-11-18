@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { wallIn } from '@orvyn/today-parse';
 import { and, eq, sql } from 'drizzle-orm';
-import { type ZodType } from 'zod';
+import { type ZodType, type ZodTypeDef } from 'zod';
 import { ENV, type Env } from '../../config/env';
 import { DB, type Db } from '../../db/db.module';
 import { aiUsage } from './ai.schema';
@@ -213,7 +213,7 @@ export class AiService {
     task: string;
     system: string;
     data: Part[];
-    schema: ZodType<T>;
+    schema: ZodType<T, ZodTypeDef, unknown>;
     maxTokens?: number;
   }): Promise<T> {
     if (!this.model) throw new AiOff('AI is not set up on this server');

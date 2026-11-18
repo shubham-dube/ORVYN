@@ -10,6 +10,7 @@ import { TodayModule } from './modules/today/today.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { AiModule } from './modules/ai/ai.module';
 import { MoneyModule } from './modules/money/money.module';
+import { DropModule } from './modules/drop/drop.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -54,6 +55,7 @@ export class AppModule {
         TodayModule,
         CalendarModule,
         MoneyModule,
+        DropModule,
         ...(extra ?? []),
       ],
       controllers: [HealthController],
