@@ -8,3 +8,4 @@ export * from '../modules/today/today.schema';
 export * from '../modules/calendar/calendar.schema';
 export * from '../modules/ai/ai.schema';
 export * from '../modules/files/files.schema';
+export * from '../modules/money/money.schema';

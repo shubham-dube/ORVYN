@@ -35,6 +35,8 @@ export const CategoryFields = z.object({
   colour: z.enum(PROJECT_COLOURS).default('sky'),
   order: z.number().int().min(0).max(1000).default(0),
   archived: z.boolean().default(false),
+  /** set on the starting categories, so readers can file "food" even after the person renames it */
+  slug: z.string().max(40).nullable().default(null),
 });
 export type CategoryFields = z.infer<typeof CategoryFields>;
 export type Category = CategoryFields & { id: string };
