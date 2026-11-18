@@ -157,3 +157,27 @@ export function findTransferPairs<T extends Tx & { accountId: string | null }>(t
   }
   return pairs;
 }
+
+/**
+ * Spending per day of a month, for the little chart on the dashboard: one number per calendar day (0 for quiet days),
+ * transfers left out, credits ignored. `upTo` stops the line at today so the future isn't drawn as zero.
+ */
+export function dailySpend(
+  txs: Tx[],
+  month: string,
+  timeZone: string,
+  upTo?: number,
+): { day: number; spentMinor: number }[] {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const last = Math.min(upTo ?? days, days);
+  const by = new Array<number>(days).fill(0);
+  for (const t of txs) {
+    if (t.transfer || t.direction !== 'debit' || monthOf(t.occurredAt, timeZone) !== month) continue;
+    const d = Number(
+      new Intl.DateTimeFormat('en-CA', { timeZone, day: '2-digit' }).format(new Date(t.occurredAt)),
+    );
+    by[d - 1]! += t.amountMinor;
+  }
+  return by.slice(0, last).map((spentMinor, i) => ({ day: i + 1, spentMinor }));
+}

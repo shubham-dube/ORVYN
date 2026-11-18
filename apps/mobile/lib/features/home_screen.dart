@@ -11,6 +11,7 @@ import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
+import 'dashboard_widgets.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -44,6 +45,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final unread = items.where((n) => n.readAt == null).length;
     final modules = moduleKeys.where((k) => me?.can(k) ?? false).toList();
     final loc = MaterialLocalizations.of(context);
+    final modesFor = [
+      if (me?.can('today') ?? false) 'task',
+      if (me?.can('money') ?? false) 'expense',
+      if (me?.can('drop') ?? false) 'drop',
+    ];
 
     return RefreshIndicator(
       color: l.accent,
@@ -55,30 +61,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
         children: [
           PageTitle(first.isEmpty ? greetingAt(now) : '${greetingAt(now)}, $first', overline: loc.formatFullDate(now)),
-          Glass(
-            level: GlassLevel.float,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    _Pulse(color: l.accent),
-                    const SizedBox(width: 8),
-                    const SectionLabel('Now'),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(loc.formatTimeOfDay(TimeOfDay.fromDateTime(now)), style: OrvText.display(l)),
-                const SizedBox(height: 8),
-                Text(
-                  'The light follows your day — it is ${ref.watch(phaseProvider).name} now. Today, your timeline of tasks and events, arrives next and will live right here.',
-                  style: OrvText.muted(l),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
+          if (modesFor.isNotEmpty) QuickAddCard(key: ValueKey(modesFor.join()), modes: modesFor),
+          if (me?.can('today') ?? false) const TodayCard(),
           Glass(
             level: GlassLevel.float,
             padding: const EdgeInsets.all(20),
@@ -116,6 +100,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           const SizedBox(height: 14),
+          if (me?.can('money') ?? false) const MoneyCard(),
+          if (me?.can('today') ?? false) const WeekCard(),
+          if (me?.can('drop') ?? false) const DropCard(),
           Glass(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -156,7 +143,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                         children: [
                                           Text(name, style: OrvText.body(ml).copyWith(fontWeight: FontWeight.w600)),
                                           const SizedBox(width: 8),
-                                          const OrvBadge('soon'),
+                                          if (routes[k] == null) const OrvBadge('soon'),
                                         ],
                                       ),
                                       Text(line, style: OrvText.muted(ml)),

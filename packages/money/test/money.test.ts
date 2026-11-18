@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   budgetProgress,
+  dailySpend,
   findTransferPairs,
   monthStory,
   subscriptions,
@@ -221,5 +222,35 @@ describe('when an entry happened', () => {
     expect(occurredAtFor({ date: '2026-11-18', time: null }, now, 'Asia/Kolkata').toISOString()).toBe(
       now.toISOString(),
     );
+  });
+});
+
+describe('daily spend for the dashboard chart', () => {
+  const tx = (id: string, at: string, amountMinor: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    amountMinor,
+    direction: 'debit' as const,
+    occurredAt: at,
+    merchant: id,
+    categoryId: null,
+    transfer: false,
+    ...extra,
+  });
+  it('is one number per day, skipping transfers and income, stopping at today', () => {
+    const d = dailySpend(
+      [
+        tx('a', '2026-11-02T10:00:00+05:30', 24000),
+        tx('b', '2026-11-02T20:00:00+05:30', 1000),
+        tx('c', '2026-11-05T10:00:00+05:30', 5000, { transfer: true }),
+        tx('d', '2026-11-05T11:00:00+05:30', 7000, { direction: 'credit' }),
+        tx('e', '2026-10-31T23:00:00+05:30', 9000),
+        tx('f', '2026-11-04T00:30:00+05:30', 300),
+      ],
+      '2026-11',
+      'Asia/Kolkata',
+      5,
+    );
+    expect(d.map((x) => x.spentMinor)).toEqual([0, 25000, 0, 300, 0]);
+    expect(dailySpend([], '2026-02', 'Asia/Kolkata')).toHaveLength(28);
   });
 });

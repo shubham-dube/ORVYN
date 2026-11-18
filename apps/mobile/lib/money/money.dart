@@ -345,3 +345,16 @@ String transactionsCsv(List<TxItem> list, List<CategoryItem> cats, List<AccountI
   }
   return '${rows.map((r) => r.map(_csv).join(',')).join('\n')}\n';
 }
+
+/// Spending per day of a month for the dashboard chart (0 for quiet days; transfers and income left out), up to
+/// [upTo] (today). Same as dailySpend in packages/money.
+List<int> dailySpend(List<TxItem> txs, String month, {int? upTo}) {
+  final y = int.parse(month.substring(0, 4)), m = int.parse(month.substring(5, 7));
+  final days = DateTime(y, m + 1, 0).day;
+  final by = List<int>.filled(days, 0);
+  for (final t in txs) {
+    if (t.transfer || t.credit || monthKey(t.occurredAt) != month) continue;
+    by[t.occurredAt.day - 1] += t.amountMinor;
+  }
+  return by.sublist(0, (upTo ?? days).clamp(0, days));
+}
