@@ -49,15 +49,15 @@ test('the Chrome extension connects through the web app and shows live notificat
     await expect.poll(badge).toBe(before ? String(before) : '');
 
     // quick capture from any page: to Today (parsed like everywhere) and to Drop
-    await popup.getByLabel('Add or drop').fill('renew passport @Errands');
+    await popup.getByLabel('Add or drop').fill('renew driving licence @Errands');
     await popup.getByRole('button', { name: 'Add to Today' }).click();
-    await expect(popup.getByRole('status')).toHaveText('Added to Today: Renew passport');
+    await expect(popup.getByRole('status')).toHaveText('Added to Today: Renew driving licence');
     await popup.getByLabel('Add or drop').fill('https://example.test/long-read');
     await popup.getByRole('button', { name: 'Drop' }).click();
     await expect(popup.getByRole('status')).toHaveText('Dropped — a suggestion is on its way');
     const web = await ctx.newPage();
     await web.goto('http://localhost:3100/today');
-    await expect(web.getByText('Renew passport')).toBeVisible({ timeout: 15_000 });
+    await expect(web.getByText('Renew driving licence')).toBeVisible({ timeout: 15_000 });
     await web.goto('http://localhost:3100/drop');
     await expect(web.getByLabel('Dropped: https://example.test/long-read')).toBeVisible({ timeout: 15_000 });
     await web.close();
