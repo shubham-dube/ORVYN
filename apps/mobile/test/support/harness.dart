@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:orvyn/app/calendar.dart';
 import 'package:orvyn/app/home_widget.dart';
+import 'package:orvyn/core/alarm.dart';
 import 'package:orvyn/money/capture.dart';
 import 'package:orvyn/drop/drop.dart';
 import 'package:orvyn/app/app.dart';
@@ -131,6 +132,7 @@ class AppHarness {
   final widget = RecordingWidgetPublisher();
   final capture = FakeCaptureChannel();
   final share = FakeShareChannel();
+  final alarms = FakeAlarmScheduler();
   PickedFile? photo;
   String? spoken;
   final widgetClicks = StreamController<Uri?>.broadcast();
@@ -163,6 +165,7 @@ class AppHarness {
           widgetPublisherProvider.overrideWithValue(widget),
           captureChannelProvider.overrideWithValue(capture),
           shareChannelProvider.overrideWithValue(share),
+          alarmSchedulerProvider.overrideWithValue(alarms),
           photoPickerProvider.overrideWithValue(({required bool camera}) async => photo),
           speechProvider.overrideWithValue(FakeSpeech(() => spoken)),
           widgetClicksProvider.overrideWithValue(widgetClicks.stream),
@@ -248,4 +251,14 @@ class FakeSpeech implements Speech {
   final String? Function() words;
   @override
   Future<String?> listen() async => words();
+}
+
+class FakeAlarmScheduler implements AlarmScheduler {
+  List<AlarmSlot> current = [];
+  int calls = 0;
+  @override
+  Future<void> replaceAll(List<AlarmSlot> wanted) async {
+    calls++;
+    current = wanted;
+  }
 }

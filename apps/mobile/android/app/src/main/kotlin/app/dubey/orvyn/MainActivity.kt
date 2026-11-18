@@ -32,10 +32,20 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
         receive(intent)
+        lightUpForAlarm(intent)
+    }
+
+    /** Opened by a ringing alarm: show over the lock screen and wake the screen, only then (the app lock still applies). */
+    private fun lightUpForAlarm(intent: Intent?) {
+        val payload = intent?.getStringExtra("payload") ?: return
+        if (!payload.contains("\"alarm\":true")) return
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        lightUpForAlarm(intent)
         if (receive(intent)) share?.invokeMethod("shared", null)
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Task } from '@orvyn/contracts';
+import type { ReminderWay, Task } from '@orvyn/contracts';
 import { CalendarDays, Check, Flag, Inbox, Plus, Sun, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
+import { WaysPicker, waysLabel } from '@/components/ways-picker';
 import { TaskChips } from '@/components/task-chips';
 import { LeadTimes, leadLabel } from '@/components/today-settings';
 import { looksUnread, type Parsed } from '@orvyn/today-parse';
@@ -448,6 +449,7 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
         <TaskReminders
           draft={draft}
           defaults={settings?.reminders.timed ?? null}
+          defaultWays={settings?.reminders.via}
           onChange={(reminders) => setDraft({ ...draft, reminders })}
         />
         <Field label="Notes">
@@ -486,13 +488,17 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
 function TaskReminders({
   draft,
   defaults,
+  defaultWays,
   onChange,
 }: {
   draft: Task;
   defaults: number[] | null;
+  defaultWays: ReminderWay[] | undefined;
   onChange(r: Task['reminders']): void;
 }) {
   const own = (draft.reminders ?? []).flatMap((r) => (r.kind === 'before' ? [r.minutes] : []));
+  // one set of ways for the task's reminders (the data allows one per reminder; the sheet keeps it simple)
+  const ownWays = draft.reminders?.find((r) => r.via?.length)?.via ?? defaultWays;
   const custom = draft.reminders !== null;
   if (!draft.dueAt && !draft.scheduledStart) {
     return (
@@ -508,7 +514,9 @@ function TaskReminders({
         value={custom ? 'custom' : 'defaults'}
         onChange={(v) =>
           onChange(
-            v === 'custom' ? (defaults ?? []).map((minutes) => ({ kind: 'before' as const, minutes })) : null,
+            v === 'custom'
+              ? (defaults ?? []).map((minutes) => ({ kind: 'before' as const, minutes, via: defaultWays }))
+              : null,
           )
         }
         options={[
@@ -517,16 +525,25 @@ function TaskReminders({
         ]}
       />
       {custom ? (
-        <LeadTimes
-          label="Remind me"
-          value={own}
-          onChange={(m) => onChange(m.map((minutes) => ({ kind: 'before' as const, minutes })))}
-        />
+        <>
+          <LeadTimes
+            label="Remind me"
+            value={own}
+            onChange={(m) =>
+              onChange(m.map((minutes) => ({ kind: 'before' as const, minutes, via: ownWays })))
+            }
+          />
+          <WaysPicker
+            label="By"
+            value={ownWays}
+            onChange={(via) => onChange((draft.reminders ?? []).map((r) => ({ ...r, via })))}
+          />
+        </>
       ) : (
         <p className="text-small text-orv-muted">
           {defaults
             ? defaults.length
-              ? defaults.map(leadLabel).join(', ')
+              ? `${defaults.map(leadLabel).join(', ')} · ${waysLabel(defaultWays)}`
               : 'No reminder'
             : 'Set your defaults in Settings → Today.'}
         </p>

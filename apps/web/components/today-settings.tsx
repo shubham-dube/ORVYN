@@ -1,5 +1,6 @@
 'use client';
 
+import { WaysPicker } from '@/components/ways-picker';
 import {
   STARTING_SETTINGS,
   type TimeRange,
@@ -149,6 +150,11 @@ export function TodaySettings() {
           value={draft.reminders.timed}
           onChange={(timed) => edit({ reminders: { ...draft.reminders, timed } })}
         />
+        <WaysPicker
+          label="Remind me by"
+          value={draft.reminders.via}
+          onChange={(via) => edit({ reminders: { ...draft.reminders, via } })}
+        />
         <div className="flex flex-wrap items-end gap-3">
           <Segmented<'digest' | 'ping' | 'none'>
             label="For things with only a date"
@@ -197,6 +203,14 @@ export function TodaySettings() {
             </Field>
           ) : null}
         </div>
+        {draft.reminders.dateOnly.mode !== 'none' ? (
+          <WaysPicker
+            label="Send the summary by"
+            value={draft.reminders.dateOnlyVia}
+            onChange={(dateOnlyVia) => edit({ reminders: { ...draft.reminders, dateOnlyVia } })}
+            tryable={false}
+          />
+        ) : null}
         <Switch
           label="Include overdue tasks in the summary"
           checked={draft.reminders.overdueInDigest}

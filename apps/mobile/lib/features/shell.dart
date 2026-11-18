@@ -8,6 +8,8 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app/home_widget.dart';
+import '../app/today.dart';
+import '../core/push_android.dart' show AndroidAlarmScheduler;
 import '../drop/drop.dart';
 import '../app/notifications.dart';
 import '../app/state.dart';
@@ -39,6 +41,13 @@ class _ShellState extends ConsumerState<Shell> {
     _taps = ref.read(pusherProvider).taps.listen((t) async {
       final id = t['id'] as String?;
       final action = t['action'] as String?;
+      // an alarm scheduled on this phone: its buttons act on this phone's own copy
+      if (t['kind'] == 'local-alarm') {
+        if (action == 'done') unawaited(ref.read(todayActionsProvider).complete(t['taskId'] as String, true));
+        if (action == 'snooze_10m') unawaited(AndroidAlarmScheduler.snooze(t));
+        if (action == null && mounted) context.go('/today');
+        return;
+      }
       if (id == null) return;
       final ctl = ref.read(notificationsProvider.notifier);
       if (action != null && action.isNotEmpty) {

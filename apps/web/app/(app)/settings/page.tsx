@@ -1,10 +1,12 @@
 'use client';
 
-import type { DeviceView, NotifySettings } from '@orvyn/contracts';
+import type { ContactChannels, DeviceView, NotifySettings } from '@orvyn/contracts';
 import {
   Bell,
   KeyRound,
   Laptop,
+  Mail,
+  MessageCircle,
   Monitor,
   Moon,
   Smartphone,
@@ -19,7 +21,8 @@ import { useTheme } from '@/components/theme-provider';
 import { Badge, Glass, Label, Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
+import { refreshChannels } from '@/components/ways-picker';
 import { cn } from '@/lib/cn';
 import { enablePush, pushPermission, pushSupported } from '@/lib/push';
 import { useSession } from '@/lib/session';
@@ -166,6 +169,7 @@ function Notifications() {
       title="Notifications"
       line="One notification reaches every device; open or dismiss it anywhere and it clears everywhere."
     >
+      <ReachMe />
       <div className="flex flex-wrap items-center gap-3">
         <Bell size={18} className="text-orv-accent" aria-hidden />
         <p className="flex-1 text-[14px]">
@@ -356,6 +360,129 @@ function Security() {
         ))}
       </div>
     </Section>
+  );
+}
+
+/** Where reminders can reach me besides the apps (D23). */
+function ReachMe() {
+  const toast = useToast();
+  const [ch, setCh] = useState<ContactChannels | null>(null);
+  const [number, setNumber] = useState('');
+  const [code, setCode] = useState('');
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void refreshChannels().then(setCh);
+  }, []);
+  if (!ch) return null;
+  const wa = ch.whatsapp;
+  const run = async (fn: () => Promise<ContactChannels['whatsapp']>, ok?: string) => {
+    setBusy(true);
+    try {
+      const w = await fn();
+      setCh({ ...ch, whatsapp: w });
+      if (ok) toast({ title: ok, tone: 'success' });
+      return w;
+    } catch (e) {
+      toast({ title: e instanceof ApiError ? e.message : 'That didn’t work', tone: 'danger' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-3" aria-label="Reach me">
+      <Label>Reach me by</Label>
+      <p className="flex items-center gap-2 text-[14px]">
+        <Mail size={16} className="text-orv-accent" aria-hidden /> Email: <strong>{ch.email}</strong>
+      </p>
+      <div className="flex flex-col gap-2">
+        <p className="flex items-center gap-2 text-[14px]">
+          <MessageCircle size={16} className="text-orv-accent" aria-hidden /> WhatsApp:{' '}
+          <strong>
+            {!wa.available
+              ? 'not set up on this server yet'
+              : wa.verified
+                ? wa.masked
+                : wa.masked
+                  ? `${wa.masked} (not confirmed)`
+                  : 'no number'}
+          </strong>
+          {wa.verified ? <Badge tone="success">Confirmed</Badge> : null}
+        </p>
+        {wa.available ? (
+          <div className="flex flex-wrap items-end gap-2">
+            {!wa.verified && !(wa.masked && sent) ? (
+              <>
+                <Field label="Your number (with country code)">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      inputMode="tel"
+                      placeholder="+91 98765 43210"
+                      value={number}
+                      onChange={(e) => setNumber(e.target.value)}
+                    />
+                  )}
+                </Field>
+                <Button
+                  loading={busy}
+                  disabled={number.trim().length < 6}
+                  onClick={async () => {
+                    if (await run(() => api('/notifications/whatsapp', { method: 'PUT', body: { number } })))
+                      setSent(true);
+                  }}
+                >
+                  Send me a code
+                </Button>
+              </>
+            ) : null}
+            {!wa.verified && wa.masked && sent ? (
+              <>
+                <Field label="The 6-digit code on WhatsApp">
+                  {(id) => (
+                    <Input
+                      id={id}
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                    />
+                  )}
+                </Field>
+                <Button
+                  variant="primary"
+                  loading={busy}
+                  disabled={code.length !== 6}
+                  onClick={async () => {
+                    await run(
+                      () => api('/notifications/whatsapp/verify', { method: 'POST', body: { code } }),
+                      'WhatsApp confirmed',
+                    );
+                    setCode('');
+                  }}
+                >
+                  Confirm
+                </Button>
+                <Button variant="ghost" onClick={() => setSent(false)}>
+                  Use another number
+                </Button>
+              </>
+            ) : null}
+            {wa.verified ? (
+              <Button
+                variant="ghost"
+                loading={busy}
+                onClick={() =>
+                  void run(() => api('/notifications/whatsapp', { method: 'DELETE' }), 'Number removed')
+                }
+              >
+                Remove number
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

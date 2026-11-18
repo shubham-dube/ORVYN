@@ -14,6 +14,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
+import 'ways_editor.dart';
 
 const _dayNames = {'mon': 'Mon', 'tue': 'Tue', 'wed': 'Wed', 'thu': 'Thu', 'fri': 'Fri', 'sat': 'Sat', 'sun': 'Sun'};
 
@@ -236,6 +237,12 @@ class _TodaySettingsScreenState extends ConsumerState<TodaySettingsScreen> {
                 value: ((d['reminders'] as Map)['timed'] as List).cast<int>(),
                 onChanged: (v) => edit(() => (d['reminders'] as Map)['timed'] = v),
               ),
+              const SizedBox(height: 10),
+              WaysEditor(
+                label: 'Remind me by',
+                value: ((d['reminders'] as Map)['via'] as List?)?.cast<String>(),
+                onChanged: (v) => edit(() => (d['reminders'] as Map)['via'] = v),
+              ),
               const SizedBox(height: 12),
               Text('For things with only a date', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
@@ -277,6 +284,14 @@ class _TodaySettingsScreenState extends ConsumerState<TodaySettingsScreen> {
                   );
                 },
               ),
+              if ((d['reminders'] as Map)['dateOnly']['mode'] != 'none') ...[
+                const SizedBox(height: 10),
+                WaysEditor(
+                  label: 'Send the summary by',
+                  value: ((d['reminders'] as Map)['dateOnlyVia'] as List?)?.cast<String>(),
+                  onChanged: (v) => edit(() => (d['reminders'] as Map)['dateOnlyVia'] = v),
+                ),
+              ],
               const SizedBox(height: 8),
               OrvSwitchRow(
                 label: 'Include overdue tasks in the summary',

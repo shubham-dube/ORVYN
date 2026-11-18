@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'app/app.dart';
 import 'app/platform.dart';
 import 'app/state.dart';
+import 'app/home_widget.dart';
 import 'core/push_android.dart';
 import 'sync/db.dart';
 
@@ -25,6 +26,7 @@ Future<void> main() async {
         dbProvider.overrideWithValue(db),
         pusherProvider.overrideWithValue(push),
         deviceInfoProvider.overrideWithValue(device),
+        alarmSchedulerProvider.overrideWithValue(AndroidAlarmScheduler()),
       ],
       child: const OrvynApp(),
     ),

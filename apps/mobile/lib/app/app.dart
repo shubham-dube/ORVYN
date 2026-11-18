@@ -46,6 +46,7 @@ class _OrvynAppState extends ConsumerState<OrvynApp> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     ref.watch(homeWidgetSyncProvider); // keeps the home-screen widget current (and blank when signed out)
+    ref.watch(alarmSyncProvider); // alarms ring on this phone even offline
     ref.watch(captureSyncProvider); // payment messages read on this phone become transactions (ADR-0012)
     final look = OrvLook(phase: ref.watch(phaseProvider), module: 'core');
     final locked = ref.watch(lockProvider).locked && ref.watch(sessionProvider) is SignedIn;

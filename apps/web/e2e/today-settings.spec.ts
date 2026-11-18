@@ -112,3 +112,50 @@ test('calendars: the connect button explains when Google isn’t set up on this 
   await expect(page.getByText('Nothing was connected')).toBeVisible();
   await expect(page).toHaveURL(/\/settings#calendars$/);
 });
+
+test('reminders can come any way: my defaults, a task of its own, and "try it now" shows up in the bell', async ({
+  page,
+}) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/settings');
+  const today = page.locator('section', { has: page.getByRole('heading', { name: 'Today', exact: true }) });
+  // defaults: an alarm and an email as well
+  const ways = today.getByRole('group', { name: 'Remind me by' });
+  await ways.getByRole('checkbox', { name: 'Alarm' }).click();
+  await ways.getByRole('checkbox', { name: 'Email' }).click();
+  await expect(ways.getByText(/Rings like an alarm/)).toBeVisible();
+  await today.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Saved', { exact: true })).toBeVisible();
+
+  // a task of its own: hard notification only
+  await page.goto('/today');
+  await page.getByLabel('New task').fill('Pick up the parcel');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: 'Pick up the parcel' }).click();
+  await page.getByLabel('Time', { exact: true }).fill('17:00');
+  await expect(page.getByText(/· Notification, Alarm and Email/)).toBeVisible();
+  await page.getByRole('radio', { name: 'Just for this task' }).click();
+  const own = page.getByRole('group', { name: 'By' });
+  await own.getByRole('checkbox', { name: 'Hard notification' }).click();
+  await own.getByRole('checkbox', { name: 'Alarm' }).click();
+  await own.getByRole('checkbox', { name: 'Email' }).click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Pick up the parcel' }).click();
+  await expect(
+    page.getByRole('group', { name: 'By' }).getByRole('checkbox', { name: 'Hard notification' }),
+  ).toHaveAttribute('aria-checked', 'true');
+  await expect(
+    page.getByRole('group', { name: 'By' }).getByRole('checkbox', { name: 'Alarm' }),
+  ).toHaveAttribute('aria-checked', 'false');
+
+  // try it: a sample reaches the bell
+  await page.getByRole('group', { name: 'By' }).getByRole('button', { name: 'Try it now' }).click();
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('button', { name: /^Notifications/ })
+    .first()
+    .click();
+  await expect(page.getByLabel('Notifications').getByText('Sample reminder')).toBeVisible({
+    timeout: 10_000,
+  });
+});

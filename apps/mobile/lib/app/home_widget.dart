@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
+import '../core/alarm.dart';
 import 'calendar.dart';
+import 'today_settings.dart';
 import 'state.dart';
 import 'today.dart';
 
@@ -150,4 +152,34 @@ final widgetClicksProvider = Provider<Stream<Uri?>>((_) async* {
     // not on a phone
   }
   yield* HomeWidget.widgetClicked.handleError((Object _) {});
+});
+
+// ------------------------------------------------------------------ alarms on this phone (D22)
+
+/// Where alarms are scheduled; the real one is Android's, replaced in tests.
+final alarmSchedulerProvider = Provider<AlarmScheduler?>((_) => null);
+
+/// Keeps this phone's alarms matching the synced tasks and the person's defaults (offline-safe).
+final alarmSyncProvider = Provider<void>((ref) {
+  final scheduler = ref.watch(alarmSchedulerProvider);
+  final session = ref.watch(sessionProvider);
+  if (scheduler == null || session is! SignedIn || !session.me.can('today')) return;
+  Timer? debounce;
+  void plan() {
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 600), () {
+      final tasks = [for (final t in ref.read(tasksProvider).value ?? const <TaskItem>[]) (id: t.id, data: t.data)];
+      final settings = ref.read(todaySettingsProvider).value;
+      unawaited(
+        scheduler.replaceAll(
+          planAlarms(tasks, (settings?['reminders'] as Map?)?.cast<String, dynamic>(), ref.read(clockProvider)()),
+        ),
+      );
+    });
+  }
+
+  ref.listen(tasksProvider, (_, _) => plan());
+  ref.listen(todaySettingsProvider, (_, _) => plan());
+  ref.onDispose(() => debounce?.cancel());
+  plan();
 });

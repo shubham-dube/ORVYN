@@ -16,6 +16,7 @@ sealed class PushCommand {
         url: _nullable(data['url']),
         module: (data['module'] as String?) ?? 'core',
         priority: (data['priority'] as String?) ?? 'normal',
+        alarm: data['alarm'] == true || data['alarm'] == 'true',
         actions: [
           for (final a in _list(data['actions']))
             PushAction(a['id'] as String, a['label'] as String, a['open'] as String?),
@@ -51,6 +52,7 @@ class ShowPush extends PushCommand {
     required this.module,
     required this.priority,
     required this.actions,
+    this.alarm = false,
   }) : super(id);
   final String title;
   final String body;
@@ -58,6 +60,9 @@ class ShowPush extends PushCommand {
   final String module;
   final String priority;
   final List<PushAction> actions;
+
+  /// rings like an alarm (D22)
+  final bool alarm;
 }
 
 class ClearPush extends PushCommand {

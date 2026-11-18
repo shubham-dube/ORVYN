@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/state.dart';
 import '../app/today.dart';
+import '../app/reminder_ways.dart';
 import '../app/smart_add.dart';
 import '../app/today_settings.dart';
 import 'today_settings_screen.dart' show LeadTimesEditor;
@@ -16,6 +17,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
 import 'sheets.dart';
+import 'ways_editor.dart';
 import 'today_calendar.dart';
 
 /// Today (spec 0002, M1): quick add, overdue / today / upcoming / inbox / done, settle on complete, task sheet.
@@ -448,6 +450,15 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
   late int _priority = widget.task.priority;
 
   /// null = my defaults (D17); [] = none for this task; else these minutes-before
+  /// the ways for this task's own reminders (the data allows one set per reminder; the sheet keeps one for all)
+  late List<String>? _ways = () {
+    for (final r in (widget.task.data['reminders'] as List?) ?? const []) {
+      final via = (r as Map)['via'] as List?;
+      if (via != null && via.isNotEmpty) return via.cast<String>();
+    }
+    return null;
+  }();
+
   late List<int>? _reminders = widget.task.data['reminders'] == null
       ? null
       : [
@@ -482,7 +493,7 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
       'reminders': _reminders == null
           ? null
           : [
-              for (final m in _reminders!) {'kind': 'before', 'minutes': m},
+              for (final m in _reminders!) {'kind': 'before', 'minutes': m, if (_ways != null) 'via': _ways},
             ],
     });
     if (mounted) Navigator.of(context).pop();
@@ -618,15 +629,23 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
           ],
         ),
         const SizedBox(height: 6),
-        if (_reminders != null)
-          LeadTimesEditor(label: 'Remind me', value: _reminders!, onChanged: (v) => setState(() => _reminders = v))
-        else
+        if (_reminders != null) ...[
+          LeadTimesEditor(label: 'Remind me', value: _reminders!, onChanged: (v) => setState(() => _reminders = v)),
+          const SizedBox(height: 10),
+          WaysEditor(
+            label: 'By',
+            value:
+                _ways ??
+                ((ref.watch(todaySettingsProvider).value?['reminders'] as Map?)?['via'] as List?)?.cast<String>(),
+            onChanged: (v) => setState(() => _ways = v),
+          ),
+        ] else
           Text(
             defaults == null
                 ? 'Set your defaults in Settings → Working hours & reminders.'
                 : defaults.isEmpty
                 ? 'No reminder'
-                : defaults.map(leadLabel).join(', '),
+                : '${defaults.map(leadLabel).join(', ')} · ${waysLabel(((ref.watch(todaySettingsProvider).value?['reminders'] as Map?)?['via']))}',
             style: OrvText.muted(l),
           ),
       ],

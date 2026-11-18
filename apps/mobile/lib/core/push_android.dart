@@ -6,7 +6,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import 'package:timezone/timezone.dart' as tz;
+
 import 'actions.dart';
+import 'alarm.dart';
+import 'background.dart';
 import 'api.dart';
 import 'config.dart';
 import 'push.dart';
@@ -26,6 +30,39 @@ const _urgent = AndroidNotificationChannel(
   importance: Importance.max,
 );
 
+const _alarm = AndroidNotificationChannel(
+  'orvyn.alarm',
+  'Alarms',
+  description: 'Reminders you asked to ring like an alarm',
+  importance: Importance.max,
+  playSound: true,
+  audioAttributesUsage: AudioAttributesUsage.alarm,
+  enableVibration: true,
+);
+
+/// An alarm rings (insistent sound until acted on), lights the screen over the lock screen, and stays until dismissed.
+AndroidNotificationDetails _alarmDetails({
+  required String tag,
+  required String body,
+  List<AndroidNotificationAction>? actions,
+}) => AndroidNotificationDetails(
+  _alarm.id,
+  _alarm.name,
+  channelDescription: _alarm.description,
+  importance: Importance.max,
+  priority: Priority.max,
+  category: AndroidNotificationCategory.alarm,
+  fullScreenIntent: true,
+  ongoing: true,
+  autoCancel: false,
+  audioAttributesUsage: AudioAttributesUsage.alarm,
+  additionalFlags: Int32List.fromList(<int>[4]), // FLAG_INSISTENT: keeps ringing until the person acts
+  visibility: NotificationVisibility.public,
+  tag: tag,
+  styleInformation: BigTextStyleInformation(body),
+  actions: actions,
+);
+
 /// Taps arrive here (in any isolate) as the notification's payload: `{"id": ..., "url": ..., "action": ...}`.
 final StreamController<Map<String, dynamic>> notificationTaps = StreamController.broadcast();
 
@@ -35,19 +72,38 @@ class AndroidShade implements NotificationShade {
     id: notificationIntId(p.id),
     title: p.title,
     body: p.body,
-    payload: jsonEncode({'id': p.id, 'url': p.url}),
+    payload: jsonEncode({'id': p.id, 'url': p.url, if (p.alarm) 'alarm': true}),
     notificationDetails: NotificationDetails(
-      android: AndroidNotificationDetails(
-        p.priority == 'urgent' ? _urgent.id : _channel.id,
-        p.priority == 'urgent' ? _urgent.name : _channel.name,
-        tag: p.id,
-        styleInformation: BigTextStyleInformation(p.body),
-        actions: [
-          for (final a in p.actions.take(maxShadeActions))
-            // a button that only does something (Done, Snooze…) runs without opening the app
-            AndroidNotificationAction(a.id, a.label, showsUserInterface: a.open != null, cancelNotification: true),
-        ],
-      ),
+      android: p.alarm
+          ? _alarmDetails(
+              tag: p.id,
+              body: p.body,
+              actions: [
+                for (final a in p.actions.take(maxShadeActions))
+                  AndroidNotificationAction(
+                    a.id,
+                    a.label,
+                    showsUserInterface: a.open != null,
+                    cancelNotification: true,
+                  ),
+              ],
+            )
+          : AndroidNotificationDetails(
+              p.priority == 'urgent' ? _urgent.id : _channel.id,
+              p.priority == 'urgent' ? _urgent.name : _channel.name,
+              tag: p.id,
+              styleInformation: BigTextStyleInformation(p.body),
+              actions: [
+                for (final a in p.actions.take(maxShadeActions))
+                  // a button that only does something (Done, Snooze…) runs without opening the app
+                  AndroidNotificationAction(
+                    a.id,
+                    a.label,
+                    showsUserInterface: a.open != null,
+                    cancelNotification: true,
+                  ),
+              ],
+            ),
     ),
   );
 
@@ -67,6 +123,82 @@ Future<void> initShade() async {
   final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
   await android?.createNotificationChannel(_channel);
   await android?.createNotificationChannel(_urgent);
+  await android?.createNotificationChannel(_alarm);
+}
+
+/// Local alarms (D22): scheduled with Android's alarm-clock scheduling, so they ring on time with no connection.
+class AndroidAlarmScheduler implements AlarmScheduler {
+  static const _kind = 'local-alarm';
+
+  @override
+  Future<void> replaceAll(List<AlarmSlot> wanted) async {
+    final want = {for (final w in wanted) w.id: w};
+    final pending = await _plugin.pendingNotificationRequests();
+    final have = <int>{};
+    for (final p in pending) {
+      final payload = p.payload == null ? null : jsonDecode(p.payload!) as Map<String, dynamic>;
+      if (payload?['kind'] != _kind) continue;
+      if (want.containsKey(p.id)) {
+        have.add(p.id);
+      } else {
+        await _plugin.cancel(id: p.id);
+      }
+    }
+    for (final w in wanted) {
+      if (have.contains(w.id)) continue;
+      await _plugin.zonedSchedule(
+        id: w.id,
+        title: w.title,
+        body: w.body,
+        scheduledDate: tz.TZDateTime.fromMillisecondsSinceEpoch(tz.UTC, w.at.millisecondsSinceEpoch),
+        notificationDetails: NotificationDetails(
+          android: _alarmDetails(
+            tag: 'alarm-${w.id}',
+            body: w.body,
+            actions: const [
+              AndroidNotificationAction('done', 'Done', cancelNotification: true),
+              AndroidNotificationAction('snooze_10m', 'Snooze 10 min', cancelNotification: true),
+            ],
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.alarmClock,
+        payload: jsonEncode({
+          'kind': _kind,
+          'alarm': true,
+          'taskId': w.taskId,
+          'localId': w.id,
+          'title': w.title,
+          'body': w.body,
+        }),
+      );
+    }
+  }
+
+  /// Snooze: the same alarm again in [minutes].
+  static Future<void> snooze(Map<String, dynamic> payload, {int minutes = 10}) async {
+    final id = notificationIntId('snooze:${payload['localId']}:${DateTime.now().millisecondsSinceEpoch ~/ 60000}');
+    await _plugin.zonedSchedule(
+      id: id,
+      title: payload['title'] as String?,
+      body: payload['body'] as String?,
+      scheduledDate: tz.TZDateTime.fromMillisecondsSinceEpoch(
+        tz.UTC,
+        DateTime.now().add(Duration(minutes: minutes)).millisecondsSinceEpoch,
+      ),
+      notificationDetails: NotificationDetails(
+        android: _alarmDetails(
+          tag: 'alarm-$id',
+          body: (payload['body'] as String?) ?? '',
+          actions: const [
+            AndroidNotificationAction('done', 'Done', cancelNotification: true),
+            AndroidNotificationAction('snooze_10m', 'Snooze 10 min', cancelNotification: true),
+          ],
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.alarmClock,
+      payload: jsonEncode({...payload, 'localId': id}),
+    );
+  }
 }
 
 /// A shade button pressed while the app is in the background or closed: do it with the stored session.
@@ -74,10 +206,19 @@ Future<void> initShade() async {
 Future<void> backgroundAction(NotificationResponse r) async {
   final action = r.actionId;
   if (action == null || r.payload == null) return;
-  final id = (jsonDecode(r.payload!) as Map<String, dynamic>)['id'] as String?;
+  final payload = jsonDecode(r.payload!) as Map<String, dynamic>;
+  if (payload['kind'] == 'local-alarm') return localAlarmAction(payload, action);
+  final id = payload['id'] as String?;
   if (id == null) return;
   final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
   await runNotificationAction(api, id, action);
+}
+
+/// A button on a local alarm while the app is closed: Done completes the task from this phone's own copy (synced
+/// when there's a connection); Snooze rings again in 10 minutes.
+Future<void> localAlarmAction(Map<String, dynamic> payload, String action) async {
+  if (action == 'snooze_10m') return AndroidAlarmScheduler.snooze(payload);
+  if (action == 'done') await completeTaskInBackground(payload['taskId'] as String);
 }
 
 /// Data messages while the app is in the background or killed.
