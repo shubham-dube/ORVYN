@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { readByRules } from './rules';
 import { DROP_ITEM, type DropProposal, DropProposal as ProposalSchema } from '@orvyn/contracts';
 import { instantAt, wallIn } from '@orvyn/today-parse';
 import { Queue, Worker } from 'bullmq';
@@ -128,20 +129,37 @@ export class DropService implements OnModuleInit, OnModuleDestroy {
       .from(todaySettings)
       .where(eq(todaySettings.ownerId, ownerId));
     const tz = settings?.tz ?? 'Asia/Kolkata';
-    const categories = has('money')
-      ? (
-          await this.db
-            .select({ name: moneyCategories.name })
-            .from(moneyCategories)
-            .where(
-              and(
-                eq(moneyCategories.ownerId, ownerId),
-                isNull(moneyCategories.deletedAt),
-                eq(moneyCategories.archived, false),
-              ),
-            )
-        ).map((c) => c.name)
+    const cats = has('money')
+      ? await this.db
+          .select({ name: moneyCategories.name, slug: moneyCategories.slug })
+          .from(moneyCategories)
+          .where(
+            and(
+              eq(moneyCategories.ownerId, ownerId),
+              isNull(moneyCategories.deletedAt),
+              eq(moneyCategories.archived, false),
+            ),
+          )
       : [];
+    const categories = cats.map((c) => c.name);
+
+    // ORVYN's own parsers first: short typed text they understand costs nothing (spec 0007 C3)
+    if (item.text && !item.fileId && !item.url) {
+      const ruled = readByRules(item.text, {
+        now: new Date(this.now()),
+        timeZone: tz,
+        kinds,
+        categories: cats,
+      });
+      if (ruled) {
+        await this.write(ownerId, itemId, {
+          status: 'proposed',
+          proposal: this.fit(ruled, kinds, tz),
+          problem: null,
+        });
+        return;
+      }
+    }
     const corrections = await this.db
       .select({ text: dropItems.text, proposal: dropItems.proposal, correction: dropItems.correction })
       .from(dropItems)
@@ -185,6 +203,8 @@ person's earlier corrections as guidance. If unsure, choose note.`,
         data,
         schema: ProposalSchema,
         maxTokens: 600,
+        // a photo or file read as a plain note usually means the cheap read missed it (spec 0007 C3)
+        unsure: (a) => a.kind === 'note' && !!item.fileId,
       });
       const fixed = this.fit(proposal, kinds, tz);
       await this.write(ownerId, itemId, { status: 'proposed', proposal: fixed, problem: null });

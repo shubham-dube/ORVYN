@@ -20,3 +20,25 @@ export const aiUsage = pgTable(
   },
   (t) => [index('ai_usage_day_idx').on(t.day), index('ai_usage_owner_day_idx').on(t.ownerId, t.day)],
 );
+
+/**
+ * Answers already paid for (spec 0007 C3), per person: the same task on the same content returns the stored answer
+ * instead of calling the model again. Keyed by a hash of task + instructions + content; kept 30 days. Never shared
+ * between people.
+ */
+export const aiCache = pgTable(
+  'ai_cache',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id'),
+    key: text('key').notNull(),
+    task: text('task').notNull(),
+    answer: text('answer').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    index('ai_cache_owner_key_idx').on(t.ownerId, t.key),
+    index('ai_cache_created_idx').on(t.createdAt),
+  ],
+);

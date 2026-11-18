@@ -159,6 +159,11 @@ for search, at most a few paragraphs). Never invent a date or an amount: if it i
         data,
         schema: LibraryRead,
         maxTokens: 1500,
+        // the cheap read couldn't tell what it is: the stronger model looks once (spec 0007 C3)
+        unsure: (a) =>
+          !a.title.trim() ||
+          !(LIBRARY_CATEGORIES as readonly string[]).includes(a.category) ||
+          a.category === 'Other',
       });
       const cat = (LIBRARY_CATEGORIES as readonly string[]).includes(r.category) ? r.category : 'Other';
       const tags = [...new Set([...doc.tags, ...r.tags.map((t) => t.toLowerCase())])].slice(0, 20);

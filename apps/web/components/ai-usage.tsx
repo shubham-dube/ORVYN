@@ -21,6 +21,7 @@ const TASKS: Record<string, string> = {
   'today.parse': 'Reading typed tasks',
   'assistant.chat': 'Assistant',
   'library.read': 'Reading documents',
+  'money.reply': 'Reading your replies about payments',
 };
 
 /** What AI has cost, by day and by job — yours, and (for the owner) everyone's. Never any content. */
@@ -87,7 +88,14 @@ export function AiUsage() {
         <ul className="flex flex-col gap-1 text-[13px]" aria-label="Your AI use by job">
           {u.byTask.map((t) => (
             <li key={t.task + t.model} className="flex justify-between gap-3">
-              <span className="truncate">{TASKS[t.task] ?? t.task}</span>
+              <span className="truncate">
+                {TASKS[t.task] ?? t.task}
+                {t.model === 'cache' ? (
+                  <span className="text-orv-success"> · answered from memory, free</span>
+                ) : t.model.includes('fable') ? (
+                  <span className="text-orv-muted"> · stronger model, when unsure</span>
+                ) : null}
+              </span>
               <span className="tabular-nums text-orv-muted">
                 {t.calls} calls · {usd(t.costUsd)}
               </span>

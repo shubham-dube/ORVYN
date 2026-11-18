@@ -64,17 +64,31 @@ describe('the AI gateway (ADR-0010)', () => {
     fake.handlers['test.cost'] = () => ({ answer: 1 });
     fake.costPerCall = 0.008;
     const one = () =>
-      ai.complete({ ownerId: friend.user.id, task: 'test.cost', system: '', data: [], schema: Shape });
+      ai.complete({
+        ownerId: friend.user.id,
+        task: 'test.cost',
+        system: '',
+        data: [],
+        schema: Shape,
+        cache: false,
+      });
     await one(); // 0.008 < 0.015
     await one(); // 0.016 ≥ half the cap
     await expect(one()).rejects.toMatchObject({ scope: 'person' });
     const status = (await call<any>(h, 'GET', '/ai/status', { token: friend.accessToken })).body;
     expect(status).toMatchObject({ available: true, paused: true, capUsd: 0.03 });
     // someone else still can, until the day's cap: this call takes the day over it, then nobody gets more today
-    await ai.complete({ ownerId: me.user.id, task: 'test.cost', system: '', data: [], schema: Shape });
+    await ai.complete({
+      ownerId: me.user.id,
+      task: 'test.cost',
+      system: '',
+      data: [],
+      schema: Shape,
+      cache: false,
+    });
     const before = fake.calls.length;
     await expect(
-      ai.complete({ ownerId: null, task: 'test.cost', system: '', data: [], schema: Shape }),
+      ai.complete({ ownerId: null, task: 'test.cost', system: '', data: [], schema: Shape, cache: false }),
     ).rejects.toBeInstanceOf(AiPaused);
     expect(fake.calls.length).toBe(before); // no request went out after the cap (AC4)
   });
@@ -82,7 +96,14 @@ describe('the AI gateway (ADR-0010)', () => {
   it('tomorrow it runs again', async () => {
     ai.now = () => Date.now() + 86_400_000;
     expect(
-      await ai.complete({ ownerId: me.user.id, task: 'test.cost', system: '', data: [], schema: Shape }),
+      await ai.complete({
+        ownerId: me.user.id,
+        task: 'test.cost',
+        system: '',
+        data: [],
+        schema: Shape,
+        cache: false,
+      }),
     ).toEqual({
       answer: 1,
     });

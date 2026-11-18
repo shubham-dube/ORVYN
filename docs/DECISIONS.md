@@ -2,6 +2,17 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-18 (spec 0007, after the first deploy)
+
+From your request ("use AI smartly so the bill is as low as possible"), recorded so you can change any of it:
+
+| #        | Topic            | Decision                                                                                                                                                                                                                                                                        |
+| -------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0007-1 | Payment review   | Every captured payment asks "what was it?" with buttons and a reply box. Replies are read by rules; only an unreadable reply goes to the cheapest model, which may only pick one of your categories. "always …" or the same answer twice makes ORVYN file that merchant itself. |
+| D-0007-2 | Rules before AI  | Short typed text in Drop that ORVYN's own parsers understand (an amount with a money word, a task with a day or time, a meeting at a time) is proposed without any AI call.                                                                                                     |
+| D-0007-3 | Models           | The cheapest model (Haiku) answers first for Drop and Library; **Fable (D13) is used only when that answer doesn't fit or looks unsure**. Refines D13. Routes can be changed with `AI_ROUTES` (`"escalate.<task>"` for the second try).                                         |
+| D-0007-4 | Cache and images | The same question on the same content is answered from a per-person cache for 30 days (free, shown in usage). Photos are shrunk to 1568 px before sending (~85% fewer tokens). The $1/day cap (D19) is unchanged.                                                               |
+
 ## Decided — 2026-11-19 (steps 4–5, reminders everywhere, advanced tasks)
 
 Decided by me from your request, recorded so you can change any of it:

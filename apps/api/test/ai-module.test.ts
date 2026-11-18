@@ -1,6 +1,14 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { AiPaused, AiService, type AiTool, type Model, ModelHttpError } from '../src/modules/ai/ai.service';
+import {
+  AiPaused,
+  AiService,
+  type AiTool,
+  MAX_IMAGE_EDGE,
+  type Model,
+  ModelHttpError,
+  shrinkImages,
+} from '../src/modules/ai/ai.service';
 import { type FakeModel } from '../src/modules/ai/fake.model';
 import { call, type Harness, OWNER, signIn, startApp } from './harness';
 
@@ -40,7 +48,14 @@ describe('timeouts and retries', () => {
       },
     });
     expect(
-      await ai.complete({ ownerId: me.user.id, task: 'test.retry', system: '', data: [], schema: Shape }),
+      await ai.complete({
+        ownerId: me.user.id,
+        task: 'test.retry',
+        system: '',
+        data: [],
+        schema: Shape,
+        cache: false,
+      }),
     ).toEqual({
       ok: true,
     });
@@ -53,7 +68,14 @@ describe('timeouts and retries', () => {
       },
     });
     await expect(
-      ai.complete({ ownerId: me.user.id, task: 'test.retry', system: '', data: [], schema: Shape }),
+      ai.complete({
+        ownerId: me.user.id,
+        task: 'test.retry',
+        system: '',
+        data: [],
+        schema: Shape,
+        cache: false,
+      }),
     ).rejects.toThrow(/503/);
     expect(n).toBe(2);
     restore();
@@ -68,7 +90,14 @@ describe('timeouts and retries', () => {
       },
     });
     await expect(
-      ai.complete({ ownerId: me.user.id, task: 'test.noretry', system: '', data: [], schema: Shape }),
+      ai.complete({
+        ownerId: me.user.id,
+        task: 'test.noretry',
+        system: '',
+        data: [],
+        schema: Shape,
+        cache: false,
+      }),
     ).rejects.toThrow(/401/);
     expect(n).toBe(1);
     restore();
@@ -235,5 +264,75 @@ describe('usage views (AC5)', () => {
       }),
     ).rejects.toBeInstanceOf(AiPaused);
     fake.costPerCall = 0.002;
+  });
+});
+
+describe('cheaper AI (spec 0007 C3)', () => {
+  // the tests above used up today's share: these run on another day
+  beforeAll(() => (ai.now = () => Date.now() + 3 * 86_400_000));
+  afterAll(() => (ai.now = Date.now));
+
+  it('the same question twice is paid once, per person; a different person asks the model', async () => {
+    fake.handlers['test.cache'] = () => ({ ok: true });
+    const q = (ownerId: string) =>
+      ai.complete({
+        ownerId,
+        task: 'test.cache',
+        system: 'S',
+        data: [{ type: 'text', text: 'same' }],
+        schema: Shape,
+      });
+    const before = fake.calls.length;
+    await q(me.user.id);
+    await q(me.user.id);
+    expect(fake.calls.length).toBe(before + 1);
+    await q(friend.user.id); // never served from someone else's answers
+    expect(fake.calls.length).toBe(before + 2);
+  });
+
+  it('cheap model first; the strong one only when the answer does not fit or looks unsure', async () => {
+    const models: string[] = [];
+    const restore = swap({
+      chat: async (o) => {
+        models.push(o.model);
+        const ok = o.model.includes('fable');
+        return {
+          text: ok ? '{"ok":true}' : '{"ok":false}',
+          inputTokens: 1,
+          outputTokens: 1,
+          costUsd: 0.0001,
+        };
+      },
+    });
+    const ask = (text: string, unsure?: (a: { ok: boolean }) => boolean) =>
+      ai.complete({
+        ownerId: me.user.id,
+        task: 'library.read',
+        system: '',
+        data: [{ type: 'text', text }],
+        schema: Shape,
+        unsure,
+        cache: false,
+      });
+    expect(await ask('a')).toEqual({ ok: false });
+    expect(models).toEqual(['anthropic/claude-haiku-5.5']);
+    models.length = 0;
+    expect(await ask('b', (a) => !a.ok)).toEqual({ ok: true });
+    expect(models).toEqual(['anthropic/claude-haiku-5.5', 'anthropic/claude-fable-5.2']);
+    restore();
+  });
+
+  it('phone photos are shrunk before they are sent; small images go as they are', async () => {
+    const sharp = (await import('sharp')).default;
+    const big = await sharp({ create: { width: 4000, height: 3000, channels: 3, background: '#88aacc' } })
+      .jpeg({ quality: 95 })
+      .toBuffer();
+    const [out] = await shrinkImages([
+      { type: 'image', dataUrl: `data:image/jpeg;base64,${big.toString('base64')}` },
+    ]);
+    const meta = await sharp(Buffer.from((out as any).dataUrl.split(',')[1], 'base64')).metadata();
+    expect([meta.width, meta.height]).toEqual([MAX_IMAGE_EDGE, 1176]);
+    const small = { type: 'image' as const, dataUrl: 'data:image/png;base64,iVBORw0KGgo=' };
+    expect(await shrinkImages([small])).toEqual([small]);
   });
 });

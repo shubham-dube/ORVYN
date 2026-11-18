@@ -127,6 +127,13 @@
       "when": 1795018560957,
       "tag": "0017_merchant_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1795019237729,
+      "tag": "0018_ai_cache",
+      "breakpoints": true
     }
   ]
 }

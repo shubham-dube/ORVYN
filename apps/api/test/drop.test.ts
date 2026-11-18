@@ -120,7 +120,7 @@ describe('Drop: the AI proposes, the person confirms (AC3)', () => {
         why: '',
       },
     });
-    await dropped(me, { kind: 'text', text: 'spotify 119' });
+    await dropped(me, { kind: 'text', text: 'that spotify family plan thing' }); // not something the rules read
     expect(fake.calls.at(-1)!.text).toMatch(/corrected[\s\S]*Subscriptions/);
   });
 
