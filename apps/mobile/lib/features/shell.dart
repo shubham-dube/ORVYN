@@ -17,6 +17,8 @@ import '../core/models.dart';
 import '../design/orb.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
+import '../design/controls.dart';
+import 'launcher.dart';
 import 'sheets.dart';
 
 /// The signed-in frame: content, a glass dock in thumb reach with the Orb in the middle, a bell up top.
@@ -112,9 +114,26 @@ class _ShellState extends ConsumerState<Shell> {
             Positioned(
               top: 8,
               right: 12,
-              child: _Bell(
-                count: unread,
-                onTap: () => showGlassSheet<void>(context, (_) => const NotificationsSheet()),
+              child: Row(
+                children: [
+                  _Bell(count: unread, onTap: () => showGlassSheet<void>(context, (_) => const NotificationsSheet())),
+                  const SizedBox(width: 8),
+                  Semantics(
+                    container: true,
+                    button: true,
+                    label: 'Settings',
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      onTap: () => context.go('/settings'),
+                      child: OrvAvatar(
+                        name: session is SignedIn
+                            ? (session.me.name.isEmpty ? session.me.email : session.me.name)
+                            : '?',
+                        size: 42,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -163,10 +182,10 @@ class _ShellState extends ConsumerState<Shell> {
                             onTap: () => context.go('/money'),
                           ),
                         _DockItem(
-                          icon: LucideIcons.settings,
-                          label: 'Settings',
-                          active: widget.location.startsWith('/settings'),
-                          onTap: () => context.go('/settings'),
+                          icon: _moreIcon(widget.location),
+                          label: 'More',
+                          active: moreRoutes.any(widget.location.startsWith),
+                          onTap: () => showGlassSheet<void>(context, (_) => ModuleLauncher(location: widget.location)),
                         ),
                       ],
                     ),
@@ -183,6 +202,14 @@ class _ShellState extends ConsumerState<Shell> {
       ),
     );
   }
+}
+
+/// The More slot shows the module you are in, so you always know where you are.
+IconData _moreIcon(String location) {
+  for (final m in launcherModules) {
+    if (moreRoutes.contains(m.route) && location.startsWith(m.route)) return m.icon;
+  }
+  return LucideIcons.layoutGrid;
 }
 
 class _DockItem extends StatelessWidget {

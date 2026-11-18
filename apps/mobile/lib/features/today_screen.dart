@@ -36,6 +36,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   TaskQuery _query = TaskQuery.empty;
   String _scope = 'all';
   bool _selecting = false;
+  bool _searching = false;
   final _picked = <String>{};
 
   @override
@@ -54,26 +55,15 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
               children: [
-                PageTitle('Today', overline: loc.formatFullDate(now)),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    children: [
-                      for (final (v, name) in const [('list', 'List'), ('board', 'Board'), ('calendar', 'Calendar')])
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: ChoiceChip(
-                            label: Text(name),
-                            selected: _view == v,
-                            showCheckmark: false,
-                            onSelected: (_) => setState(() => _view = v),
-                            selectedColor: l.accent.withValues(alpha: 0.16),
-                            side: BorderSide(color: _view == v ? l.accent : l.c.edge),
-                            backgroundColor: Colors.transparent,
-                          ),
-                        ),
-                    ],
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(child: PageTitle('Today', overline: loc.formatFullDate(now))),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: _ViewSwitch(value: _view, onChanged: (v) => setState(() => _view = v)),
+                    ),
+                  ],
                 ),
                 // "+" on the home-screen widget opens Today ready to type
                 _QuickAdd(focus: GoRouterState.of(context).uri.queryParameters['add'] == '1'),
@@ -112,12 +102,29 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _Toolbar(
+          scope: _view == 'board' ? null : _scope,
+          onScope: (v) => setState(() => _scope = v),
+          searching: _searching || _query.text.isNotEmpty,
+          onSearch: () => setState(() {
+            final open = _searching || _query.text.isNotEmpty;
+            if (open) _query = _query.copy(text: '');
+            _searching = !open;
+          }),
+          filters: filterCount(_query),
+          onFilters: () => showGlassSheet<void>(
+            context,
+            (_) => TaskFilterSheet(query: _query, tasks: all, onChanged: (q) => setState(() => _query = q)),
+          ),
+          selecting: _selecting,
+          onSelecting: setSelecting,
+        ),
+        const SizedBox(height: 8),
         TaskFilterBar(
           query: _query,
           onChanged: (q) => setState(() => _query = q),
           tasks: all,
-          selecting: _selecting,
-          onSelecting: setSelecting,
+          searching: _searching || _query.text.isNotEmpty,
         ),
         if (_selecting && picked.isNotEmpty) ...[
           const SizedBox(height: 8),
@@ -129,32 +136,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             }),
           ),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 4),
         if (_view == 'board')
           TaskBoard(tasks: filtered, onOpen: open)
         else ...[
-          Wrap(
-            spacing: 6,
-            children: [
-              for (final (v, name) in const [
-                ('all', 'All'),
-                ('today', 'Today'),
-                ('upcoming', 'Upcoming'),
-                ('inbox', 'Inbox'),
-                ('done', 'Done'),
-              ])
-                ChoiceChip(
-                  label: Text(name),
-                  selected: _scope == v,
-                  showCheckmark: false,
-                  onSelected: (_) => setState(() => _scope = v),
-                  selectedColor: l.accent.withValues(alpha: 0.16),
-                  side: BorderSide(color: _scope == v ? l.accent : l.c.edge),
-                  backgroundColor: Colors.transparent,
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
           _Sections(
             groups: g,
             done: done.take(100).toList(),
@@ -165,6 +150,196 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             filtering: !_query.isEmpty,
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// List · Board · Calendar as three icons in one pill, next to the title.
+class _ViewSwitch extends StatelessWidget {
+  const _ViewSwitch({required this.value, required this.onChanged});
+  final String value;
+  final ValueChanged<String> onChanged;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: l.c.glassStrong,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: l.c.edge),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (v, name, icon) in const [
+            ('list', 'List', LucideIcons.list),
+            ('board', 'Board', LucideIcons.columns3),
+            ('calendar', 'Calendar', LucideIcons.calendarDays),
+          ])
+            Semantics(
+              container: true,
+              button: true,
+              selected: value == v,
+              label: name,
+              excludeSemantics: true,
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onChanged(v);
+                },
+                child: AnimatedContainer(
+                  duration: OrvTokens.durationFast,
+                  width: 38,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: value == v ? l.accentGradient : null,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(icon, size: 17, color: value == v ? Colors.white : l.c.muted),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One quiet row: which tasks (text tabs), then search, filters and select as icons.
+class _Toolbar extends StatelessWidget {
+  const _Toolbar({
+    required this.scope,
+    required this.onScope,
+    required this.searching,
+    required this.onSearch,
+    required this.filters,
+    required this.onFilters,
+    required this.selecting,
+    required this.onSelecting,
+  });
+
+  /// null on the board (it shows every open task by project)
+  final String? scope;
+  final ValueChanged<String> onScope;
+  final bool searching;
+  final VoidCallback onSearch;
+  final int filters;
+  final VoidCallback onFilters;
+  final bool selecting;
+  final ValueChanged<bool> onSelecting;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    Widget icon(IconData i, String label, bool on, VoidCallback tap, {int badge = 0}) => Semantics(
+      container: true,
+      button: true,
+      selected: on,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: tap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AnimatedContainer(
+              duration: OrvTokens.durationFast,
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: on ? l.accent.withValues(alpha: 0.14) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(i, size: 18, color: on ? l.accent : l.c.muted),
+            ),
+            if (badge > 0)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 15,
+                  height: 15,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(gradient: l.accentGradient, shape: BoxShape.circle),
+                  child: Text(
+                    '$badge',
+                    style: const TextStyle(
+                      fontFamily: fontFamily,
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+
+    return Row(
+      children: [
+        Expanded(
+          child: scope == null
+              ? Text('By project', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600))
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final (v, name) in const [
+                        ('all', 'All'),
+                        ('today', 'Today'),
+                        ('upcoming', 'Upcoming'),
+                        ('inbox', 'Inbox'),
+                        ('done', 'Done'),
+                      ])
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            onScope(v);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: OrvText.body(l).copyWith(
+                                    fontSize: 15,
+                                    fontWeight: scope == v ? FontWeight.w700 : FontWeight.w500,
+                                    color: scope == v ? l.c.text : l.c.muted,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                AnimatedContainer(
+                                  duration: OrvTokens.durationFast,
+                                  height: 3,
+                                  width: scope == v ? 18 : 0,
+                                  decoration: BoxDecoration(
+                                    gradient: l.accentGradient,
+                                    borderRadius: BorderRadius.circular(2),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+        ),
+        icon(
+          searching ? LucideIcons.x : LucideIcons.search,
+          searching ? 'Close search' : 'Search tasks',
+          searching,
+          onSearch,
+        ),
+        icon(LucideIcons.slidersHorizontal, 'Filters', filters > 0, onFilters, badge: filters),
+        icon(LucideIcons.listChecks, 'Select', selecting, () => onSelecting(!selecting)),
       ],
     );
   }
@@ -181,27 +356,32 @@ enum _When { today, tomorrow, someday }
 
 class _QuickAddState extends ConsumerState<_QuickAdd> {
   final _c = TextEditingController();
+  final _focus = FocusNode();
   _When _when = _When.today;
   ParsedTask? _parsed;
   String _parsedFor = '';
   final _literal = <List<int>>[];
   Timer? _debounce;
+  bool _wasEmpty = true;
 
   @override
   void initState() {
     super.initState();
     _c.addListener(_onText);
+    _focus.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _focus.dispose();
     _c.dispose();
     super.dispose();
   }
 
   void _onText() {
     final text = _c.text;
+    if (text.isEmpty != _wasEmpty) setState(() => _wasEmpty = text.isEmpty);
     // a removed chip only counts while its words are still where they were
     _literal.removeWhere((r) => r[1] > text.length);
     _debounce?.cancel();
@@ -253,7 +433,7 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
     final hasDay = p != null && (p.dueAt != null || p.dueDate != null);
     return Glass(
       level: GlassLevel.float,
-      padding: const EdgeInsets.fromLTRB(14, 6, 8, 10),
+      padding: EdgeInsets.fromLTRB(14, 4, 8, _focus.hasFocus || !_wasEmpty ? 10 : 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -265,12 +445,13 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
                 child: TextField(
                   key: const Key('quick-add'),
                   controller: _c,
+                  focusNode: _focus,
                   autofocus: widget.focus,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _add(),
                   style: OrvText.body(l).copyWith(fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: 'Add a task… “kal shaam 6 baje call mom”',
+                    hintText: 'Add a task…  “kal shaam 6 baje call mom”',
                     hintStyle: OrvText.body(l).copyWith(color: l.c.faint, fontSize: 16),
                     border: InputBorder.none,
                   ),
@@ -316,38 +497,39 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
                 ),
               ),
             ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    if (!hasDay)
-                      for (final w in _When.values)
-                        ChoiceChip(
-                          label: Text(switch (w) {
-                            _When.today => 'Today',
-                            _When.tomorrow => 'Tomorrow',
-                            _When.someday => 'Someday',
-                          }),
-                          selected: _when == w,
-                          onSelected: (_) => setState(() => _when = w),
-                          showCheckmark: false,
-                          selectedColor: l.accent.withValues(alpha: 0.16),
-                          side: BorderSide(color: _when == w ? l.accent : l.c.edge),
-                          labelStyle: OrvText.muted(l)
-                              .copyWith(color: _when == w ? l.accent : l.c.muted, fontWeight: FontWeight.w600),
-                          backgroundColor: Colors.transparent,
-                        ),
-                  ],
+          if (_focus.hasFocus || !_wasEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (!hasDay)
+                        for (final w in _When.values)
+                          ChoiceChip(
+                            label: Text(switch (w) {
+                              _When.today => 'Today',
+                              _When.tomorrow => 'Tomorrow',
+                              _When.someday => 'Someday',
+                            }),
+                            selected: _when == w,
+                            onSelected: (_) => setState(() => _when = w),
+                            showCheckmark: false,
+                            selectedColor: l.accent.withValues(alpha: 0.16),
+                            side: BorderSide(color: _when == w ? l.accent : l.c.edge),
+                            labelStyle: OrvText.muted(l)
+                                .copyWith(color: _when == w ? l.accent : l.c.muted, fontWeight: FontWeight.w600),
+                            backgroundColor: Colors.transparent,
+                          ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              OrvButton(label: 'Add', small: true, variant: ButtonVariant.primary, onPressed: _add),
-            ],
-          ),
+                const SizedBox(width: 8),
+                if (!_wasEmpty) OrvButton(label: 'Add', small: true, variant: ButtonVariant.primary, onPressed: _add),
+              ],
+            ),
         ],
       ),
     );

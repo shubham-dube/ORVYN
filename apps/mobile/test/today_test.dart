@@ -63,8 +63,9 @@ void main() {
     // offline: the server can't be reached, the app keeps going
     final push = h.server.routes['POST /sync/push']!;
     h.server.on('POST /sync/push', (_) => const Reply(503));
-    await tester.tap(find.text('Someday'));
     await tester.enterText(find.byKey(const Key('quick-add')), 'Call the plumber');
+    await settle(tester);
+    await tester.tap(find.text('Someday'));
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
     expect(find.text('Call the plumber'), findsOneWidget);

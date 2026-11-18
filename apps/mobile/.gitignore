@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# local screenshots of screens (not goldens)
+test/zz_shots/
+test/zz_shots_test.dart

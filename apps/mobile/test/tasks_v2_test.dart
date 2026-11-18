@@ -44,6 +44,8 @@ void main() {
     expect(find.textContaining('#urgent'), findsWidgets);
 
     // words: found through the steps too
+    await tester.tap(find.bySemanticsLabel('Search tasks'));
+    await settle(tester);
     await tester.enterText(find.byKey(const Key('task-search')), 'review');
     await settle(tester);
     expect(find.text('Ship release notes'), findsOneWidget);
@@ -55,8 +57,13 @@ void main() {
     // a tag, saved under a name, comes back on a tap
     await tester.enterText(find.byKey(const Key('task-search')), '');
     await settle(tester);
-    await tapIt(tester, find.text('Any tag'));
-    await tapIt(tester, find.text('#urgent').last);
+    await tester.tap(find.bySemanticsLabel('Filters'));
+    await settle(tester);
+    await tester.tap(find.widgetWithText(ChoiceChip, '#urgent'));
+    await settle(tester);
+    await tester.tap(find.text('Show tasks'));
+    await settle(tester);
+    expect(find.bySemanticsLabel('Filters'), findsOneWidget);
     expect(find.text('Buy milk'), findsNothing);
     await tapIt(tester, find.text('Save this filter'));
     await tester.enterText(find.widgetWithText(TextField, '').last, 'Urgent');
@@ -101,7 +108,7 @@ void main() {
     expect((row('a')['checklist'] as List).single, containsPair('done', true));
 
     // the board has a column per project; long-press moves a card
-    await tapIt(tester, find.text('Board'));
+    await tapIt(tester, find.bySemanticsLabel('Board'));
     expect(find.bySemanticsLabel(RegExp(r'^No project, 3 tasks')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp(r'^Home, 0 tasks')), findsOneWidget);
     await tester.longPress(find.text('Buy bread'));
@@ -110,8 +117,8 @@ void main() {
     expect(row('c')['projectId'], 'p-home');
 
     // bulk: select two tasks and move them
-    await tapIt(tester, find.text('List'));
-    await tapIt(tester, find.text('Select'));
+    await tapIt(tester, find.bySemanticsLabel('List'));
+    await tapIt(tester, find.bySemanticsLabel('Select'));
     await tapIt(tester, find.text('Buy milk'));
     await tapIt(tester, find.text('Plan offsite'));
     expect(find.text('2 selected'), findsOneWidget);

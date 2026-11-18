@@ -14,21 +14,24 @@ import '../design/theme.dart';
 import '../design/toast.dart';
 import 'today_calendar.dart' show labelColour;
 
-/// Search, filters and saved filters for the task list.
+/// How many filters (besides words) are on — shown as a badge on the filter button.
+int filterCount(TaskQuery q) =>
+    (q.projectId != null ? 1 : 0) + (q.tag != null ? 1 : 0) + (q.minPriority > 0 ? 1 : 0) + (q.when != 'any' ? 1 : 0);
+
+/// Search (when open), what is filtered in plain words, and saved filters. The filter choices themselves live in
+/// [TaskFilterSheet] so the list stays calm (spec 0007 B).
 class TaskFilterBar extends ConsumerStatefulWidget {
   const TaskFilterBar({
     super.key,
     required this.query,
     required this.onChanged,
     required this.tasks,
-    required this.selecting,
-    required this.onSelecting,
+    this.searching = false,
   });
   final TaskQuery query;
   final ValueChanged<TaskQuery> onChanged;
   final List<TaskItem> tasks;
-  final bool selecting;
-  final ValueChanged<bool> onSelecting;
+  final bool searching;
   @override
   ConsumerState<TaskFilterBar> createState() => _TaskFilterBarState();
 }
@@ -57,89 +60,40 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
     final q = widget.query;
     final projects = ref.watch(projectsProvider).value ?? const <ProjectItem>[];
     final saved = ref.watch(savedFiltersProvider).value ?? const <SavedFilterItem>[];
-    final tags = allTags(widget.tasks);
     String? projectName(String id) => projects.where((p) => p.id == id).firstOrNull?.name;
     TaskQuery fromSaved(SavedFilterItem f) => TaskQuery.fromJson(f.data);
     final active = saved.where((f) => fromSaved(f) == q).firstOrNull;
 
-    Widget menu(String label, String? value, List<(String?, String)> options, ValueChanged<String?> pick) =>
-        PopupMenuButton<String?>(
-          tooltip: label,
-          onSelected: pick,
-          itemBuilder: (_) => [for (final (v, t) in options) PopupMenuItem<String?>(value: v, child: Text(t))],
-          child: Chip(
-            label: Text(options.where((o) => o.$1 == value).firstOrNull?.$2 ?? label),
-            side: BorderSide(color: value == null || value == 'any' || value == '0' ? l.c.edge : l.accent),
-            backgroundColor: value == null || value == 'any' || value == '0'
-                ? Colors.transparent
-                : l.accent.withValues(alpha: 0.12),
-          ),
-        );
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          key: const Key('task-search'),
-          controller: _search,
-          onChanged: (v) => widget.onChanged(q.copy(text: v)),
-          style: OrvText.body(l),
-          decoration: InputDecoration(
-            isDense: true,
-            prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-            hintText: 'Search tasks, notes, tags',
-            hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: l.c.edge),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: l.c.edge),
+        if (widget.searching)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: TextField(
+              key: const Key('task-search'),
+              controller: _search,
+              autofocus: q.text.isEmpty,
+              onChanged: (v) => widget.onChanged(q.copy(text: v)),
+              style: OrvText.body(l),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: l.c.field,
+                prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                hintText: 'Search tasks, notes, tags',
+                hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: l.c.edge),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: l.c.edge),
+                ),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 0,
-          children: [
-            menu('All projects', q.projectId, [
-              (null, 'All projects'),
-              ('none', 'No project'),
-              for (final p in projects) (p.id, p.name),
-            ], (v) => widget.onChanged(q.copy(projectId: v))),
-            if (tags.isNotEmpty)
-              menu('Any tag', q.tag, [
-                (null, 'Any tag'),
-                for (final t in tags) (t, '#$t'),
-              ], (v) => widget.onChanged(q.copy(tag: v))),
-            menu('Any priority', q.minPriority == 0 ? null : '${q.minPriority}', const [
-              (null, 'Any priority'),
-              ('1', 'Low and up'),
-              ('2', 'Medium and up'),
-              ('3', 'High only'),
-            ], (v) => widget.onChanged(q.copy(minPriority: int.tryParse(v ?? '') ?? 0))),
-            menu('Any time', q.when == 'any' ? null : q.when, const [
-              (null, 'Any time'),
-              ('overdue', 'Overdue'),
-              ('today', 'Today'),
-              ('week', 'Next 7 days'),
-              ('later', 'Later'),
-              ('none', 'No date'),
-            ], (v) => widget.onChanged(q.copy(when: v ?? 'any'))),
-            FilterChip(
-              label: const Text('Select'),
-              avatar: Icon(LucideIcons.listChecks, size: 14, color: l.accent),
-              selected: widget.selecting,
-              showCheckmark: false,
-              onSelected: widget.onSelecting,
-              selectedColor: l.accent.withValues(alpha: 0.16),
-              side: BorderSide(color: widget.selecting ? l.accent : l.c.edge),
-              backgroundColor: Colors.transparent,
-            ),
-          ],
-        ),
         if (!q.isEmpty && active == null)
           _naming
               ? Row(
@@ -170,40 +124,153 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
                 )
               : Row(
                   children: [
+                    Icon(LucideIcons.funnel, size: 13, color: l.accent),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         describeQuery(q, projectName: projectName),
                         style: OrvText.muted(l).copyWith(fontSize: 12),
                       ),
                     ),
-                    TextButton.icon(
-                      onPressed: () => setState(() => _naming = true),
-                      icon: const Icon(LucideIcons.bookmark, size: 14),
-                      label: const Text('Save this filter'),
-                    ),
+                    TextButton(onPressed: () => setState(() => _naming = true), child: const Text('Save this filter')),
                     TextButton(onPressed: () => widget.onChanged(TaskQuery.empty), child: const Text('Clear')),
                   ],
                 ),
         if (saved.isNotEmpty)
+          SizedBox(
+            height: 40,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final f in saved)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: InputChip(
+                      label: Text(f.name),
+                      avatar: Icon(LucideIcons.bookmark, size: 13, color: l.accent),
+                      selected: active?.id == f.id,
+                      showCheckmark: false,
+                      tooltip: describeQuery(fromSaved(f), projectName: projectName),
+                      onPressed: () => widget.onChanged(active?.id == f.id ? TaskQuery.empty : fromSaved(f)),
+                      onDeleted: () => ref.read(todayActionsProvider).removeFilter(f.id),
+                      deleteButtonTooltipMessage: 'Delete filter ${f.name}',
+                      selectedColor: l.accent.withValues(alpha: 0.16),
+                      side: BorderSide(color: active?.id == f.id ? l.accent : l.c.edge),
+                      backgroundColor: Colors.transparent,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The filter choices, in a sheet: project, tag, priority and when — each a short row of choices.
+class TaskFilterSheet extends ConsumerStatefulWidget {
+  const TaskFilterSheet({super.key, required this.query, required this.onChanged, required this.tasks});
+  final TaskQuery query;
+  final ValueChanged<TaskQuery> onChanged;
+  final List<TaskItem> tasks;
+  @override
+  ConsumerState<TaskFilterSheet> createState() => _TaskFilterSheetState();
+}
+
+class _TaskFilterSheetState extends ConsumerState<TaskFilterSheet> {
+  late TaskQuery _q = widget.query;
+
+  void _set(TaskQuery q) {
+    setState(() => _q = q);
+    widget.onChanged(q);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final projects = ref.watch(projectsProvider).value ?? const <ProjectItem>[];
+    final tags = allTags(widget.tasks);
+
+    Widget group<T>(String label, T value, List<(T, String)> options, ValueChanged<T> pick) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SectionLabel(label),
+          const SizedBox(height: 6),
           Wrap(
             spacing: 6,
+            runSpacing: 6,
             children: [
-              for (final f in saved)
-                InputChip(
-                  label: Text(f.name),
-                  selected: active?.id == f.id,
+              for (final (v, t) in options)
+                ChoiceChip(
+                  label: Text(t),
+                  selected: value == v,
                   showCheckmark: false,
-                  tooltip: describeQuery(fromSaved(f), projectName: projectName),
-                  onPressed: () => widget.onChanged(active?.id == f.id ? TaskQuery.empty : fromSaved(f)),
-                  onDeleted: () => ref.read(todayActionsProvider).removeFilter(f.id),
-                  deleteButtonTooltipMessage: 'Delete filter ${f.name}',
+                  onSelected: (_) => pick(v),
                   selectedColor: l.accent.withValues(alpha: 0.16),
-                  side: BorderSide(color: active?.id == f.id ? l.accent : l.c.edge),
+                  side: BorderSide(color: value == v ? l.accent : l.c.edge),
                   backgroundColor: Colors.transparent,
                 ),
             ],
           ),
-      ],
+        ],
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('Filter tasks', style: OrvText.heading(l))),
+              if (filterCount(_q) > 0)
+                TextButton(
+                  onPressed: () => _set(TaskQuery(text: _q.text)),
+                  child: const Text('Reset'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  group<String>('When', _q.when, const [
+                    ('any', 'Any time'),
+                    ('overdue', 'Overdue'),
+                    ('today', 'Today'),
+                    ('week', 'Next 7 days'),
+                    ('later', 'Later'),
+                    ('none', 'No date'),
+                  ], (v) => _set(_q.copy(when: v))),
+                  group<String?>('Project', _q.projectId, [
+                    (null, 'All projects'),
+                    ('none', 'No project'),
+                    for (final p in projects) (p.id, p.name),
+                  ], (v) => _set(_q.copy(projectId: v))),
+                  if (tags.isNotEmpty)
+                    group<String?>('Tag', _q.tag, [
+                      (null, 'Any tag'),
+                      for (final t in tags) (t, '#$t'),
+                    ], (v) => _set(_q.copy(tag: v))),
+                  group<int>('Priority', _q.minPriority, const [
+                    (0, 'Any priority'),
+                    (1, 'Low and up'),
+                    (2, 'Medium and up'),
+                    (3, 'High only'),
+                  ], (v) => _set(_q.copy(minPriority: v))),
+                ],
+              ),
+            ),
+          ),
+          OrvButton(label: 'Show tasks', variant: ButtonVariant.primary, onPressed: () => Navigator.of(context).pop()),
+        ],
+      ),
     );
   }
 }

@@ -41,7 +41,7 @@ Future<FakeSyncBackend> openCalendar(WidgetTester tester, AppHarness h, {bool se
   await h.pump(tester);
   await tester.tap(find.bySemanticsLabel('Today'));
   await settle(tester);
-  await tester.tap(find.text('Calendar'));
+  await tester.tap(find.bySemanticsLabel('Calendar'));
   await settle(tester);
   return b;
 }
