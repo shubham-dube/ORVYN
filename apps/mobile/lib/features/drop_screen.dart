@@ -7,6 +7,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/state.dart';
 import '../core/api.dart';
+import '../core/files.dart';
+import 'file_viewer.dart';
 import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
@@ -87,10 +89,85 @@ class _ComposerState extends ConsumerState<_Composer> {
   bool _listening = false;
   bool _busy = false;
 
+  /// recording a voice note: when it started, and how loud it is now
+  DateTime? _recordingSince;
+  double _level = 0;
+  StreamSubscription<double>? _levelSub;
+  Timer? _tick;
+
   @override
   void dispose() {
     _c.dispose();
+    _levelSub?.cancel();
+    _tick?.cancel();
     super.dispose();
+  }
+
+  Future<void> _record() async {
+    final toaster = Toaster.of(context);
+    final rec = ref.read(voiceRecorderProvider);
+    if (_recordingSince == null) {
+      if (!await rec.start()) {
+        toaster.show(
+          'Microphone access is off',
+          body: 'Allow it for ORVYN in the phone’s settings.',
+          tone: ToastTone.danger,
+        );
+        return;
+      }
+      unawaited(HapticFeedback.mediumImpact());
+      _levelSub = rec.level.listen((v) => mounted ? setState(() => _level = v) : null);
+      _tick = Timer.periodic(const Duration(seconds: 1), (_) => mounted ? setState(() {}) : null);
+      setState(() => _recordingSince = DateTime.now());
+      return;
+    }
+    await _stopRecording(keep: true);
+  }
+
+  Future<void> _stopRecording({required bool keep}) async {
+    final toaster = Toaster.of(context);
+    final rec = ref.read(voiceRecorderProvider);
+    await _levelSub?.cancel();
+    _tick?.cancel();
+    final f = await rec.stop();
+    setState(() {
+      _recordingSince = null;
+      _level = 0;
+    });
+    if (!keep || f == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(dropActionsProvider).dropVoice(f.bytes, name: f.name, mime: f.mime, words: _c.text);
+      _c.clear();
+      toaster.show('Voice note kept', body: 'It’s in Drop; you can play it any time.', tone: ToastTone.success);
+    } on ApiError catch (e) {
+      toaster.show(
+        e.code == 'offline' ? 'Voice notes need a connection' : 'That recording couldn’t be kept',
+        tone: ToastTone.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _file() async {
+    final toaster = Toaster.of(context);
+    final f = await ref.read(anyFilePickerProvider)();
+    if (f == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(dropActionsProvider).dropFile(f.bytes, name: f.name, mime: f.mime, caption: _c.text.trim());
+      _c.clear();
+    } on ApiError catch (e) {
+      toaster.show(
+        e.code == 'offline'
+            ? 'Files need a connection'
+            : (e.message.isNotEmpty ? e.message : 'That file couldn’t be dropped'),
+        tone: ToastTone.danger,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _send() async {
@@ -156,6 +233,36 @@ class _ComposerState extends ConsumerState<_Composer> {
               border: InputBorder.none,
             ),
           ),
+          if (_recordingSince != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: l.c.danger, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Recording ${DateTime.now().difference(_recordingSince!).inSeconds ~/ 60}:${(DateTime.now().difference(_recordingSince!).inSeconds % 60).toString().padLeft(2, '0')}',
+                    key: const Key('recording-timer'),
+                    style: OrvText.body(l).copyWith(color: l.c.danger, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(width: 10),
+                  for (final k in const [0.5, 0.9, 0.7, 1.0, 0.6, 0.8])
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                      width: 3,
+                      height: 4 + 16 * _level * k,
+                      decoration: BoxDecoration(color: l.accent, borderRadius: BorderRadius.circular(2)),
+                    ),
+                  const Spacer(),
+                  TextButton(onPressed: () => _stopRecording(keep: false), child: const Text('Discard')),
+                ],
+              ),
+            ),
           Row(
             children: [
               IconButton(
@@ -167,6 +274,19 @@ class _ComposerState extends ConsumerState<_Composer> {
                 tooltip: 'Choose a photo',
                 icon: Icon(LucideIcons.image, color: l.c.muted),
                 onPressed: _busy ? null : () => _photo(false),
+              ),
+              IconButton(
+                tooltip: 'Attach a file',
+                icon: Icon(LucideIcons.paperclip, color: l.c.muted),
+                onPressed: _busy || _recordingSince != null ? null : _file,
+              ),
+              IconButton(
+                tooltip: _recordingSince == null ? 'Record a voice note' : 'Stop and keep the voice note',
+                icon: Icon(
+                  _recordingSince == null ? LucideIcons.audioLines : LucideIcons.square,
+                  color: _recordingSince == null ? l.c.muted : l.c.danger,
+                ),
+                onPressed: _busy ? null : _record,
               ),
               IconButton(
                 tooltip: _listening ? 'Listening' : 'Speak',
@@ -225,6 +345,17 @@ class _ItemCard extends ConsumerWidget {
                 ),
                 const SizedBox(width: 8),
                 Expanded(child: Text(item.summary, style: OrvText.body(l))),
+                if (item.fileId != null)
+                  IconButton(
+                    tooltip: item.kind == 'voice' ? 'Play' : 'Open',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      item.kind == 'voice' ? LucideIcons.play : LucideIcons.paperclip,
+                      size: 18,
+                      color: l.accent,
+                    ),
+                    onPressed: () => openStoredFile(context, ref, id: item.fileId!, name: item.fileName ?? 'file'),
+                  ),
                 GestureDetector(
                   onTap: () => actions.dismiss(item),
                   child: Semantics(

@@ -10,7 +10,10 @@ import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
+import '../core/files.dart';
 import '../library/library.dart';
+import 'file_viewer.dart';
+import 'record_sheet.dart';
 import '../money/money.dart' show formatMoney;
 import 'common.dart';
 import 'sheets.dart';
@@ -40,6 +43,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     try {
       final id = await ref.read(libraryActionsProvider).addPhoto(camera: camera);
       if (id != null) toaster.show('Added to Library', body: 'ORVYN is reading it.', tone: ToastTone.success);
+    } catch (e) {
+      toaster.show('Couldn’t add that', body: messageFor(e), tone: ToastTone.danger);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _add(Future<LocalFile?> Function() pick, {String done = 'Added to Library'}) async {
+    final toaster = Toaster.of(context);
+    final f = await pick();
+    if (f == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(libraryActionsProvider).addFile(f.bytes, name: f.name, mime: f.mime);
+      toaster.show(done, body: 'ORVYN is reading it.', tone: ToastTone.success);
     } catch (e) {
       toaster.show('Couldn’t add that', body: messageFor(e), tone: ToastTone.danger);
     } finally {
@@ -85,6 +103,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     small: true,
                     icon: LucideIcons.image,
                     onPressed: _busy ? null : () => _addPhoto(false),
+                  ),
+                  OrvButton(
+                    key: const Key('lib-file'),
+                    label: 'File',
+                    small: true,
+                    icon: LucideIcons.paperclip,
+                    onPressed: _busy ? null : () => _add(ref.read(anyFilePickerProvider)),
+                  ),
+                  OrvButton(
+                    key: const Key('lib-voice'),
+                    label: 'Voice note',
+                    small: true,
+                    icon: LucideIcons.mic,
+                    onPressed: _busy ? null : () => _add(() => recordVoiceNote(context), done: 'Voice note kept'),
                   ),
                   OrvButton(
                     key: const Key('lib-note'),
@@ -433,6 +465,18 @@ class _DocSheetState extends ConsumerState<_DocSheet> {
                 },
               ),
               const SizedBox(width: 6),
+              if (doc.fileId != null)
+                IconButton(
+                  tooltip: 'Open the original',
+                  icon: Icon(LucideIcons.externalLink, color: l.accent),
+                  onPressed: () => openStoredFile(
+                    context,
+                    ref,
+                    id: doc.fileId!,
+                    name: doc.fileName.isEmpty ? doc.title : doc.fileName,
+                    mime: doc.data['mime'] as String?,
+                  ),
+                ),
               OrvButton(
                 label: 'Read again',
                 small: true,

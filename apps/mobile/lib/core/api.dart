@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
@@ -156,6 +157,28 @@ class Api {
       );
     }
     return Map<String, dynamic>.from(r.data as Map);
+  }
+
+  /// A stored file's bytes (decrypted by the server for its owner).
+  Future<Uint8List> download(String id) async {
+    Future<Response<List<int>>> send() => dio.get<List<int>>(
+      '/files/$id',
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: {if (_access != null) 'authorization': 'Bearer $_access'},
+      ),
+    );
+    Response<List<int>> r;
+    try {
+      r = await send();
+      if (r.statusCode == 401 && await refresh() != null) r = await send();
+    } on DioException catch (e) {
+      throw ApiError(0, 'offline', e.message ?? 'Network unavailable');
+    }
+    if ((r.statusCode ?? 0) >= 400) {
+      throw ApiError(r.statusCode ?? 0, 'download_failed', 'The file couldn’t be opened.');
+    }
+    return Uint8List.fromList(r.data ?? const []);
   }
 
   Future<T> get<T>(String path, {Map<String, dynamic>? query}) => call<T>('GET', path, query: query);

@@ -74,11 +74,26 @@ class DropActions {
     final f = await ref.read(apiProvider).upload(bytes, name: name, mime: mime);
     return _then(
       sync.upsert(dropItem, {
-        'kind': mime.startsWith('image/') ? 'photo' : 'file',
+        'kind': mime.startsWith('image/') ? 'photo' : (mime.startsWith('audio/') ? 'voice' : 'file'),
         'fileId': f['id'],
         'fileName': f['name'],
         'text': caption,
         'source': source,
+        'status': 'new',
+      }),
+    );
+  }
+
+  /// A voice note: the recording is kept as a file; whatever words go with it are what the AI reads.
+  Future<String> dropVoice(Uint8List bytes, {required String name, required String mime, String words = ''}) async {
+    final f = await ref.read(apiProvider).upload(bytes, name: name, mime: mime, purpose: 'voice');
+    return _then(
+      sync.upsert(dropItem, {
+        'kind': 'voice',
+        'fileId': f['id'],
+        'fileName': name,
+        'text': words.trim(),
+        'source': 'android',
         'status': 'new',
       }),
     );
