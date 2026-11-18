@@ -26,3 +26,16 @@ into acting.
 ## Consequences
 
 Work that needs AI is asynchronous (queued), visible as "waiting" when paused, and tested without a network.
+
+## Update (spec 0005): the finished gateway
+
+- **Timeouts and retries:** a model call is given up after 45 s; a timeout, 408, 429 or 5xx is retried once after a
+  short pause; anything else (a bad key, a 400) is not retried. Every attempt still goes through the cap and ledger.
+- **Conversations with tools** (`AiService.converse`): the model answers each turn with JSON — "look this up" (a
+  read-only tool the caller supplied) or "here is my answer, my proposals and my sources". Tool results are handed back
+  as data. The model never calls anything itself and the Assistant's tools contain no Vault access and no writes;
+  changes are only ever _proposals_ the person confirms (AGENTS.md rule 4). The person's own request travels outside
+  the `<data>` block; everything else stays inside it.
+- **Usage views:** `GET /ai/usage` (a person's own cost by day and task, with today's status) and `GET /ai/usage/all`
+  (owner only: totals and who used what today). Counts and cost only — never content. Shown in Settings → AI on web
+  and Android.

@@ -1,5 +1,6 @@
 'use client';
 
+import { AiUsage } from '@/components/ai-usage';
 import type { ContactChannels, DeviceView, NotifySettings } from '@orvyn/contracts';
 import {
   Bell,
@@ -47,8 +48,21 @@ export default function SettingsPage() {
       <Appearance />
       <Notifications />
       <TodaySection />
+      <AiSection />
       <Security />
     </div>
+  );
+}
+
+function AiSection() {
+  return (
+    <Section
+      id="ai"
+      title="AI"
+      line="What ORVYN's helpers have used. Only counts are shown, never what you asked or what was read."
+    >
+      <AiUsage />
+    </Section>
   );
 }
 

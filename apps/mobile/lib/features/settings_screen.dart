@@ -44,7 +44,112 @@ class SettingsScreen extends ConsumerWidget {
         SizedBox(height: 14),
         _TodayEntry(),
         _Calendars(),
+        SizedBox(height: 14),
+        _AiUsage(),
+        SizedBox(height: 14),
         _Security(),
+      ],
+    );
+  }
+}
+
+final _aiUsageProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
+  try {
+    return await ref.read(apiProvider).get<Map<String, dynamic>>('/ai/usage', query: {'days': 14});
+  } catch (_) {
+    return null;
+  }
+});
+
+String _usd(num n) => '${r'$'}${n.toStringAsFixed(n < 0.1 ? 3 : 2)}';
+
+/// What AI has cost, by day and by job. Counts only, never what was asked or read.
+class _AiUsage extends ConsumerWidget {
+  const _AiUsage();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final u = ref.watch(_aiUsageProvider).value;
+    const names = {
+      'drop.understand': 'Sorting what you drop',
+      'today.parse': 'Reading typed tasks',
+      'assistant.chat': 'Assistant',
+      'library.read': 'Reading documents',
+    };
+    final status = (u?['status'] as Map?)?.cast<String, dynamic>();
+    final byTask = ((u?['byTask'] as List?) ?? const []).cast<Map<String, dynamic>>();
+    final byDay = ((u?['byDay'] as List?) ?? const []).cast<Map<String, dynamic>>().reversed.toList();
+    final mx = byDay.fold<double>(0.001, (a, d) => (d['costUsd'] as num) > a ? (d['costUsd'] as num).toDouble() : a);
+    final spent = (status?['spentTodayUsd'] as num?) ?? 0;
+    final cap = (status?['capUsd'] as num?) ?? 1;
+    return _Section(
+      title: 'AI',
+      line: 'What ORVYN’s helpers have used. Only counts are shown, never what you asked or what was read.',
+      children: [
+        if (u == null || status == null)
+          Text('Couldn’t load AI use right now.', style: OrvText.muted(l))
+        else ...[
+          Text(
+            status['available'] != true
+                ? 'AI is not set up on this server.'
+                : status['paused'] == true
+                ? 'Paused until tomorrow.'
+                : 'On.',
+            style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Today, everyone together: ${_usd(spent)} of ${_usd(cap)}. '
+            'The limit is set on the server; each person can use at most half of it.',
+            style: OrvText.muted(l),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (spent / (cap == 0 ? 1 : cap)).clamp(0, 1).toDouble(),
+              minHeight: 6,
+              backgroundColor: l.c.track,
+              color: status['paused'] == true ? l.c.warning : l.accent,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text('Your use, last ${u['days']} days: ${_usd(u['totalUsd'] as num)}', style: OrvText.muted(l)),
+          const SizedBox(height: 6),
+          Semantics(
+            label: 'Your AI cost per day',
+            child: SizedBox(
+              height: 56,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (final d in byDay)
+                    Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 1),
+                        height: 4 + (d['costUsd'] as num) / mx * 52,
+                        decoration: BoxDecoration(
+                          gradient: l.accentGradient,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (byDay.isEmpty) Text('No AI use yet.', style: OrvText.muted(l)),
+          for (final t in byTask)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Expanded(child: Text(names[t['task']] ?? t['task'] as String, style: OrvText.body(l))),
+                  Text('${t['calls']} calls · ${_usd(t['costUsd'] as num)}', style: OrvText.muted(l)),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }

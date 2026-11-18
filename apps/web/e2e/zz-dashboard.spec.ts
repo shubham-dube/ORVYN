@@ -36,3 +36,14 @@ test('Dashboard: the day at a glance, quick add for a task and an expense, and l
   await expect(page.getByRole('heading', { level: 1, name: /Good/ })).toBeVisible();
   await expect(next.getByText('Dashboard check task')).toHaveCount(0);
 });
+
+test('Settings: what AI has used, today against the limit, and (owner) by person', async ({ page }) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/settings');
+  const ai = page.getByTestId('ai-usage');
+  await expect(ai).toBeVisible();
+  await expect(ai).toContainText('Today, everyone together');
+  await expect(ai).toContainText('each person can use at most half');
+  await expect(ai.getByText('Everyone today (owner)')).toBeVisible();
+  await expect(ai.getByRole('img', { name: 'Your AI cost per day' })).toBeVisible();
+});
