@@ -341,17 +341,74 @@ class _ManageSheetState extends ConsumerState<ManageSheet> {
           const SizedBox(height: 10),
           Wrap(
             spacing: 6,
-            children: [tab('repeating', 'Repeating'), tab('accounts', 'Accounts'), tab('categories', 'Categories')],
+            children: [
+              tab('repeating', 'Repeating'),
+              tab('accounts', 'Accounts'),
+              tab('categories', 'Categories'),
+              tab('learned', 'Learned'),
+            ],
           ),
           const SizedBox(height: 12),
           switch (_tab) {
             'repeating' => const _RepeatingList(),
             'accounts' => const _Accounts(),
+            'learned' => const _Learned(),
             _ => const _Categories(),
           },
         ],
       ),
     );
+  }
+}
+
+final _rulesProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final r = await ref.read(apiProvider).get<List<dynamic>>('/money/rules');
+  return [for (final x in r) Map<String, dynamic>.from(x as Map)];
+});
+
+/// What ORVYN learned from answers to "what was it?" (spec 0007 C1); each can be forgotten.
+class _Learned extends ConsumerWidget {
+  const _Learned();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final rules = ref.watch(_rulesProvider);
+    return switch (rules) {
+      AsyncData(:final value) when value.isEmpty => Text(
+        'Nothing yet. When ORVYN asks about a payment, answer with a category — “always food” files that merchant by '
+        'itself from then on. Answering the same way twice does it too.',
+        style: OrvText.muted(l),
+      ),
+      AsyncData(:final value) => Column(
+        children: [
+          for (final r in value)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(r['merchant'] as String, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+              subtitle: Text(
+                '${switch (r['action']) {
+                  'ignore' => 'Skipped — not yours',
+                  'transfer' => 'Your own transfer',
+                  _ => 'Filed as ${r['category'] ?? 'a deleted category'}',
+                }} · ${r['active'] == true ? (r['always'] == true ? 'always' : 'automatic') : 'asks once more first'}',
+                style: OrvText.muted(l).copyWith(fontSize: 12),
+              ),
+              trailing: TextButton(
+                onPressed: () async {
+                  await ref.read(apiProvider).delete<dynamic>('/money/rules/${r['id']}');
+                  ref.invalidate(_rulesProvider);
+                },
+                child: Text('Forget', semanticsLabel: 'Forget ${r['merchant']}'),
+              ),
+            ),
+        ],
+      ),
+      AsyncError() => Text('Couldn’t load what ORVYN learned.', style: OrvText.muted(l)),
+      _ => const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+    };
   }
 }
 

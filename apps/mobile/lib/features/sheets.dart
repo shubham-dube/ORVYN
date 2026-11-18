@@ -129,14 +129,14 @@ class NotificationsSheet extends ConsumerWidget {
                                       timeAgo(n.createdAt, now),
                                       style: OrvText.muted(l).copyWith(color: l.c.faint, fontSize: 11),
                                     ),
-                                    if (n.actions.any((a) => a.open == null))
+                                    if (n.actions.any((a) => a.open == null && a.reply == null))
                                       Padding(
                                         padding: const EdgeInsets.only(top: 6),
                                         child: Wrap(
                                           spacing: 6,
                                           runSpacing: 6,
                                           children: [
-                                            for (final a in n.actions.where((a) => a.open == null))
+                                            for (final a in n.actions.where((a) => a.open == null && a.reply == null))
                                               OrvButton(
                                                 label: a.label,
                                                 small: true,
@@ -151,6 +151,12 @@ class NotificationsSheet extends ConsumerWidget {
                                               ),
                                           ],
                                         ),
+                                      ),
+                                    for (final a in n.actions.where((a) => a.reply != null))
+                                      ReplyField(
+                                        label: '${a.label} to ${n.title}',
+                                        hint: a.reply!,
+                                        onSend: (text) => ctl.act(n.id, a.id, text: text),
                                       ),
                                   ],
                                 ),
@@ -372,6 +378,94 @@ class StickySheet extends StatelessWidget {
               border: Border(top: BorderSide(color: l.c.hairline)),
             ),
             child: Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 10), child: footer),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A short typed answer to a notification ("food", "split 3", "not mine"); the keyboard's send button sends.
+class ReplyField extends StatefulWidget {
+  const ReplyField({super.key, required this.label, required this.hint, required this.onSend});
+  final String label;
+  final String hint;
+  final Future<bool> Function(String text) onSend;
+  @override
+  State<ReplyField> createState() => _ReplyFieldState();
+}
+
+class _ReplyFieldState extends State<ReplyField> {
+  final _c = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final t = _c.text.trim();
+    if (t.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    final toaster = Toaster.of(context);
+    final ok = await widget.onSend(t);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (ok) {
+      _c.clear();
+    } else {
+      toaster.show('That didn’t work', tone: ToastTone.danger);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              key: Key('reply-${widget.label}'),
+              controller: _c,
+              maxLength: 200,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => _send(),
+              style: OrvText.body(l).copyWith(fontSize: 14),
+              decoration: InputDecoration(
+                isDense: true,
+                counterText: '',
+                hintText: widget.hint,
+                hintStyle: OrvText.muted(l).copyWith(color: l.c.faint, fontSize: 13),
+                filled: true,
+                fillColor: l.c.field,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide(color: l.c.edge),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide(color: l.c.edge),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          IconButton.filled(
+            tooltip: 'Send reply',
+            onPressed: _busy ? null : _send,
+            style: IconButton.styleFrom(backgroundColor: l.accent),
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(LucideIcons.send, size: 16, color: Colors.white),
           ),
         ],
       ),

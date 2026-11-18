@@ -95,12 +95,19 @@ class DeviceView {
 }
 
 class NotificationAction {
-  const NotificationAction(this.id, this.label, this.open);
-  factory NotificationAction.fromJson(Map<String, dynamic> j) =>
-      NotificationAction(j['id'] as String, j['label'] as String, j['open'] as String?);
+  const NotificationAction(this.id, this.label, this.open, {this.reply});
+  factory NotificationAction.fromJson(Map<String, dynamic> j) => NotificationAction(
+    j['id'] as String,
+    j['label'] as String,
+    j['open'] as String?,
+    reply: (j['reply'] as Map?)?['placeholder'] as String?,
+  );
   final String id;
   final String label;
   final String? open;
+
+  /// a typed answer goes with it (the placeholder to show), e.g. "food · split 3 · not mine"
+  final String? reply;
 }
 
 class NotificationView {

@@ -86,10 +86,10 @@ class NotificationsController extends Notifier<List<NotificationView>> {
   }
 
   /// Press an action (Done, Snooze 10 min, …): the server does it and clears it on every device.
-  Future<bool> act(String id, String actionId) async {
+  Future<bool> act(String id, String actionId, {String? text}) async {
     final before = state;
     state = state.where((n) => n.id != id).toList();
-    final ok = await runNotificationAction(ref.read(apiProvider), id, actionId);
+    final ok = await runNotificationAction(ref.read(apiProvider), id, actionId, text: text);
     if (ok) {
       await ref.read(pusherProvider).clear(id);
     } else {

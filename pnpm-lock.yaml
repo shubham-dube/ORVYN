@@ -65,6 +65,9 @@ importers:
       '@orvyn/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@orvyn/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       '@orvyn/today-parse':
         specifier: workspace:*
         version: link:../../packages/today-parse

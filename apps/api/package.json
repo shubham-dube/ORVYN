@@ -27,6 +27,7 @@
     "@orvyn/today-parse": "workspace:*",
     "@orvyn/vault-crypto": "workspace:*",
     "@orvyn/today-plan": "workspace:*",
+    "@orvyn/money": "workspace:*",
     "@sentry/node": "^10.78.0",
     "@simplewebauthn/server": "^13.3.3",
     "bullmq": "^5.81.5",

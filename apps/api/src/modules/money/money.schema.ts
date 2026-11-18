@@ -122,3 +122,25 @@ export const moneyRecurring = pgTable(
   },
   (t) => [index('money_recurring_owner_idx').on(t.ownerId)],
 );
+
+/**
+ * What the person taught ORVYN about a merchant (spec 0007 C1): file it under a category, treat it as a transfer, or
+ * skip it. Learned from their answers; used once they said "always" or answered the same way twice. Server-side
+ * only; listed and removable from Money's settings.
+ */
+export const moneyMerchantRules = pgTable(
+  'money_merchant_rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerId: uuid('owner_id').notNull(),
+    merchantKey: text('merchant_key').notNull(),
+    merchant: text('merchant').notNull(),
+    action: text('action', { enum: ['category', 'transfer', 'ignore'] }).notNull(),
+    categoryId: uuid('category_id'),
+    hits: integer('hits').notNull().default(1),
+    always: boolean('always').notNull().default(false),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('money_rules_owner_merchant_uq').on(t.ownerId, t.merchantKey)],
+);

@@ -120,6 +120,13 @@
       "when": 1795015677478,
       "tag": "0016_push_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795018560957,
+      "tag": "0017_merchant_rules",
+      "breakpoints": true
     }
   ]
 }

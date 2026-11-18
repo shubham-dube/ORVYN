@@ -60,7 +60,11 @@ self.addEventListener('push', (e) => {
       icon: '/icons/icon-192.png',
       badge: '/icons/badge-96.png',
       data: { id: p.id, url: p.url || '/', actions: p.actions || [] },
-      actions: (p.actions || []).slice(0, 2).map((a) => ({ action: a.id, title: a.label })),
+      // a reply box can't live in a browser notification: those open the app instead
+      actions: (p.actions || [])
+        .filter((a) => !a.reply)
+        .slice(0, 2)
+        .map((a) => ({ action: a.id, title: a.label })),
     }),
   );
 });

@@ -14,7 +14,7 @@ interface Ctx {
   dismissAll(): Promise<void>;
   markRead(id: string): Promise<void>;
   /** press an action button (Done, Snooze 10 min, …); the server does it and clears it everywhere */
-  act(id: string, actionId: string): Promise<void>;
+  act(id: string, actionId: string, text?: string): Promise<void>;
 }
 const NCtx = createContext<Ctx | null>(null);
 
@@ -54,9 +54,12 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setItems([]);
     await api('/notifications/dismiss-all', { method: 'POST' });
   }, []);
-  const act = useCallback(async (id: string, actionId: string) => {
+  const act = useCallback(async (id: string, actionId: string, text?: string) => {
     setItems((xs) => xs.filter((x) => x.id !== id));
-    await api(`/notifications/${id}/actions/${encodeURIComponent(actionId)}`, { method: 'POST' });
+    await api(`/notifications/${id}/actions/${encodeURIComponent(actionId)}`, {
+      method: 'POST',
+      body: text === undefined ? {} : { text },
+    });
   }, []);
   // a button pressed on a web push notification arrives as /?notification=…&action=… (see public/sw.js)
   useEffect(() => {

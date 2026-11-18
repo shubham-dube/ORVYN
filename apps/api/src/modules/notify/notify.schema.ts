@@ -7,6 +7,8 @@ export interface StoredAction {
   id: string;
   label: string;
   open?: string;
+  /** a typed answer goes with this action (spec 0007 C1) */
+  reply?: { placeholder: string };
 }
 
 export const notifications = pgTable(

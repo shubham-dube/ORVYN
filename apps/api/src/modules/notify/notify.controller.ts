@@ -96,8 +96,14 @@ export class NotifyController {
 
   @Post(':id/actions/:actionId')
   @HttpCode(200)
-  async act(@Auth() a: AuthContext, @Param('id') id: string, @Param('actionId') actionId: string) {
-    await this.notify.act(a.userId, id, actionId, a.deviceId);
+  async act(
+    @Auth() a: AuthContext,
+    @Param('id') id: string,
+    @Param('actionId') actionId: string,
+    @Body(new ZodPipe(z.object({ text: z.string().max(500).optional() }).default({})))
+    body: { text?: string },
+  ) {
+    await this.notify.act(a.userId, id, actionId, a.deviceId, body?.text);
     return { ok: true };
   }
 

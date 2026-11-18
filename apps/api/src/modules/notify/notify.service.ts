@@ -46,6 +46,8 @@ export interface NotifyAction {
   ownerId: string;
   deviceId: string;
   actionId: string;
+  /** what the person typed, for an action that asks for a reply */
+  text?: string;
   notification: { id: string; module: string; kind: string; ref: string | null };
 }
 
@@ -121,6 +123,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
             target: [notifications.ownerId, notifications.dedupeKey],
             targetWhere: sql`${notifications.dedupeKey} is not null`,
             set: {
+              kind: values.kind,
               title: values.title,
               body: values.body,
               url: values.url,
@@ -390,21 +393,30 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
    * An action button pressed on any device (shade, toast, web push, extension, in-app). The owning module does the
    * work (awaited, so the reply means it's done), then the notification clears everywhere.
    */
-  async act(ownerId: string, id: string, actionId: string, deviceId: string): Promise<void> {
+  async act(ownerId: string, id: string, actionId: string, deviceId: string, text?: string): Promise<void> {
     const [n] = await this.db
       .select()
       .from(notifications)
       .where(and(eq(notifications.id, id), eq(notifications.ownerId, ownerId)));
     if (!n) throw notFound();
-    if (!n.actions.some((a) => a.id === actionId))
-      throw badRequest('unknown_action', 'That action is not available.');
+    const action = n.actions.find((a) => a.id === actionId);
+    if (!action) throw badRequest('unknown_action', 'That action is not available.');
+    const typed = text?.trim().slice(0, 200);
+    if (action.reply && !typed) throw badRequest('reply_required', 'Type an answer first.');
     await this.events.emitAsync('notify.action', {
       ownerId,
       deviceId,
       actionId,
+      ...(action.reply ? { text: typed } : {}),
       notification: { id: n.id, module: n.module, kind: n.kind, ref: n.ref },
     } satisfies NotifyAction);
-    if (!n.dismissedAt) await this.dismiss(ownerId, id, deviceId, true);
+    // the module may have asked again under the same key (e.g. "didn't catch that"): keep that one
+    const [now] = await this.db
+      .select({ dismissedAt: notifications.dismissedAt, updatedAt: notifications.updatedAt })
+      .from(notifications)
+      .where(eq(notifications.id, id));
+    const replaced = now && now.updatedAt.getTime() > n.updatedAt.getTime();
+    if (now && !now.dismissedAt && !replaced) await this.dismiss(ownerId, id, deviceId, true);
   }
 
   async dismiss(ownerId: string, id: string, deviceId: string, everywhere = false): Promise<void> {
@@ -416,6 +428,16 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     if (!r.length) throw notFound();
     await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id }, everywhere ? undefined : deviceId);
     await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'dismiss' });
+  }
+
+  /** Has this person ever been sent a notification with this key (read or not)? */
+  async hasKey(ownerId: string, dedupeKey: string): Promise<boolean> {
+    const [r] = await this.db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(and(eq(notifications.ownerId, ownerId), eq(notifications.dedupeKey, dedupeKey)))
+      .limit(1);
+    return !!r;
   }
 
   /** A module saying "that's handled" (e.g. the task was done on another device): clears it everywhere, quietly. */

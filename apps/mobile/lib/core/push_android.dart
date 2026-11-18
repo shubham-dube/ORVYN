@@ -85,6 +85,8 @@ class AndroidShade implements NotificationShade {
                     a.label,
                     showsUserInterface: a.open != null,
                     cancelNotification: true,
+                    // a reply box right in the shade: answered without opening ORVYN
+                    inputs: [if (a.reply != null) AndroidNotificationActionInput(label: a.reply)],
                   ),
               ],
             )
@@ -101,6 +103,8 @@ class AndroidShade implements NotificationShade {
                     a.label,
                     showsUserInterface: a.open != null,
                     cancelNotification: true,
+                    // a reply box right in the shade: answered without opening ORVYN
+                    inputs: [if (a.reply != null) AndroidNotificationActionInput(label: a.reply)],
                   ),
               ],
             ),
@@ -116,7 +120,7 @@ Future<void> initShade() async {
     settings: const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_stat_orvyn')),
     onDidReceiveNotificationResponse: (r) {
       final p = r.payload == null ? <String, dynamic>{} : jsonDecode(r.payload!) as Map<String, dynamic>;
-      notificationTaps.add({...p, 'action': r.actionId});
+      notificationTaps.add({...p, 'action': r.actionId, if (r.input != null) 'input': r.input});
     },
     onDidReceiveBackgroundNotificationResponse: backgroundAction,
   );
@@ -211,7 +215,8 @@ Future<void> backgroundAction(NotificationResponse r) async {
   final id = payload['id'] as String?;
   if (id == null) return;
   final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
-  await runNotificationAction(api, id, action);
+  final typed = r.input?.trim();
+  await runNotificationAction(api, id, action, text: typed == null || typed.isEmpty ? null : typed);
 }
 
 /// A button on a local alarm while the app is closed: Done completes the task from this phone's own copy (synced

@@ -17,7 +17,7 @@ export interface SpendEntry {
   time: string | null;
 }
 
-const HINTS: [RegExp, string][] = [
+export const HINTS: [RegExp, string][] = [
   [/\b(lunch|dinner|breakfast|snacks?|coffee|tea|chai|food|restaurant|cafe)\b/i, 'food'],
   [/\b(groceries|grocery|vegetables|veggies|milk|fruits?)\b/i, 'groceries'],
   [/\b(cab|auto|taxi|metro|bus|train ticket|parking|toll)\b/i, 'transport'],

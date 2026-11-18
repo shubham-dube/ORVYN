@@ -13,10 +13,11 @@ import { describeSpec, nextDates, parseRepeat } from '@orvyn/today-plan';
 import { Pause, Play, Plus, Repeat, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { RepeatBuilder } from '@/components/repeat-builder';
-import { Badge, Label, Segmented, Sheet, Switch, useToast } from '@/components/ui/bits';
+import { Badge, Label, Segmented, Sheet, SkeletonRows, Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
+import { api } from '@/lib/api';
 import { useMoney } from '@/lib/money';
 
 export const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -356,7 +357,7 @@ export function AddTransactionSheet({
   );
 }
 
-type Tab = 'repeating' | 'accounts' | 'categories';
+type Tab = 'repeating' | 'accounts' | 'categories' | 'learned';
 
 /** Everything about how Money is set up: scheduled entries, accounts and categories. */
 export function ManageSheet({ open, onClose }: { open: boolean; onClose(): void }) {
@@ -372,11 +373,81 @@ export function ManageSheet({ open, onClose }: { open: boolean; onClose(): void 
             { value: 'repeating', label: 'Repeating' },
             { value: 'accounts', label: 'Accounts' },
             { value: 'categories', label: 'Categories' },
+            { value: 'learned', label: 'Learned' },
           ]}
         />
-        {tab === 'repeating' ? <RepeatingList /> : tab === 'accounts' ? <Accounts /> : <Categories />}
+        {tab === 'repeating' ? (
+          <RepeatingList />
+        ) : tab === 'accounts' ? (
+          <Accounts />
+        ) : tab === 'categories' ? (
+          <Categories />
+        ) : (
+          <Learned />
+        )}
       </div>
     </Sheet>
+  );
+}
+
+interface MerchantRule {
+  id: string;
+  merchant: string;
+  action: 'category' | 'transfer' | 'ignore';
+  category: string | null;
+  hits: number;
+  always: boolean;
+  active: boolean;
+}
+
+/** What ORVYN learned from answers to "what was it?" (spec 0007 C1): each merchant's rule, removable. */
+function Learned() {
+  const [rules, setRules] = useState<MerchantRule[] | null>(null);
+  const toast = useToast();
+  useEffect(() => {
+    api<MerchantRule[]>('/money/rules')
+      .then(setRules)
+      .catch(() => setRules([]));
+  }, []);
+  if (!rules) return <SkeletonRows rows={3} label="Loading what ORVYN learned" />;
+  if (!rules.length)
+    return (
+      <p className="text-small text-orv-muted">
+        Nothing yet. When ORVYN asks about a payment, answer with a category — say “always food” and that
+        merchant is filed by itself from then on. Answering the same way twice does it too.
+      </p>
+    );
+  return (
+    <ul className="flex flex-col gap-1.5" aria-label="Learned">
+      {rules.map((r) => (
+        <li key={r.id} className="glass-pane flex items-center gap-3 px-3 py-2">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[14px] font-semibold">{r.merchant}</p>
+            <p className="text-[12px] text-orv-muted">
+              {r.action === 'ignore'
+                ? 'Skipped — not yours'
+                : r.action === 'transfer'
+                  ? 'Your own transfer'
+                  : `Filed as ${r.category ?? 'a deleted category'}`}
+              {' · '}
+              {r.active ? (r.always ? 'always' : `automatic (answered ${r.hits}×)`) : 'asks once more first'}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`Forget ${r.merchant}`}
+            onClick={async () => {
+              await api(`/money/rules/${r.id}`, { method: 'DELETE' });
+              setRules((xs) => xs?.filter((x) => x.id !== r.id) ?? null);
+              toast({ title: `ORVYN will ask about ${r.merchant} again` });
+            }}
+          >
+            Forget
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }
 

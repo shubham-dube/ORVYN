@@ -53,7 +53,7 @@ class _ShellState extends ConsumerState<Shell> {
       if (id == null) return;
       final ctl = ref.read(notificationsProvider.notifier);
       if (action != null && action.isNotEmpty) {
-        final ok = await ctl.act(id, action);
+        final ok = await ctl.act(id, action, text: (t['input'] as String?)?.trim());
         if (mounted && !ok) Toaster.of(context).show('That didn’t work', tone: ToastTone.danger);
         return;
       }

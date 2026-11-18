@@ -1,6 +1,7 @@
 'use client';
 
-import { BellOff, X } from 'lucide-react';
+import { BellOff, Send, X } from 'lucide-react';
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
 import { Empty } from '@/components/ui/bits';
@@ -81,14 +82,14 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
                     >
                       <X size={16} className="mx-auto" />
                     </button>
-                    {item.actions.some((a) => !a.open) ? (
+                    {item.actions.some((a) => !a.open && !a.reply) ? (
                       <div
                         className="flex basis-full flex-wrap gap-1.5 pl-5"
                         role="group"
                         aria-label={`Actions for ${item.title}`}
                       >
                         {item.actions
-                          .filter((a) => !a.open)
+                          .filter((a) => !a.open && !a.reply)
                           .map((a) => (
                             <Button
                               key={a.id}
@@ -101,6 +102,16 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
                           ))}
                       </div>
                     ) : null}
+                    {item.actions
+                      .filter((a) => a.reply)
+                      .map((a) => (
+                        <ReplyBox
+                          key={a.id}
+                          label={`${a.label} to ${item.title}`}
+                          placeholder={a.reply!.placeholder}
+                          onSend={(text) => n.act(item.id, a.id, text)}
+                        />
+                      ))}
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -116,5 +127,57 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
         </motion.div>
       ) : null}
     </AnimatePresence>
+  );
+}
+
+/** A short typed answer to a notification ("food", "split 3", "not mine"); Enter sends. */
+function ReplyBox({
+  label,
+  placeholder,
+  onSend,
+}: {
+  label: string;
+  placeholder: string;
+  onSend(text: string): Promise<void>;
+}) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    try {
+      await onSend(text.trim());
+      setText('');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="flex basis-full items-center gap-1.5 pl-5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void send();
+      }}
+    >
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={placeholder}
+        aria-label={label}
+        maxLength={200}
+        className="h-9 min-w-0 flex-1 rounded-full border border-orv-edge bg-orv-field px-3 text-[14px] outline-none placeholder:text-orv-faint focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--orv-accent)_25%,transparent)]"
+      />
+      <Button
+        size="sm"
+        variant="primary"
+        type="submit"
+        loading={busy}
+        disabled={!text.trim()}
+        aria-label="Send reply"
+      >
+        <Send size={14} />
+      </Button>
+    </form>
   );
 }

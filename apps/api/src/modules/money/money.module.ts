@@ -25,6 +25,7 @@ import {
   moneyTransactions,
 } from './money.schema';
 import { RecurringService } from './recurring.service';
+import { ReviewService } from './review.service';
 import { serverOrigin } from '../sync/sync.service';
 
 type Owned = PgTable & { id: PgColumn; ownerId: PgColumn; deletedAt: PgColumn };
@@ -112,7 +113,7 @@ class MoneyEntities implements OnModuleInit {
 
 @Module({
   imports: [SyncModule],
-  providers: [MoneyEntities, RecurringService],
+  providers: [MoneyEntities, RecurringService, ReviewService],
   controllers: [MoneyController],
 })
 export class MoneyModule {}

@@ -1,4 +1,4 @@
-import { Controller, HttpCode, Inject, Post } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { DEFAULT_CATEGORIES, MONEY_CATEGORY } from '@orvyn/contracts';
 import { and, eq } from 'drizzle-orm';
 import { v5 } from 'uuid';
@@ -6,6 +6,8 @@ import { DB, type Db } from '../../db/db.module';
 import { Auth, type AuthContext, RequireEntitlement } from '../auth/auth.decorators';
 import { SERVER_DEVICE, SyncService } from '../sync/sync.service';
 import { moneyCategories } from './money.schema';
+import { ReviewService } from './review.service';
+import { notFound } from '../../common/errors';
 
 const NS = '8f3b2c1d-4e5a-4b6c-9d7e-0f1a2b3c4d5e';
 
@@ -15,7 +17,20 @@ export class MoneyController {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly sync: SyncService,
+    private readonly review: ReviewService,
   ) {}
+
+  /** What ORVYN learned about merchants from the person's answers (spec 0007 C1). */
+  @Get('rules')
+  rules(@Auth() a: AuthContext) {
+    return this.review.rules(a.userId);
+  }
+
+  @Delete('rules/:id')
+  @HttpCode(204)
+  async removeRule(@Auth() a: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    if (!(await this.review.removeRule(a.userId, id))) throw notFound();
+  }
 
   /**
    * The starting categories, once per person (ids derived from the person and the slug, so two devices asking at

@@ -19,7 +19,12 @@ sealed class PushCommand {
         alarm: data['alarm'] == true || data['alarm'] == 'true',
         actions: [
           for (final a in _list(data['actions']))
-            PushAction(a['id'] as String, a['label'] as String, a['open'] as String?),
+            PushAction(
+              a['id'] as String,
+              a['label'] as String,
+              a['open'] as String?,
+              reply: (a['reply'] as Map?)?['placeholder'] as String?,
+            ),
         ],
       ),
       'dismiss' || 'read' => ClearPush(id),
@@ -37,10 +42,13 @@ sealed class PushCommand {
 }
 
 class PushAction {
-  const PushAction(this.id, this.label, this.open);
+  const PushAction(this.id, this.label, this.open, {this.reply});
   final String id;
   final String label;
   final String? open;
+
+  /// placeholder of an inline reply box (Android's RemoteInput)
+  final String? reply;
 }
 
 class ShowPush extends PushCommand {

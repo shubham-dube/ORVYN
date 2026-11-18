@@ -45,6 +45,7 @@ const DEFAULT_ROUTES: Record<string, string> = {
   default: 'anthropic/claude-haiku-5.5',
   'drop.understand': 'anthropic/claude-fable-5.2', // D13
   'today.parse': 'anthropic/claude-haiku-5.5',
+  'money.reply': 'anthropic/claude-haiku-5.5', // one word in, one number out (spec 0007 C1)
   'library.read': 'anthropic/claude-fable-5.2', // reads photos and PDFs, like Drop (D13, D26)
 };
 

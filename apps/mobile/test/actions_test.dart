@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:orvyn/core/actions.dart';
 import 'package:orvyn/core/api.dart';
 import 'package:orvyn/core/session_store.dart';
@@ -90,6 +91,51 @@ void main() {
     h.server.on('POST /notifications/r3/read', (_) => {'ok': true});
     await settle(tester);
     expect(find.text('Settings'), findsWidgets);
+    await tester.pump(const Duration(seconds: 6));
+    await finish(tester);
+  });
+
+  testWidgets('a payment question answered by typing, in the app and from the shade (spec 0007 C1)', (tester) async {
+    final h = AppHarness()..signedInAs(userJson(ent: ['money']));
+    final sent = <Object?>[];
+    for (final id in ['m1', 'm2']) {
+      h.server.on('POST /notifications/$id/actions/reply', (r) {
+        sent.add(r.body);
+        return {'ok': true};
+      });
+    }
+    await h.pump(tester);
+    h.sockets.push({
+      'type': 'notify.new',
+      'notification': {
+        ...notificationJson('m1', '₹240 at Swiggy', body: 'What was it?', module: 'money'),
+        'kind': 'review',
+        'actions': [
+          {'id': 'c.food', 'label': 'Food & dining'},
+          {'id': 'reply', 'label': 'Reply', 'reply': {'placeholder': 'food · split 3 · not mine'}},
+          {'id': 'ignore', 'label': 'Not mine'},
+        ],
+      },
+    });
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel(RegExp('Notifications, 1 unread')));
+    await settle(tester);
+    expect(find.text('Food & dining'), findsOneWidget);
+    expect(find.text('Not mine'), findsOneWidget);
+    expect(find.text('Reply'), findsNothing, reason: 'a reply is a box, not a button');
+    await tester.enterText(find.byKey(const Key('reply-Reply to ₹240 at Swiggy')), 'split 3 food');
+    await tester.testTextInput.receiveAction(TextInputAction.send);
+    await settle(tester);
+    expect(sent, [
+      {'text': 'split 3 food'},
+    ]);
+    await tester.tapAt(const Offset(10, 10));
+    await settle(tester);
+
+    // typed into the reply box in the shade while ORVYN is open
+    h.pusher.tapController.add({'id': 'm2', 'url': '/money', 'action': 'reply', 'input': ' always groceries '});
+    await settle(tester);
+    expect(sent.last, {'text': 'always groceries'});
     await tester.pump(const Duration(seconds: 6));
     await finish(tester);
   });

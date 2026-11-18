@@ -5,6 +5,8 @@ export const NotificationAction = z.object({
   label: z.string().max(30),
   /** Opens the app at this path instead of running in the background. */
   open: z.string().max(300).optional(),
+  /** Asks for a short typed answer (Android inline reply, a text box in the app); sent with the action. */
+  reply: z.object({ placeholder: z.string().max(80) }).optional(),
 });
 
 export const Priority = z.enum(['low', 'normal', 'high', 'urgent']);
