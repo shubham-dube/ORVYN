@@ -50,3 +50,4 @@ app.*.map.json
 # local screenshots of screens (not goldens)
 test/zz_shots/
 test/zz_shots_test.dart
+test/failures/
