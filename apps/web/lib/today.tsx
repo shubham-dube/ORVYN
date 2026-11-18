@@ -4,10 +4,7 @@ import {
   type CalEvent,
   EVENT_DEFAULTS,
   type Calendar,
-  type Mutation,
   type Project,
-  type PullResponse,
-  type PushResult,
   type Task,
   TODAY_CALENDAR,
   TODAY_EVENT,
@@ -16,12 +13,9 @@ import {
   TODAY_TASK,
   type TodaySettingsFields,
 } from '@orvyn/contracts';
-import { SyncClient } from '@orvyn/sync-client';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { api } from './api';
-import { realtime } from './realtime';
-import { useToast } from '@/components/ui/bits';
 import { useSession } from './session';
+import { useSync } from './sync';
 
 interface TodayCtx {
   ready: boolean;
@@ -45,37 +39,21 @@ interface TodayCtx {
 
 const Ctx = createContext<TodayCtx | null>(null);
 
-/** One sync client per signed-in person (database `orvyn-<userId>`), nudged by the live socket. */
+/** Today's data from the shared offline mirror (lib/sync.tsx). */
 export function TodayProvider({ children }: { children: ReactNode }) {
-  const { me, deviceId } = useSession();
+  const { me } = useSession();
+  const { client, version, pending, write } = useSync();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
-  const [pending, setPending] = useState(0);
   const [settings, setSettings] = useState<TodaySettingsFields | null>(null);
   const [ready, setReady] = useState(false);
-  const toast = useToast();
-
-  const client = useMemo(() => {
-    if (!me) return null;
-    return new SyncClient(
-      `orvyn-${me.id}`,
-      {
-        push: (mutations: Mutation[]) =>
-          api<PushResult>('/sync/push', { method: 'POST', body: { mutations } }),
-        pull: (cursor) => api<PullResponse>(`/sync/pull${cursor ? `?cursor=${cursor}` : ''}`),
-      },
-      `w${(deviceId ?? 'web').replace(/[^A-Za-z0-9]/g, '').slice(0, 12)}`,
-    );
-  }, [me, deviceId]);
 
   const reload = useCallback(async () => {
-    if (!client) return;
-    const [t, p, n, st, ev, cal] = await Promise.all([
+    const [t, p, st, ev, cal] = await Promise.all([
       client.list<Task>(TODAY_TASK),
       client.list<Project>(TODAY_PROJECT),
-      client.pendingCount(),
       me ? client.get<TodaySettingsFields>(TODAY_SETTINGS, me.id) : null,
       client.list<CalEvent>(TODAY_EVENT),
       client.list<Calendar>(TODAY_CALENDAR),
@@ -85,67 +63,36 @@ export function TodayProvider({ children }: { children: ReactNode }) {
     setSettings(st);
     setTasks(t);
     setProjects(p);
-    setPending(n);
     setReady(true);
   }, [client, me]);
 
   useEffect(() => {
-    if (!client) return;
-    const off = client.onChange(() => void reload());
-    // the server refused a change (e.g. Today was switched off for you): say so, and show the server's truth
-    const offRejected = client.onRejected((r) =>
-      toast({
-        title: 'A change couldn’t be saved',
-        body: r.reason === 'forbidden' ? 'Today isn’t enabled for you.' : undefined,
-        tone: 'danger',
-      }),
-    );
-    const sync = () => client.sync().catch(() => undefined); // offline: the outbox waits
-    void reload().then(sync);
-    const offLive = realtime?.on((m) => m.type === 'sync.changed' && void sync());
-    window.addEventListener('online', sync);
-    const t = setInterval(sync, 60_000);
-    return () => {
-      off();
-      offRejected();
-      offLive?.();
-      window.removeEventListener('online', sync);
-      clearInterval(t);
-      client.close();
-    };
-  }, [client, reload, toast]);
+    void reload();
+  }, [reload, version]);
 
   const value = useMemo<TodayCtx>(() => {
-    const write = async <T,>(fn: () => Promise<T>) => {
-      const r = await fn();
-      void client?.sync().catch(() => undefined);
-      return r;
-    };
     return {
       ready,
       tasks,
       projects,
       pending,
       settings,
-      saveSettings: (fields) =>
-        write(async () => void (await client!.upsert(TODAY_SETTINGS, fields, me!.id))),
-      addTask: (fields) => write(() => client!.upsert(TODAY_TASK, { ...fields })),
-      updateTask: (id, fields) => write(async () => void (await client!.upsert(TODAY_TASK, fields, id))),
-      removeTask: (id) => write(() => client!.remove(TODAY_TASK, id)),
-      addProject: (name) => write(() => client!.upsert(TODAY_PROJECT, { name })),
+      saveSettings: (fields) => write(async () => void (await client.upsert(TODAY_SETTINGS, fields, me!.id))),
+      addTask: (fields) => write(() => client.upsert(TODAY_TASK, { ...fields })),
+      updateTask: (id, fields) => write(async () => void (await client.upsert(TODAY_TASK, fields, id))),
+      removeTask: (id) => write(() => client.remove(TODAY_TASK, id)),
+      addProject: (name) => write(() => client.upsert(TODAY_PROJECT, { name })),
       events,
       calendars,
-      addEvent: (fields) => write(() => client!.upsert(TODAY_EVENT, { ...fields })),
-      updateEvent: (id, fields) => write(async () => void (await client!.upsert(TODAY_EVENT, fields, id))),
-      removeEvent: (id) => write(() => client!.remove(TODAY_EVENT, id)),
+      addEvent: (fields) => write(() => client.upsert(TODAY_EVENT, { ...fields })),
+      updateEvent: (id, fields) => write(async () => void (await client.upsert(TODAY_EVENT, fields, id))),
+      removeEvent: (id) => write(() => client.remove(TODAY_EVENT, id)),
       saveCalendar: (id, fields) =>
         write(async () =>
-          id
-            ? (await client!.upsert(TODAY_CALENDAR, fields, id), id)
-            : client!.upsert(TODAY_CALENDAR, fields),
+          id ? (await client.upsert(TODAY_CALENDAR, fields, id), id) : client.upsert(TODAY_CALENDAR, fields),
         ),
     };
-  }, [client, me, ready, tasks, projects, pending, settings, events, calendars]);
+  }, [write, client, me, ready, tasks, projects, pending, settings, events, calendars]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

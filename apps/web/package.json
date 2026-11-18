@@ -14,6 +14,7 @@
   "dependencies": {
     "@orvyn/contracts": "workspace:*",
     "@orvyn/design-tokens": "workspace:*",
+    "@orvyn/money": "workspace:*",
     "@orvyn/sync-client": "workspace:*",
     "@orvyn/today-parse": "workspace:*",
     "@orvyn/today-plan": "workspace:*",

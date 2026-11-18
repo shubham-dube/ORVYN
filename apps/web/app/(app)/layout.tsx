@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, CheckCircle2, Home, Settings, Shield } from 'lucide-react';
+import { Bell, CheckCircle2, Home, Settings, Shield, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -11,6 +11,8 @@ import { Orb } from '@/components/ui/orb';
 import { cn } from '@/lib/cn';
 import { NotificationsProvider, useNotifications } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
+import { MoneyProvider } from '@/lib/money';
+import { SyncProvider } from '@/lib/sync';
 import { TodayProvider } from '@/lib/today';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -22,9 +24,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   if (status !== 'signedIn') return <Splash />;
   return (
     <NotificationsProvider>
-      <MaybeToday>
-        <Shell>{children}</Shell>
-      </MaybeToday>
+      <SyncProvider>
+        <MaybeToday>
+          <MaybeMoney>
+            <Shell>{children}</Shell>
+          </MaybeMoney>
+        </MaybeToday>
+      </SyncProvider>
     </NotificationsProvider>
   );
 }
@@ -34,6 +40,15 @@ function MaybeToday({ children }: { children: ReactNode }) {
   const { me } = useSession();
   return me?.role === 'owner' || me?.entitlements.includes('today') ? (
     <TodayProvider>{children}</TodayProvider>
+  ) : (
+    children
+  );
+}
+
+function MaybeMoney({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  return me?.role === 'owner' || me?.entitlements.includes('money') ? (
+    <MoneyProvider>{children}</MoneyProvider>
   ) : (
     children
   );
@@ -69,6 +84,9 @@ function Shell({ children }: { children: ReactNode }) {
     { href: '/', label: 'Home', icon: Home },
     ...(me?.role === 'owner' || me?.entitlements.includes('today')
       ? [{ href: '/today', label: 'Today', icon: CheckCircle2 }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('money')
+      ? [{ href: '/money', label: 'Money', icon: Wallet }]
       : []),
     { href: '/settings', label: 'Settings', icon: Settings },
     ...(me?.role === 'owner' ? [{ href: '/admin', label: 'People', icon: Shield }] : []),
@@ -144,7 +162,11 @@ function Shell({ children }: { children: ReactNode }) {
           <span />
         )}
         <span aria-hidden />
-        <span aria-hidden />
+        {nav.some((i) => i.href === '/money') ? (
+          <DockLink href="/money" label="Money" active={pathname === '/money'} icon={<Wallet size={20} />} />
+        ) : (
+          <span aria-hidden />
+        )}
         <DockLink
           href="/settings"
           label="Settings"

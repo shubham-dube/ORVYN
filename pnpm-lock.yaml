@@ -223,6 +223,9 @@ importers:
       '@orvyn/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@orvyn/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       '@orvyn/sync-client':
         specifier: workspace:*
         version: link:../../packages/sync-client
