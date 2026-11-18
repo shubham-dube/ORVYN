@@ -19,6 +19,7 @@ MAIL_FROM=ORVYN <orvyn@example.test>
 CLOUDFLARE_TUNNEL_TOKEN=unused
 BACKUP_AGE_RECIPIENT=$(grep -o 'age1[0-9a-z]*' "$work/pub.txt")
 GLITCHTIP_SECRET_KEY=$(openssl rand -hex 32)
+FILES_MASTER_KEY=$(openssl rand -base64 32)
 RELEASE=latest
 ENV
 FILES="-p orvyn-smoke -f docker-compose.yml -f test/compose.ci.yml --env-file $work/.env"
