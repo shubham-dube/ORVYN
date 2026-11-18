@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReminderWay, Task } from '@orvyn/contracts';
-import { CalendarDays, Check, Flag, Inbox, Plus, Sun, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, CheckCheck, Inbox, Plus, Repeat, Sun, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Glass, Label, Segmented, Sheet } from '@/components/ui/bits';
@@ -17,6 +17,23 @@ import { looksUnread, type Parsed } from '@orvyn/today-parse';
 import { api } from '@/lib/api';
 import { smartParse, taskFields } from '@/lib/smart-task';
 import { groupTasks, localDay, taskMoment, useToday } from '@/lib/today';
+import { RepeatBuilder } from '@/components/repeat-builder';
+import {
+  Board,
+  BulkBar,
+  ChecklistEditor,
+  PriorityFlag,
+  TagsInput,
+  TaskToolbar,
+} from '@/components/task-views';
+import {
+  allTags,
+  checklistProgress,
+  EMPTY_QUERY,
+  isEmptyQuery,
+  taskMatches,
+  type TaskQuery,
+} from '@orvyn/today-plan';
 
 export default function TodayPage() {
   return (
@@ -27,20 +44,26 @@ export default function TodayPage() {
 }
 
 function TodayView() {
-  const { ready, tasks, pending } = useToday();
+  const { ready, tasks, pending, projects, settings } = useToday();
   const [now, setNow] = useState(() => new Date());
   const [editing, setEditing] = useState<Task | null>(null);
-  const [mode, setMode] = useState<'list' | 'calendar'>('list');
+  const [mode, setMode] = useState<'list' | 'board' | 'calendar'>('list');
+  const [query, setQuery] = useState<TaskQuery>(EMPTY_QUERY);
+  const [scope, setScope] = useState<'all' | 'today' | 'upcoming' | 'inbox' | 'done'>('all');
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const tz = settings?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     try {
-      if (localStorage.getItem('orvyn.today.mode') === 'calendar') setMode('calendar');
+      const m = localStorage.getItem('orvyn.today.mode');
+      if (m === 'calendar' || m === 'board') setMode(m);
     } catch {
       /* storage blocked: start on the list */
     }
     return () => clearInterval(t);
   }, []);
-  const pickMode = (m: 'list' | 'calendar') => {
+  const pickMode = (m: 'list' | 'board' | 'calendar') => {
     setMode(m);
     try {
       localStorage.setItem('orvyn.today.mode', m);
@@ -48,7 +71,28 @@ function TodayView() {
       /* fine */
     }
   };
-  const g = useMemo(() => groupTasks(tasks, now), [tasks, now]);
+  const filtered = useMemo(
+    () => (isEmptyQuery(query) ? tasks : tasks.filter((t) => taskMatches(t, query, now, tz))),
+    [tasks, query, now, tz],
+  );
+  const g = useMemo(() => groupTasks(filtered, now), [filtered, now]);
+  const done = useMemo(
+    () =>
+      filtered
+        .filter((t) => t.completedAt)
+        .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
+        .slice(0, 100),
+    [filtered],
+  );
+  const pickedTasks = tasks.filter((t) => picked.includes(t.id));
+  const open = (t: Task) =>
+    selecting
+      ? setPicked((p) => (p.includes(t.id) ? p.filter((x) => x !== t.id) : [...p, t.id]))
+      : setEditing(t);
+  const leaveSelecting = (v: boolean) => {
+    setSelecting(v);
+    if (!v) setPicked([]);
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -67,6 +111,7 @@ function TodayView() {
             onChange={pickMode}
             options={[
               { value: 'list', label: 'List' },
+              { value: 'board', label: 'Board' },
               { value: 'calendar', label: 'Calendar' },
             ]}
           />
@@ -75,6 +120,17 @@ function TodayView() {
 
       <QuickAdd />
 
+      {ready && mode !== 'calendar' ? (
+        <TaskToolbar
+          query={query}
+          setQuery={setQuery}
+          tasks={tasks}
+          projects={projects}
+          selecting={selecting}
+          setSelecting={leaveSelecting}
+        />
+      ) : null}
+
       {ready && mode === 'calendar' ? (
         <CalendarViews onOpenTask={setEditing} />
       ) : !ready ? (
@@ -82,41 +138,109 @@ function TodayView() {
           <div className="skeleton h-4 w-2/3 rounded" />
           <div className="skeleton mt-3 h-4 w-1/2 rounded" />
         </Glass>
+      ) : mode === 'board' ? (
+        <Board tasks={filtered} projects={projects} onOpen={open} />
       ) : (
         <>
-          {g.overdue.length ? (
-            <Section title="Overdue" tone="danger" items={g.overdue} onOpen={setEditing} now={now} />
-          ) : null}
-          <Section
-            title="Today"
-            icon={<Sun size={14} aria-hidden />}
-            items={g.today}
-            onOpen={setEditing}
-            now={now}
-            empty="Nothing planned for today. Add something above, or enjoy it."
+          <Segmented
+            label="Show"
+            value={scope}
+            onChange={(v) => setScope(v as typeof scope)}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'today', label: 'Today' },
+              { value: 'upcoming', label: 'Upcoming' },
+              { value: 'inbox', label: 'Inbox' },
+              { value: 'done', label: 'Done' },
+            ]}
           />
-          {g.upcoming.length ? (
+          {scope === 'done' ? (
             <Section
-              title="Upcoming"
-              icon={<CalendarDays size={14} aria-hidden />}
-              items={g.upcoming}
-              onOpen={setEditing}
+              title="Done"
+              icon={<CheckCheck size={14} aria-hidden />}
+              items={done}
+              onOpen={open}
               now={now}
+              muted
+              empty="Nothing finished yet."
+              picked={picked}
             />
-          ) : null}
-          <Section
-            title="Inbox"
-            icon={<Inbox size={14} aria-hidden />}
-            items={g.inbox}
-            onOpen={setEditing}
-            now={now}
-            empty="Inbox zero."
-          />
-          {g.doneToday.length ? (
-            <Section title="Done today" items={g.doneToday} onOpen={setEditing} now={now} muted />
-          ) : null}
+          ) : (
+            <>
+              {scope === 'all' || scope === 'today' ? (
+                <>
+                  {g.overdue.length ? (
+                    <Section
+                      title="Overdue"
+                      tone="danger"
+                      items={g.overdue}
+                      onOpen={open}
+                      now={now}
+                      picked={picked}
+                    />
+                  ) : null}
+                  <Section
+                    title="Today"
+                    icon={<Sun size={14} aria-hidden />}
+                    items={g.today}
+                    onOpen={open}
+                    now={now}
+                    picked={picked}
+                    empty={
+                      isEmptyQuery(query)
+                        ? 'Nothing planned for today. Add something above, or enjoy it.'
+                        : 'Nothing matches today.'
+                    }
+                  />
+                </>
+              ) : null}
+              {(scope === 'all' || scope === 'upcoming') && (g.upcoming.length || scope === 'upcoming') ? (
+                <Section
+                  title="Upcoming"
+                  icon={<CalendarDays size={14} aria-hidden />}
+                  items={g.upcoming}
+                  onOpen={open}
+                  now={now}
+                  picked={picked}
+                  empty="Nothing coming up."
+                />
+              ) : null}
+              {scope === 'all' || scope === 'inbox' ? (
+                <Section
+                  title="Inbox"
+                  icon={<Inbox size={14} aria-hidden />}
+                  items={g.inbox}
+                  onOpen={open}
+                  now={now}
+                  picked={picked}
+                  empty={isEmptyQuery(query) ? 'Inbox zero.' : 'Nothing matches in the inbox.'}
+                />
+              ) : null}
+              {scope === 'all' && g.doneToday.length ? (
+                <Section
+                  title="Done today"
+                  items={g.doneToday}
+                  onOpen={open}
+                  now={now}
+                  muted
+                  picked={picked}
+                />
+              ) : null}
+            </>
+          )}
         </>
       )}
+
+      {selecting ? (
+        <BulkBar
+          picked={pickedTasks}
+          projects={projects}
+          clear={() => {
+            setPicked([]);
+            setSelecting(false);
+          }}
+        />
+      ) : null}
 
       <TaskSheet task={editing} onClose={() => setEditing(null)} />
     </div>
@@ -226,7 +350,9 @@ function Section({
   tone,
   empty,
   muted,
+  picked,
 }: {
+  picked?: string[];
   title: string;
   items: Task[];
   onOpen(t: Task): void;
@@ -246,7 +372,14 @@ function Section({
       <ul className="flex flex-col" aria-label={title}>
         <AnimatePresence initial={false}>
           {items.map((t) => (
-            <TaskRow key={t.id} task={t} onOpen={onOpen} now={now} muted={muted} />
+            <TaskRow
+              key={t.id}
+              task={t}
+              onOpen={onOpen}
+              now={now}
+              muted={muted}
+              picked={picked?.includes(t.id)}
+            />
           ))}
         </AnimatePresence>
       </ul>
@@ -260,11 +393,13 @@ function TaskRow({
   onOpen,
   now,
   muted,
+  picked,
 }: {
   task: Task;
   onOpen(t: Task): void;
   now: Date;
   muted?: boolean;
+  picked?: boolean;
 }) {
   const { updateTask, projects } = useToday();
   const [settling, setSettling] = useState(false);
@@ -286,7 +421,11 @@ function TaskRow({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 8, scale: 0.98 }}
       transition={spring.smooth}
-      className="group flex items-center gap-3 rounded-orv-md px-1 py-2 hover:bg-orv-track"
+      aria-selected={picked || undefined}
+      className={cn(
+        'group flex items-center gap-3 rounded-orv-md px-1 py-2 hover:bg-orv-track',
+        picked && 'bg-orv-track ring-1 ring-orv-accent',
+      )}
     >
       <button
         role="checkbox"
@@ -336,24 +475,41 @@ function TaskRow({
               })}
             </span>
           ) : null}
+          {task.durationMin ? (
+            <span>
+              ·{' '}
+              {task.durationMin >= 60
+                ? `${+(task.durationMin / 60).toFixed(1)} h`
+                : `${task.durationMin} min`}
+            </span>
+          ) : null}
           {project ? <span>· {project.name}</span> : null}
-          {task.rrule ? <span>· repeats</span> : null}
+          {task.rrule ? (
+            <span className="inline-flex items-center gap-1">
+              · <Repeat size={11} aria-hidden /> repeats
+            </span>
+          ) : null}
+          {checklistProgress(task).total ? (
+            <span
+              aria-label={`${checklistProgress(task).done} of ${checklistProgress(task).total} steps done`}
+            >
+              · {checklistProgress(task).done}/{checklistProgress(task).total}
+            </span>
+          ) : null}
+          {task.tags.slice(0, 3).map((t) => (
+            <span key={t}>#{t}</span>
+          ))}
         </span>
       </button>
-      {task.priority >= 2 ? (
-        <Flag
-          size={14}
-          aria-label={task.priority === 3 ? 'High priority' : 'Medium priority'}
-          className={task.priority === 3 ? 'text-orv-danger' : 'text-orv-warning'}
-        />
-      ) : null}
+      {task.priority >= 1 ? <PriorityFlag p={task.priority} /> : null}
     </motion.li>
   );
 }
 
 function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
-  const { updateTask, removeTask, projects, settings } = useToday();
+  const { updateTask, removeTask, projects, settings, tasks, addProject } = useToday();
   const [draft, setDraft] = useState<Task | null>(task);
+  const [newProject, setNewProject] = useState('');
   useEffect(() => setDraft(task), [task]);
   if (!draft)
     return (
@@ -378,6 +534,12 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
       priority: draft.priority,
       projectId: draft.projectId,
       reminders: draft.reminders,
+      tags: draft.tags,
+      checklist: draft.checklist,
+      durationMin: draft.durationMin,
+      // a repeat needs a day to start from: today when none was chosen
+      rrule: draft.rrule,
+      ...(draft.rrule && !draft.dueDate && !draft.dueAt ? { dueDate: localDay(new Date()) } : {}),
     });
     onClose();
   };
@@ -446,6 +608,82 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
             </select>
           ) : null}
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Takes">
+            {(id) => (
+              <select
+                id={id}
+                value={draft.durationMin ?? ''}
+                onChange={(e) =>
+                  setDraft({ ...draft, durationMin: e.target.value ? Number(e.target.value) : null })
+                }
+                className="h-12 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[15px]"
+              >
+                <option value="">No estimate</option>
+                {[15, 30, 45, 60, 90, 120, 180, 240].map((m) => (
+                  <option key={m} value={m}>
+                    {m >= 60 ? `${m / 60} h` : `${m} min`}
+                  </option>
+                ))}
+                {draft.durationMin && ![15, 30, 45, 60, 90, 120, 180, 240].includes(draft.durationMin) ? (
+                  <option value={draft.durationMin}>{draft.durationMin} min</option>
+                ) : null}
+              </select>
+            )}
+          </Field>
+          <Field label="Or start a new one">
+            {(id) => (
+              <div className="flex gap-2">
+                <Input
+                  id={id}
+                  value={newProject}
+                  placeholder="Name"
+                  maxLength={80}
+                  onChange={(e) => setNewProject(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!newProject.trim()}
+                  onClick={async () => {
+                    const pid = await addProject(newProject.trim());
+                    setDraft({ ...draft, projectId: pid });
+                    setNewProject('');
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            )}
+          </Field>
+        </div>
+        <Field label="Tags">
+          {() => (
+            <TagsInput
+              value={draft.tags}
+              onChange={(tags) => setDraft({ ...draft, tags })}
+              suggestions={allTags(tasks)}
+            />
+          )}
+        </Field>
+        <Field label="Steps">
+          {() => (
+            <ChecklistEditor
+              value={draft.checklist}
+              onChange={(checklist) => setDraft({ ...draft, checklist })}
+            />
+          )}
+        </Field>
+        <Field label="Repeats">
+          {() => (
+            <RepeatBuilder
+              value={draft.rrule ?? ''}
+              onChange={(rrule) => setDraft({ ...draft, rrule: rrule || null })}
+              startDate={day || localDay(new Date())}
+              timeZone={draft.timeZone}
+            />
+          )}
+        </Field>
         <TaskReminders
           draft={draft}
           defaults={settings?.reminders.timed ?? null}

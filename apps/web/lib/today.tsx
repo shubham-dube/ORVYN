@@ -5,12 +5,15 @@ import {
   EVENT_DEFAULTS,
   type Calendar,
   type Project,
+  type SavedFilter,
   type Task,
   TODAY_CALENDAR,
   TODAY_EVENT,
+  TODAY_FILTER,
   TODAY_PROJECT,
   TODAY_SETTINGS,
   TODAY_TASK,
+  TaskFields,
   type TodaySettingsFields,
 } from '@orvyn/contracts';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -28,7 +31,11 @@ interface TodayCtx {
   addTask(fields: Partial<Task> & { title: string }): Promise<string>;
   updateTask(id: string, fields: Partial<Task>): Promise<void>;
   removeTask(id: string): Promise<void>;
-  addProject(name: string): Promise<string>;
+  addProject(name: string, colour?: Project['colour']): Promise<string>;
+  updateProject(id: string, fields: Partial<Project>): Promise<void>;
+  filters: SavedFilter[];
+  saveFilter(id: string | null, fields: Partial<SavedFilter>): Promise<string>;
+  removeFilter(id: string): Promise<void>;
   events: CalEvent[];
   calendars: Calendar[];
   addEvent(fields: Partial<CalEvent> & { title: string }): Promise<string>;
@@ -39,29 +46,35 @@ interface TodayCtx {
 
 const Ctx = createContext<TodayCtx | null>(null);
 
+/** Defaults for fields a task written offline (or by an older device) doesn't carry yet. */
+const TASK_DEFAULTS = TaskFields.omit({ title: true }).parse({});
+
 /** Today's data from the shared offline mirror (lib/sync.tsx). */
 export function TodayProvider({ children }: { children: ReactNode }) {
   const { me } = useSession();
   const { client, version, pending, write } = useSync();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [filters, setFilters] = useState<SavedFilter[]>([]);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [settings, setSettings] = useState<TodaySettingsFields | null>(null);
   const [ready, setReady] = useState(false);
 
   const reload = useCallback(async () => {
-    const [t, p, st, ev, cal] = await Promise.all([
+    const [t, p, st, ev, cal, fl] = await Promise.all([
       client.list<Task>(TODAY_TASK),
       client.list<Project>(TODAY_PROJECT),
       me ? client.get<TodaySettingsFields>(TODAY_SETTINGS, me.id) : null,
       client.list<CalEvent>(TODAY_EVENT),
       client.list<Calendar>(TODAY_CALENDAR),
+      client.list<SavedFilter>(TODAY_FILTER),
     ]);
+    setFilters([...fl].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
     setEvents(ev.map((e) => ({ ...EVENT_DEFAULTS, ...e })));
     setCalendars(cal);
     setSettings(st);
-    setTasks(t);
+    setTasks(t.map((x) => ({ ...TASK_DEFAULTS, ...x })));
     setProjects(p);
     setReady(true);
   }, [client, me]);
@@ -81,7 +94,15 @@ export function TodayProvider({ children }: { children: ReactNode }) {
       addTask: (fields) => write(() => client.upsert(TODAY_TASK, { ...fields })),
       updateTask: (id, fields) => write(async () => void (await client.upsert(TODAY_TASK, fields, id))),
       removeTask: (id) => write(() => client.remove(TODAY_TASK, id)),
-      addProject: (name) => write(() => client.upsert(TODAY_PROJECT, { name })),
+      addProject: (name, colour) =>
+        write(() => client.upsert(TODAY_PROJECT, { name, ...(colour ? { colour } : {}) })),
+      updateProject: (id, fields) => write(async () => void (await client.upsert(TODAY_PROJECT, fields, id))),
+      filters,
+      saveFilter: (id, fields) =>
+        write(async () =>
+          id ? (await client.upsert(TODAY_FILTER, fields, id), id) : client.upsert(TODAY_FILTER, fields),
+        ),
+      removeFilter: (id) => write(() => client.remove(TODAY_FILTER, id)),
       events,
       calendars,
       addEvent: (fields) => write(() => client.upsert(TODAY_EVENT, { ...fields })),
@@ -92,7 +113,7 @@ export function TodayProvider({ children }: { children: ReactNode }) {
           id ? (await client.upsert(TODAY_CALENDAR, fields, id), id) : client.upsert(TODAY_CALENDAR, fields),
         ),
     };
-  }, [write, client, me, ready, tasks, projects, pending, settings, events, calendars]);
+  }, [write, client, me, ready, tasks, projects, filters, pending, settings, events, calendars]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

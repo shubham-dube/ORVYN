@@ -99,6 +99,13 @@
       "when": 1794994292478,
       "tag": "0013_money_recurring",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794995536759,
+      "tag": "0014_today_filters",
+      "breakpoints": true
     }
   ]
 }

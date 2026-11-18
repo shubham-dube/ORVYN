@@ -21,6 +21,15 @@ a human summary and next dates preview; subtasks (checklist with progress), tags
 saved filters and search; views (Today, Upcoming, Inbox, Board by project, All); projects with colours; bulk
 complete/move; per-task reminder ways; keyboard-first quick add stays.
 
+**Built (web, Android, API):** the shared repeat builder in the task sheet (never / daily / weekly with weekday circles /
+monthly by date or "2nd Friday" / yearly, every N, ends never / on a date / after N times, plain summary, next five
+dates); steps (checklist with a progress bar, shown on rows and cards); tags with suggestions; duration; projects
+(create from the sheet or the board) with colours; priority on every row; search (title, notes, tags, steps) and
+filters (project, tag, priority, when) — one rule set in TypeScript and Dart (`fixtures/task-query.json`); saved
+filters (`today.filter`, synced); List / Board / Calendar views and All / Today / Upcoming / Inbox / Done scopes; bulk
+select (complete, move to project, set day, set priority, delete). Board columns move by drag on web and by long-press
+on Android. A repeat with no day starts today.
+
 ## Money v2
 
 Add an expense for **any date and time** (quick entry understands "yesterday", "on 12 nov"; a full form with date

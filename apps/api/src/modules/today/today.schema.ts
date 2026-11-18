@@ -19,6 +19,26 @@ export const todayProjects = pgTable(
   (t) => [index('today_projects_owner_idx').on(t.ownerId)],
 );
 
+/** Saved task searches ("Work, urgent, this week"), the same on every device. */
+export const todayFilters = pgTable(
+  'today_filters',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id').notNull(),
+    name: text('name').notNull(),
+    text: text('text').notNull().default(''),
+    projectId: text('project_id'),
+    tag: text('tag'),
+    minPriority: integer('min_priority').notNull().default(0),
+    when: text('when').notNull().default('any'),
+    order: integer('sort_order').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [index('today_filters_owner_idx').on(t.ownerId)],
+);
+
 export const todayTasks = pgTable(
   'today_tasks',
   {

@@ -1,0 +1,98 @@
+{
+  "$comment": "Shared by TypeScript (packages/today-plan/test/tasks.test.ts) and Dart (apps/mobile/test/task_query_test.dart). now = Wed 18 Nov 2026 10:00 in Asia/Kolkata. 'matches' lists the titles each query keeps.",
+  "now": "2026-11-18T10:00:00+05:30",
+  "timeZone": "Asia/Kolkata",
+  "tasks": [
+    {
+      "title": "Pay electricity bill",
+      "tags": ["home", "money"],
+      "projectId": "p-home",
+      "priority": 3,
+      "dueDate": "2026-11-17",
+      "dueAt": null,
+      "scheduledStart": null,
+      "completedAt": null,
+      "checklist": [],
+      "notes": ""
+    },
+    {
+      "title": "Call the bank",
+      "tags": ["money"],
+      "projectId": null,
+      "priority": 2,
+      "dueDate": null,
+      "dueAt": "2026-11-18T16:00:00+05:30",
+      "scheduledStart": null,
+      "completedAt": null,
+      "checklist": [],
+      "notes": "ask about the card"
+    },
+    {
+      "title": "Ship release notes",
+      "tags": ["work", "urgent"],
+      "projectId": "p-work",
+      "priority": 3,
+      "dueDate": null,
+      "dueAt": null,
+      "scheduledStart": "2026-11-20T11:00:00+05:30",
+      "completedAt": null,
+      "checklist": [
+        { "text": "draft", "done": true },
+        { "text": "review", "done": false }
+      ],
+      "notes": ""
+    },
+    {
+      "title": "Plan holiday",
+      "tags": ["Home"],
+      "projectId": "p-home",
+      "priority": 0,
+      "dueDate": "2026-12-05",
+      "dueAt": null,
+      "scheduledStart": null,
+      "completedAt": null,
+      "checklist": [{ "text": "book flights", "done": false }],
+      "notes": ""
+    },
+    {
+      "title": "Read a book",
+      "tags": [],
+      "projectId": null,
+      "priority": 1,
+      "dueDate": null,
+      "dueAt": null,
+      "scheduledStart": null,
+      "completedAt": null,
+      "checklist": [],
+      "notes": ""
+    }
+  ],
+  "queries": [
+    {
+      "q": {},
+      "matches": [
+        "Pay electricity bill",
+        "Call the bank",
+        "Ship release notes",
+        "Plan holiday",
+        "Read a book"
+      ]
+    },
+    { "q": { "when": "overdue" }, "matches": ["Pay electricity bill"] },
+    { "q": { "when": "today" }, "matches": ["Call the bank"] },
+    { "q": { "when": "week" }, "matches": ["Call the bank", "Ship release notes"] },
+    { "q": { "when": "later" }, "matches": ["Plan holiday"] },
+    { "q": { "when": "none" }, "matches": ["Read a book"] },
+    { "q": { "projectId": "p-home" }, "matches": ["Pay electricity bill", "Plan holiday"] },
+    { "q": { "projectId": "none" }, "matches": ["Call the bank", "Read a book"] },
+    { "q": { "tag": "money" }, "matches": ["Pay electricity bill", "Call the bank"] },
+    { "q": { "tag": "home" }, "matches": ["Pay electricity bill", "Plan holiday"] },
+    { "q": { "minPriority": 3 }, "matches": ["Pay electricity bill", "Ship release notes"] },
+    { "q": { "minPriority": 2, "tag": "money" }, "matches": ["Pay electricity bill", "Call the bank"] },
+    { "q": { "text": "bank" }, "matches": ["Call the bank"] },
+    { "q": { "text": "CARD bank" }, "matches": ["Call the bank"] },
+    { "q": { "text": "flights" }, "matches": ["Plan holiday"] },
+    { "q": { "text": "urgent" }, "matches": ["Ship release notes"] },
+    { "q": { "text": "nothing like this" }, "matches": [] }
+  ]
+}

@@ -7,6 +7,7 @@ import 'state.dart';
 
 const todayTask = 'today.task';
 const todayProject = 'today.project';
+const todayFilter = 'today.filter';
 
 /// A task as the app reads it from the local mirror (fields may be missing until the server fills defaults).
 class TaskItem {
@@ -23,6 +24,13 @@ class TaskItem {
   DateTime? get completedAt => _time('completedAt');
   String? get projectId => data['projectId'] as String?;
   bool get repeats => data['rrule'] != null;
+  String? get rrule => data['rrule'] as String?;
+  int? get durationMin => (data['durationMin'] as num?)?.toInt();
+  List<String> get tags => [for (final t in (data['tags'] as List?) ?? const []) t as String];
+  List<({String id, String text, bool done})> get checklist => [
+    for (final c in (data['checklist'] as List?) ?? const [])
+      (id: ((c as Map)['id'] as String?) ?? '', text: (c['text'] as String?) ?? '', done: c['done'] == true),
+  ];
 
   DateTime? _time(String k) => data[k] == null ? null : DateTime.parse(data[k] as String).toLocal();
 
@@ -89,6 +97,38 @@ final tasksProvider = StreamProvider<List<TaskItem>>((ref) {
   return ref.watch(syncProvider).watch(todayTask).map((rows) => [for (final r in rows) TaskItem(r.id, r.data)]);
 });
 
+class ProjectItem {
+  ProjectItem(this.id, this.data);
+  final String id;
+  final Map<String, dynamic> data;
+  String get name => (data['name'] as String?) ?? '';
+  String get colour => (data['colour'] as String?) ?? 'sky';
+  bool get archived => data['archived'] == true;
+}
+
+final projectsProvider = StreamProvider<List<ProjectItem>>(
+  (ref) => ref
+      .watch(syncProvider)
+      .watch(todayProject)
+      .map((rows) => [for (final r in rows) ProjectItem(r.id, r.data)].where((p) => !p.archived).toList()),
+);
+
+/// A saved search ("Urgent work"), the same on every device.
+class SavedFilterItem {
+  SavedFilterItem(this.id, this.data);
+  final String id;
+  final Map<String, dynamic> data;
+  String get name => (data['name'] as String?) ?? '';
+  int get order => (data['order'] as num?)?.toInt() ?? 0;
+}
+
+final savedFiltersProvider = StreamProvider<List<SavedFilterItem>>(
+  (ref) => ref
+      .watch(syncProvider)
+      .watch(todayFilter)
+      .map((rows) => [for (final r in rows) SavedFilterItem(r.id, r.data)]..sort((a, b) => a.order.compareTo(b.order))),
+);
+
 final projectNamesProvider = StreamProvider<Map<String, String>>((ref) {
   return ref
       .watch(syncProvider)
@@ -122,6 +162,11 @@ class TodayActions {
   Future<void> update(String id, Map<String, dynamic> fields) => _then(sync.upsert(todayTask, fields, id: id));
 
   Future<void> remove(String id) => _then(sync.remove(todayTask, id));
+
+  Future<String> addProject(String name, {String? colour}) =>
+      _then(sync.upsert(todayProject, {'name': name, 'colour': ?colour}));
+  Future<String> saveFilter(String? id, Map<String, dynamic> fields) => _then(sync.upsert(todayFilter, fields, id: id));
+  Future<void> removeFilter(String id) => _then(sync.remove(todayFilter, id));
 
   Future<T> _then<T>(Future<T> f) async {
     final r = await f;

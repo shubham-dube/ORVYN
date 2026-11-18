@@ -2,12 +2,14 @@ import { Injectable, Module, type OnModuleInit } from '@nestjs/common';
 import {
   CalendarFields,
   EventFields,
+  FilterFields,
   eventProblem,
   ProjectFields,
   TaskFields,
   TODAY_CALENDAR,
   TODAY_EVENT,
   TODAY_PROJECT,
+  TODAY_FILTER,
   TODAY_SETTINGS,
   TODAY_TASK,
   TodaySettingsFields,
@@ -26,7 +28,14 @@ import { SyncModule } from '../sync/sync.module';
 import { RecurrenceService } from './recurrence.service';
 import { RemindersService } from './reminders.service';
 import { TodayController } from './today.controller';
-import { todayCalendars, todayEvents, todayProjects, todaySettings, todayTasks } from './today.schema';
+import {
+  todayCalendars,
+  todayEvents,
+  todayFilters,
+  todayProjects,
+  todaySettings,
+  todayTasks,
+} from './today.schema';
 
 /** Today (spec 0002): projects and tasks as synced entities behind the `today` feature switch. */
 @Injectable()
@@ -45,6 +54,9 @@ class TodayEntities implements OnModuleInit {
           if (id !== ownerId) throw new Rejected('settings id must be your own id');
         },
       }),
+    );
+    this.registry.register(
+      tableEntity({ name: TODAY_FILTER, entitlement: 'today', table: todayFilters, schema: FilterFields }),
     );
     this.registry.register(
       tableEntity({

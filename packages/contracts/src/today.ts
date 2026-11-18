@@ -9,6 +9,7 @@ const isoDateTime = z.string().datetime({ offset: true });
 const timeZone = z.string().min(1).max(64);
 
 export const TODAY_PROJECT = 'today.project';
+export const TODAY_FILTER = 'today.filter';
 export const TODAY_TASK = 'today.task';
 
 export const PROJECT_COLOURS = [
@@ -94,6 +95,20 @@ export const TaskFields = z.object({
   source: z.string().max(20).default('typed'),
 });
 export type TaskFields = z.infer<typeof TaskFields>;
+
+/** A named search over tasks (words, project, tag, priority, when), kept on every device. */
+export const FilterFields = z.object({
+  name: z.string().trim().min(1).max(40),
+  text: z.string().max(100).default(''),
+  /** a project id, 'none' (tasks without one) or null (any) */
+  projectId: z.string().max(40).nullable().default(null),
+  tag: z.string().max(40).nullable().default(null),
+  minPriority: z.number().int().min(0).max(3).default(0),
+  when: z.enum(['any', 'overdue', 'today', 'week', 'later', 'none']).default('any'),
+  order: z.number().int().min(0).max(1000).default(0),
+});
+export type FilterFields = z.infer<typeof FilterFields>;
+export type SavedFilter = FilterFields & { id: string };
 
 export type Task = TaskFields & { id: string };
 export type Project = ProjectFields & { id: string };

@@ -7,6 +7,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../app/state.dart';
+import '../app/task_query.dart';
 import '../app/today.dart';
 import '../app/reminder_ways.dart';
 import '../app/smart_add.dart';
@@ -16,7 +17,9 @@ import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
+import 'repeat_editor.dart';
 import 'sheets.dart';
+import 'task_tools.dart';
 import 'ways_editor.dart';
 import 'today_calendar.dart';
 
@@ -28,7 +31,12 @@ class TodayScreen extends ConsumerStatefulWidget {
 }
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
-  bool _calendar = false;
+  /// 'list' | 'board' | 'calendar'
+  String _view = 'list';
+  TaskQuery _query = TaskQuery.empty;
+  String _scope = 'all';
+  bool _selecting = false;
+  final _picked = <String>{};
 
   @override
   Widget build(BuildContext context) {
@@ -51,16 +59,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Row(
                     children: [
-                      for (final (cal, name) in const [(false, 'List'), (true, 'Calendar')])
+                      for (final (v, name) in const [('list', 'List'), ('board', 'Board'), ('calendar', 'Calendar')])
                         Padding(
                           padding: const EdgeInsets.only(right: 6),
                           child: ChoiceChip(
                             label: Text(name),
-                            selected: _calendar == cal,
+                            selected: _view == v,
                             showCheckmark: false,
-                            onSelected: (_) => setState(() => _calendar = cal),
+                            onSelected: (_) => setState(() => _view = v),
                             selectedColor: l.accent.withValues(alpha: 0.16),
-                            side: BorderSide(color: _calendar == cal ? l.accent : l.c.edge),
+                            side: BorderSide(color: _view == v ? l.accent : l.c.edge),
                             backgroundColor: Colors.transparent,
                           ),
                         ),
@@ -70,11 +78,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 // "+" on the home-screen widget opens Today ready to type
                 _QuickAdd(focus: GoRouterState.of(context).uri.queryParameters['add'] == '1'),
                 const SizedBox(height: 14),
-                if (_calendar)
+                if (_view == 'calendar')
                   TodayCalendar(onOpenTask: (t) => openTaskSheet(context, t))
                 else
                   switch (tasks) {
-                    AsyncData(:final value) => _Sections(groups: groupTasks(value, now), now: now),
+                    AsyncData(:final value) => _taskArea(context, l, value, now),
                     AsyncError() => Text('Couldn’t read your tasks.', style: OrvText.muted(l)),
                     _ => const SizedBox(height: 120),
                   },
@@ -83,6 +91,81 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _taskArea(BuildContext context, OrvLook l, List<TaskItem> all, DateTime now) {
+    final filtered = _query.isEmpty ? all : all.where((t) => taskMatches(t, _query, now)).toList();
+    final picked = all.where((t) => _picked.contains(t.id)).toList();
+    void open(TaskItem t) {
+      if (!_selecting) return openTaskSheet(context, t);
+      setState(() => _picked.contains(t.id) ? _picked.remove(t.id) : _picked.add(t.id));
+    }
+
+    void setSelecting(bool v) => setState(() {
+      _selecting = v;
+      if (!v) _picked.clear();
+    });
+    final g = groupTasks(filtered, now);
+    final done = filtered.where((t) => t.completedAt != null).toList()
+      ..sort((a, b) => b.completedAt!.compareTo(a.completedAt!));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TaskFilterBar(
+          query: _query,
+          onChanged: (q) => setState(() => _query = q),
+          tasks: all,
+          selecting: _selecting,
+          onSelecting: setSelecting,
+        ),
+        if (_selecting && picked.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          BulkBar(
+            picked: picked,
+            onDone: () => setState(() {
+              _picked.clear();
+              _selecting = false;
+            }),
+          ),
+        ],
+        const SizedBox(height: 10),
+        if (_view == 'board')
+          TaskBoard(tasks: filtered, onOpen: open)
+        else ...[
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final (v, name) in const [
+                ('all', 'All'),
+                ('today', 'Today'),
+                ('upcoming', 'Upcoming'),
+                ('inbox', 'Inbox'),
+                ('done', 'Done'),
+              ])
+                ChoiceChip(
+                  label: Text(name),
+                  selected: _scope == v,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => _scope = v),
+                  selectedColor: l.accent.withValues(alpha: 0.16),
+                  side: BorderSide(color: _scope == v ? l.accent : l.c.edge),
+                  backgroundColor: Colors.transparent,
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _Sections(
+            groups: g,
+            done: done.take(100).toList(),
+            scope: _scope,
+            now: now,
+            picked: _picked,
+            onOpen: open,
+            filtering: !_query.isEmpty,
+          ),
+        ],
+      ],
     );
   }
 }
@@ -234,28 +317,34 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
               ),
             ),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (!hasDay)
-                for (final w in _When.values)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(switch (w) {
-                        _When.today => 'Today',
-                        _When.tomorrow => 'Tomorrow',
-                        _When.someday => 'Someday',
-                      }),
-                      selected: _when == w,
-                      onSelected: (_) => setState(() => _when = w),
-                      showCheckmark: false,
-                      selectedColor: l.accent.withValues(alpha: 0.16),
-                      side: BorderSide(color: _when == w ? l.accent : l.c.edge),
-                      labelStyle: OrvText.muted(l)
-                          .copyWith(color: _when == w ? l.accent : l.c.muted, fontWeight: FontWeight.w600),
-                      backgroundColor: Colors.transparent,
-                    ),
-                  ),
-              const Spacer(),
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (!hasDay)
+                      for (final w in _When.values)
+                        ChoiceChip(
+                          label: Text(switch (w) {
+                            _When.today => 'Today',
+                            _When.tomorrow => 'Tomorrow',
+                            _When.someday => 'Someday',
+                          }),
+                          selected: _when == w,
+                          onSelected: (_) => setState(() => _when = w),
+                          showCheckmark: false,
+                          selectedColor: l.accent.withValues(alpha: 0.16),
+                          side: BorderSide(color: _when == w ? l.accent : l.c.edge),
+                          labelStyle: OrvText.muted(l)
+                              .copyWith(color: _when == w ? l.accent : l.c.muted, fontWeight: FontWeight.w600),
+                          backgroundColor: Colors.transparent,
+                        ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
               OrvButton(label: 'Add', small: true, variant: ButtonVariant.primary, onPressed: _add),
             ],
           ),
@@ -266,26 +355,62 @@ class _QuickAddState extends ConsumerState<_QuickAdd> {
 }
 
 class _Sections extends StatelessWidget {
-  const _Sections({required this.groups, required this.now});
+  const _Sections({
+    required this.groups,
+    required this.done,
+    required this.scope,
+    required this.now,
+    required this.picked,
+    required this.onOpen,
+    required this.filtering,
+  });
   final TaskGroups groups;
+  final List<TaskItem> done;
+  final String scope;
   final DateTime now;
+  final Set<String> picked;
+  final ValueChanged<TaskItem> onOpen;
+  final bool filtering;
   @override
   Widget build(BuildContext context) {
     final g = groups;
+    _Section sec(String title, List<TaskItem> items, {String? empty, bool danger = false}) =>
+        _Section(title, items, now: now, empty: empty, danger: danger, picked: picked, onOpen: onOpen);
+    if (scope == 'done') return sec('Done', done, empty: 'Nothing finished yet.');
     return Column(
       children: [
-        if (g.overdue.isNotEmpty) _Section('Overdue', g.overdue, now: now, danger: true),
-        _Section('Today', g.today, now: now, empty: 'Nothing planned for today. Add something above, or enjoy it.'),
-        if (g.upcoming.isNotEmpty) _Section('Upcoming', g.upcoming, now: now),
-        _Section('Inbox', g.inbox, now: now, empty: 'Inbox zero.'),
-        if (g.doneToday.isNotEmpty) _Section('Done today', g.doneToday, now: now),
+        if (scope == 'all' || scope == 'today') ...[
+          if (g.overdue.isNotEmpty) sec('Overdue', g.overdue, danger: true),
+          sec(
+            'Today',
+            g.today,
+            empty: filtering
+                ? 'Nothing matches today.'
+                : 'Nothing planned for today. Add something above, or enjoy it.',
+          ),
+        ],
+        if ((scope == 'all' && g.upcoming.isNotEmpty) || scope == 'upcoming')
+          sec('Upcoming', g.upcoming, empty: 'Nothing coming up.'),
+        if (scope == 'all' || scope == 'inbox')
+          sec('Inbox', g.inbox, empty: filtering ? 'Nothing matches in the inbox.' : 'Inbox zero.'),
+        if (scope == 'all' && g.doneToday.isNotEmpty) sec('Done today', g.doneToday),
       ],
     );
   }
 }
 
 class _Section extends StatelessWidget {
-  const _Section(this.title, this.items, {required this.now, this.empty, this.danger = false});
+  const _Section(
+    this.title,
+    this.items, {
+    required this.now,
+    required this.picked,
+    required this.onOpen,
+    this.empty,
+    this.danger = false,
+  });
+  final Set<String> picked;
+  final ValueChanged<TaskItem> onOpen;
   final String title;
   final List<TaskItem> items;
   final DateTime now;
@@ -316,7 +441,8 @@ class _Section extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 6),
-              for (final t in items) _TaskRow(key: ValueKey(t.id), task: t, now: now),
+              for (final t in items)
+                _TaskRow(key: ValueKey(t.id), task: t, now: now, selected: picked.contains(t.id), onOpen: onOpen),
               if (items.isEmpty && empty != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(6, 2, 6, 8),
@@ -331,9 +457,11 @@ class _Section extends StatelessWidget {
 }
 
 class _TaskRow extends ConsumerStatefulWidget {
-  const _TaskRow({super.key, required this.task, required this.now});
+  const _TaskRow({super.key, required this.task, required this.now, required this.selected, required this.onOpen});
   final TaskItem task;
   final DateTime now;
+  final bool selected;
+  final ValueChanged<TaskItem> onOpen;
   @override
   ConsumerState<_TaskRow> createState() => _TaskRowState();
 }
@@ -363,14 +491,27 @@ class _TaskRowState extends ConsumerState<_TaskRow> {
     final meta = [
       if (moment != null) loc.formatTimeOfDay(TimeOfDay.fromDateTime(moment)),
       if (moment == null && t.dueDate != null && t.dueDate != dayKey(widget.now)) _shortDate(t.dueDate!, loc),
+      if (t.durationMin != null)
+        t.durationMin! >= 60
+            ? '${(t.durationMin! / 60).toStringAsFixed(t.durationMin! % 60 == 0 ? 0 : 1)} h'
+            : '${t.durationMin} min',
       if (t.projectId != null && projects[t.projectId] != null) projects[t.projectId]!,
       if (t.repeats) 'repeats',
+      if (checklistProgress(t).total > 0) '${checklistProgress(t).done}/${checklistProgress(t).total} steps',
+      ...t.tags.take(3).map((x) => '#$x'),
     ].join(' · ');
     final late = moment != null && moment.isBefore(widget.now) && !done;
     return InkWell(
       borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-      onTap: () => openTaskSheet(context, t),
-      child: Padding(
+      onTap: () => widget.onOpen(t),
+      child: Container(
+        decoration: widget.selected
+            ? BoxDecoration(
+                color: l.c.track,
+                borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                border: Border.all(color: l.accent),
+              )
+            : null,
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Row(
           children: [
@@ -418,10 +559,14 @@ class _TaskRowState extends ConsumerState<_TaskRow> {
                 ],
               ),
             ),
-            if (t.priority >= 2)
+            if (t.priority >= 1)
               Semantics(
-                label: t.priority == 3 ? 'High priority' : 'Medium priority',
-                child: Icon(LucideIcons.flag, size: 16, color: t.priority == 3 ? l.c.danger : l.c.warning),
+                label: ['', 'Low priority', 'Medium priority', 'High priority'][t.priority],
+                child: Icon(
+                  LucideIcons.flag,
+                  size: 16,
+                  color: t.priority == 3 ? l.c.danger : (t.priority == 2 ? l.c.warning : l.c.faint),
+                ),
               ),
           ],
         ),
@@ -448,6 +593,12 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
   late String? _day = widget.task.day;
   late TimeOfDay? _time = widget.task.dueAt == null ? null : TimeOfDay.fromDateTime(widget.task.dueAt!);
   late int _priority = widget.task.priority;
+  late int? _duration = widget.task.durationMin;
+  late List<String> _tags = [...widget.task.tags];
+  late List<({String id, String text, bool done})> _steps = [...widget.task.checklist];
+  late String _rrule = widget.task.rrule ?? '';
+  late String? _projectId = widget.task.projectId;
+  final _newProject = TextEditingController();
 
   /// null = my defaults (D17); [] = none for this task; else these minutes-before
   /// the ways for this task's own reminders (the data allows one set per reminder; the sheet keeps one for all)
@@ -470,6 +621,7 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
   void dispose() {
     _title.dispose();
     _notes.dispose();
+    _newProject.dispose();
     super.dispose();
   }
 
@@ -490,6 +642,20 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
       'dueDate': dueDate,
       'dueAt': dueAt,
       'priority': _priority,
+      'durationMin': _duration,
+      'tags': _tags,
+      'checklist': [
+        for (final c in _steps)
+          {
+            'id': c.id.isEmpty ? DateTime.now().microsecondsSinceEpoch.toRadixString(36) : c.id,
+            'text': c.text,
+            'done': c.done,
+          },
+      ],
+      'projectId': _projectId,
+      'rrule': _rrule.isEmpty ? null : _rrule,
+      // a repeat needs a day to start from: today when none was chosen
+      if (_rrule.isNotEmpty && dueDate == null && dueAt == null) 'dueDate': dayKey(ref.read(clockProvider)()),
       'reminders': _reminders == null
           ? null
           : [
@@ -503,7 +669,18 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
   Widget build(BuildContext context) {
     final l = context.orv;
     final loc = MaterialLocalizations.of(context);
-    return Padding(
+    final projects = ref.watch(projectsProvider).value ?? const <ProjectItem>[];
+    final allTasks = ref.watch(tasksProvider).value ?? const <TaskItem>[];
+    ChoiceChip chip(String label, bool on, VoidCallback tap) => ChoiceChip(
+      label: Text(label),
+      selected: on,
+      showCheckmark: false,
+      onSelected: (_) => setState(tap),
+      selectedColor: l.accent.withValues(alpha: 0.16),
+      side: BorderSide(color: on ? l.accent : l.c.edge),
+      backgroundColor: Colors.transparent,
+    );
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -573,6 +750,64 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
                   backgroundColor: Colors.transparent,
                 ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text('Takes', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              chip('No estimate', _duration == null, () => _duration = null),
+              for (final m in const [15, 30, 45, 60, 90, 120, 180, 240])
+                chip(
+                  m >= 60 ? '${m ~/ 60} h${m % 60 == 0 ? '' : ' 30'}' : '$m min',
+                  _duration == m,
+                  () => _duration = m,
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text('Project', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              chip('No project', _projectId == null, () => _projectId = null),
+              for (final p in projects) chip(p.name, _projectId == p.id, () => _projectId = p.id),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: OrvField(label: 'New project', controller: _newProject),
+              ),
+              const SizedBox(width: 8),
+              OrvButton(
+                label: 'Add',
+                small: true,
+                onPressed: () async {
+                  final n = _newProject.text.trim();
+                  if (n.isEmpty) return;
+                  final id = await ref.read(todayActionsProvider).addProject(n);
+                  _newProject.clear();
+                  if (mounted) setState(() => _projectId = id);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TagsEditor(value: _tags, onChanged: (t) => setState(() => _tags = t), suggestions: allTags(allTasks)),
+          const SizedBox(height: 12),
+          ChecklistEditor(value: _steps, onChanged: (v) => setState(() => _steps = v)),
+          const SizedBox(height: 12),
+          Text('Repeats', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          RepeatEditor(
+            value: _rrule,
+            startDate: _day ?? dayKey(ref.read(clockProvider)()),
+            onChanged: (r) => setState(() => _rrule = r),
           ),
           const SizedBox(height: 12),
           if (_time != null)
