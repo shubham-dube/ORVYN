@@ -116,3 +116,40 @@ describe('reminders are the person’s (D17)', () => {
     ).toEqual({ before: [], at: [] });
   });
 });
+
+describe('reminderPlan: when and by which ways (D22)', () => {
+  const t = {
+    reminders: null,
+    dueAt: '2026-11-20T10:00:00+05:30',
+    scheduledStart: null,
+    dueDate: null,
+  } as const;
+  const defaults = { timed: [60, 10], dateOnly: { mode: 'none' as const }, overdueInDigest: false };
+  it('defaults: each lead by the default ways (a normal notification if none chosen)', async () => {
+    const { reminderPlan } = await import('../src/today');
+    expect(reminderPlan(t, defaults)).toEqual([
+      { minutes: 60, via: ['push'] },
+      { minutes: 10, via: ['push'] },
+    ]);
+    expect(reminderPlan(t, { ...defaults, via: ['alarm', 'email'] })[0]!.via).toEqual(['alarm', 'email']);
+  });
+  it('a task’s own reminders keep their own ways, else the defaults; [] means none; date-only gets none here', async () => {
+    const { reminderPlan } = await import('../src/today');
+    const own = reminderPlan(
+      {
+        ...t,
+        reminders: [
+          { kind: 'before', minutes: 5, via: ['urgent'] },
+          { kind: 'at', at: '2026-11-20T04:00:00Z' },
+        ],
+      },
+      { ...defaults, via: ['whatsapp'] },
+    );
+    expect(own).toEqual([
+      { minutes: 5, via: ['urgent'] },
+      { at: '2026-11-20T04:00:00Z', via: ['whatsapp'] },
+    ]);
+    expect(reminderPlan({ ...t, reminders: [] }, defaults)).toEqual([]);
+    expect(reminderPlan({ ...t, dueAt: null }, defaults)).toEqual([]);
+  });
+});

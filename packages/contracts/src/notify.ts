@@ -18,11 +18,26 @@ export const NotificationView = z.object({
   url: z.string().nullable(),
   actions: z.array(NotificationAction),
   priority: Priority,
+  /** rings like an alarm on devices that can (D22) */
+  alarm: z.boolean().default(false),
   createdAt: z.string(),
   readAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),
 });
 export type NotificationView = z.infer<typeof NotificationView>;
+
+/** Where a person can be reached besides the apps (D23). The number is only ever shown masked. */
+export const ContactChannels = z.object({
+  email: z.string(),
+  whatsapp: z.object({
+    /** server has the Meta credentials */
+    available: z.boolean(),
+    /** e.g. +91 ••••• ••123, null when none */
+    masked: z.string().nullable(),
+    verified: z.boolean(),
+  }),
+});
+export type ContactChannels = z.infer<typeof ContactChannels>;
 
 export const NotifySettings = z.object({
   quietHours: z

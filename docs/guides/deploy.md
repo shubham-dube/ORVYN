@@ -64,6 +64,12 @@ Google sign-in and Google Calendar (optional): in the OAuth client add the redir
 the Google Calendar API, add the `calendar.events` and `calendar.calendarlist.readonly` scopes to the consent screen,
 then fill `GOOGLE_WEB_CLIENT_ID`, `GOOGLE_WEB_CLIENT_SECRET`, `GOOGLE_CLIENT_IDS` and `CALENDAR_TOKEN_KEY`
 (`openssl rand -base64 32`; keep a copy with the backup key — without it, connected accounts must be reconnected).
+WhatsApp reminders (optional): at developers.facebook.com create a Meta app with the **WhatsApp** product, add a phone
+number, and note its _phone number id_; create a permanent access token (System User). In WhatsApp Manager create one
+_utility_ message template named `orvyn_reminder` (language English) whose body is just `{{1}}`, and wait for approval.
+Put `WHATSAPP_PHONE_ID` and `WHATSAPP_TOKEN` in `.env`. Each person then adds their number in Settings → Notifications and
+confirms it with the code they receive.
+
 Google pushes calendar changes to `https://api.orvyn.dubey.app/calendar/google/webhook` through the tunnel; nothing
 else to open.
 

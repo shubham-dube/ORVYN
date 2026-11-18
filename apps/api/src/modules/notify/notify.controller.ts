@@ -1,5 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Post, Put, Query } from '@nestjs/common';
-import { NotifySettings, RegisterPushRequest } from '@orvyn/contracts';
+import { type ContactChannels, NotifySettings, REMINDER_WAYS, RegisterPushRequest } from '@orvyn/contracts';
+import { z } from 'zod';
+import { eq } from 'drizzle-orm';
+import { badRequest } from '../../common/errors';
+import { DB, type Db } from '../../db/db.module';
+import { users } from '../auth/auth.schema';
+import { deliveryFor } from './ways';
+import { WhatsAppService } from './whatsapp.service';
 import { ZodPipe } from '../../common/zod.pipe';
 import { ENV, type Env } from '../../config/env';
 import { Auth, type AuthContext, Public } from '../auth/auth.decorators';
@@ -9,8 +16,64 @@ import { NotifyService } from './notify.service';
 export class NotifyController {
   constructor(
     private readonly notify: NotifyService,
+    private readonly whatsapp: WhatsAppService,
     @Inject(ENV) private readonly env: Env,
+    @Inject(DB) private readonly db: Db,
   ) {}
+
+  /** Where reminders can reach me besides the apps (D23): my account's email, and a confirmed WhatsApp number. */
+  @Get('channels')
+  async channels(@Auth() a: AuthContext): Promise<ContactChannels> {
+    const [u] = await this.db.select({ email: users.email }).from(users).where(eq(users.id, a.userId));
+    return { email: u?.email ?? '', whatsapp: await this.whatsapp.status(a.userId) };
+  }
+
+  @Put('whatsapp')
+  async whatsappStart(
+    @Auth() a: AuthContext,
+    @Body(new ZodPipe(z.object({ number: z.string().min(6).max(30) }))) body: { number: string },
+  ) {
+    await this.whatsapp.start(a.userId, body.number);
+    return this.whatsapp.status(a.userId);
+  }
+
+  @Post('whatsapp/verify')
+  @HttpCode(200)
+  async whatsappVerify(
+    @Auth() a: AuthContext,
+    @Body(new ZodPipe(z.object({ code: z.string().regex(/^\d{6}$/) }))) body: { code: string },
+  ) {
+    if (!(await this.whatsapp.confirm(a.userId, body.code)))
+      throw badRequest('wrong_code', 'That code isn’t right, or it has expired.');
+    return this.whatsapp.status(a.userId);
+  }
+
+  @Delete('whatsapp')
+  async whatsappRemove(@Auth() a: AuthContext) {
+    await this.whatsapp.remove(a.userId);
+    return this.whatsapp.status(a.userId);
+  }
+
+  /** "Try it": sends a sample reminder through the ways picked, so a person knows what each will feel like. */
+  @Post('try')
+  @HttpCode(200)
+  async tryWays(
+    @Auth() a: AuthContext,
+    @Body(new ZodPipe(z.object({ ways: z.array(z.enum(REMINDER_WAYS)).min(1).max(5) })))
+    body: { ways: (typeof REMINDER_WAYS)[number][] },
+  ) {
+    await this.notify.send({
+      userId: a.userId,
+      module: 'today',
+      kind: 'reminder.try',
+      title: 'Sample reminder',
+      body: 'This is how a reminder will reach you.',
+      url: '/today',
+      dedupeKey: 'try-reminder',
+      ...deliveryFor(body.ways, false),
+    });
+    return { ok: true };
+  }
 
   @Get()
   list(@Auth() a: AuthContext, @Query('before') before?: string, @Query('limit') limit?: string) {

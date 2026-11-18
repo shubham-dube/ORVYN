@@ -85,6 +85,13 @@
       "when": 1794973094916,
       "tag": "0011_drop",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1794993398490,
+      "tag": "0012_reminder_ways",
+      "breakpoints": true
     }
   ]
 }

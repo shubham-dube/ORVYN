@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
-  effectiveReminders,
   type ReminderDefaults,
+  type ReminderWay,
+  reminderPlan,
+  waysOf,
   type CalEvent,
   TODAY_EVENT,
   TODAY_SETTINGS,
@@ -19,11 +21,19 @@ import { DB, type Db } from '../../db/db.module';
 import { AccessService } from '../access/access.service';
 import { type AuthContext } from '../auth/auth.decorators';
 import { type NotifyAction, NotifyService } from '../notify/notify.service';
+import { deliveryFor } from '../notify/ways';
 import { type SyncApplied, SyncService } from '../sync/sync.service';
 import { todayEvents, todaySettings, todayTasks } from './today.schema';
 
 type Job =
-  | { kind: 'remind'; ownerId: string; taskId: string; momentMs: number; snoozed?: boolean }
+  | {
+      kind: 'remind';
+      ownerId: string;
+      taskId: string;
+      momentMs: number;
+      snoozed?: boolean;
+      via?: ReminderWay[];
+    }
   | { kind: 'digest'; ownerId: string }
   | { kind: 'event'; ownerId: string; eventId: string; startMs: number };
 
@@ -88,7 +98,13 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
   @OnEvent('sync.applied', { async: true, promisify: true })
   async onSync(e: SyncApplied): Promise<void> {
     try {
-      if (e.entity === TODAY_TASK) await this.scheduleTask(e.ownerId, e.entityId);
+      if (e.entity === TODAY_TASK) {
+        await this.scheduleTask(e.ownerId, e.entityId);
+        // done (or gone) on another device: its reminder stops everywhere, including a repeating hard one
+        const t = await this.task(e.ownerId, e.entityId);
+        if (!t || t.completedAt || e.op === 'delete')
+          await this.notify.dismissByKey(e.ownerId, `today:task:${e.entityId}`);
+      }
       if (e.entity === TODAY_SETTINGS) await this.scheduleOwner(e.ownerId);
       if (e.entity === TODAY_EVENT) {
         const series = await this.scheduleEvent(e.ownerId, e.entityId);
@@ -128,7 +144,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
     const defaults: ReminderDefaults = s
       ? (s.reminders as ReminderDefaults)
       : { timed: [], dateOnly: { mode: 'none' }, overdueInDigest: false };
-    const r = effectiveReminders(
+    const plan = reminderPlan(
       {
         reminders: t.reminders as TaskFields['reminders'],
         dueAt: t.dueAt?.toISOString() ?? null,
@@ -137,22 +153,23 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       },
       defaults,
     );
-    const fires = [
-      ...r.before.map((m) => moment.getTime() - m * 60_000),
-      ...r.at.map((a) => new Date(a).getTime()),
-    ]
-      .filter((ms) => ms > this.now() - 60_000)
-      .sort((a, b) => a - b);
-    for (const at of new Set(fires)) {
-      const jobId = `rem-${taskId}-${at}-${moment.getTime()}`;
+    // when each fires and by which ways (two reminders at the same minute by different ways are both kept)
+    const fires = new Map<string, { at: number; via: ReminderWay[] }>();
+    for (const p of plan) {
+      const at = p.minutes !== undefined ? moment.getTime() - p.minutes * 60_000 : new Date(p.at!).getTime();
+      if (at <= this.now() - 60_000) continue;
+      fires.set(`${at}-${[...p.via].sort().join('+')}`, { at, via: p.via });
+    }
+    for (const [k, f] of fires) {
+      const jobId = `rem-${taskId}-${k}-${moment.getTime()}`;
       await this.queue.add(
         'remind',
-        { kind: 'remind', ownerId, taskId, momentMs: moment.getTime() },
-        { jobId, delay: Math.max(0, at - this.now()) },
+        { kind: 'remind', ownerId, taskId, momentMs: moment.getTime(), via: f.via },
+        { jobId, delay: Math.max(0, f.at - this.now()) },
       );
       await this.redis.sadd(key, jobId);
     }
-    return [...new Set(fires)];
+    return [...new Set([...fires.values()].map((f) => f.at))].sort((a, b) => a - b);
   }
 
   /** Settings changed: the summary moves, and every open timed task is rescheduled with the new defaults. */
@@ -281,6 +298,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       url: '/today',
       dedupeKey: `today:event:${eventId}:${startMs}`,
       ref: `today.event:${eventId}`,
+      ...deliveryFor(((await this.settings(ownerId))?.reminders as ReminderDefaults | undefined)?.via),
     });
     // the last lead for this occurrence has fired: line up the next occurrence
     const leads = ((await this.settings(ownerId))?.reminders as ReminderDefaults | undefined)?.timed ?? [];
@@ -292,7 +310,8 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
   // ------------------------------------------------------------------ firing
 
   async process(job: Job): Promise<void> {
-    if (job.kind === 'remind') return this.remind(job.ownerId, job.taskId, job.momentMs, job.snoozed);
+    if (job.kind === 'remind')
+      return this.remind(job.ownerId, job.taskId, job.momentMs, job.snoozed, job.via);
     if (job.kind === 'event') return this.remindEvent(job.ownerId, job.eventId, job.startMs);
     return this.digest(job.ownerId);
   }
@@ -302,7 +321,13 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** `momentMs` 0 = a date-only task (a snooze from the summary/ping); anything else must still be its time. */
-  async remind(ownerId: string, taskId: string, momentMs: number, snoozed = false): Promise<void> {
+  async remind(
+    ownerId: string,
+    taskId: string,
+    momentMs: number,
+    snoozed = false,
+    via?: ReminderWay[],
+  ): Promise<void> {
     const t = await this.task(ownerId, taskId);
     const moment = t?.dueAt ?? t?.scheduledStart ?? null;
     if (!t || t.completedAt || (moment?.getTime() ?? 0) !== momentMs) return; // done, moved or deleted since
@@ -321,9 +346,15 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       body: when,
       url: '/today',
       actions: ACTIONS,
-      priority: t.priority >= 3 ? 'high' : 'normal',
       dedupeKey: `today:task:${taskId}`,
       ref: `today.task:${taskId}`,
+      ...deliveryFor(via),
+      priority:
+        via && waysOf(via).some((w) => w === 'urgent' || w === 'alarm')
+          ? 'urgent'
+          : t.priority >= 3
+            ? 'high'
+            : 'normal',
     });
   }
 
@@ -331,6 +362,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
     const s = await this.settings(ownerId);
     const d = (s?.reminders as ReminderDefaults | undefined)?.dateOnly;
     if (!s || !d || d.mode === 'none') return;
+    const defaultsVia = (s.reminders as ReminderDefaults).dateOnlyVia;
     const w = wallIn(new Date(this.now()), s.timeZone);
     const today = `${w.y}-${String(w.m).padStart(2, '0')}-${String(w.d).padStart(2, '0')}`;
     const overdue = (s.reminders as ReminderDefaults).overdueInDigest;
@@ -358,9 +390,10 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
           body: t.dueDate! < today ? 'Overdue' : 'Today',
           url: '/today',
           actions: ACTIONS,
-          priority: t.priority >= 3 ? 'high' : 'normal',
           dedupeKey: `today:task:${t.id}`,
           ref: `today.task:${t.id}`,
+          ...deliveryFor(defaultsVia),
+          priority: deliveryFor(defaultsVia).priority ?? (t.priority >= 3 ? 'high' : 'normal'),
         });
       return;
     }
@@ -374,6 +407,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
       body: names.slice(0, 5).join(' · ') + (names.length > 5 ? ` · +${names.length - 5} more` : ''),
       url: '/today',
       dedupeKey: `today:digest:${today}`,
+      ...deliveryFor(defaultsVia, false), // a summary never nags
     });
   }
 

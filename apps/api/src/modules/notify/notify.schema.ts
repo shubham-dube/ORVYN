@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { createdAt, pk, ts, updatedAt } from '../../db/columns';
 import { devices, users } from '../auth/auth.schema';
 
@@ -26,6 +26,13 @@ export const notifications = pgTable(
       .notNull()
       .default('normal'),
     dedupeKey: text('dedupe_key'),
+    /** rings like an alarm where the device can (D22) */
+    alarm: boolean('alarm').notNull().default(false),
+    /** which ways beyond the in-app inbox (push is the default; email/whatsapp are copies) */
+    via: jsonb('via').$type<{ push?: boolean; email?: boolean; whatsapp?: boolean } | null>(),
+    /** hard notifications come back until acknowledged (D22) */
+    repeatEveryMin: integer('repeat_every_min'),
+    repeatLeft: integer('repeat_left').notNull().default(0),
     /** What it is about, for actions (e.g. "today.task:<id>"). Never shown, never pushed. */
     ref: text('ref'),
     /** Device that caused it (e.g. a new sign-in) — it is not pushed there. */
@@ -82,6 +89,21 @@ export const notifySettings = pgTable('notify_settings', {
     .array()
     .notNull()
     .default(sql`'{}'::text[]`),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+/** Where a person can be reached besides the apps (D23). The WhatsApp number counts only once confirmed. */
+export const contactChannels = pgTable('contact_channels', {
+  ownerId: uuid('owner_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  whatsapp: text('whatsapp'),
+  whatsappVerifiedAt: ts('whatsapp_verified_at'),
+  /** HMAC of the code sent, never the code */
+  verifyHash: text('verify_hash'),
+  verifyExpiresAt: ts('verify_expires_at'),
+  verifyAttempts: integer('verify_attempts').notNull().default(0),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

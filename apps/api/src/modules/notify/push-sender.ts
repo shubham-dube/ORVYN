@@ -11,6 +11,7 @@ export interface PushPayload {
   url?: string | null;
   module?: string;
   priority?: string;
+  alarm?: boolean;
   actions?: { id: string; label: string; open?: string }[];
 }
 

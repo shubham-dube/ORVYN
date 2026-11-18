@@ -13,6 +13,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { notifications, notifySettings, pushTargets, type StoredAction } from './notify.schema';
 import { PUSH_SENDER, type PushPayload, type PushSender } from './push-sender';
 import { msUntilQuietEnds } from './quiet-hours';
+import { WhatsAppService } from './whatsapp.service';
 
 export interface SendInput {
   userId: string;
@@ -29,6 +30,15 @@ export interface SendInput {
   sourceDeviceId?: string;
   /** What it is about, for actions (e.g. "today.task:<id>") */
   ref?: string;
+  /** Rings like an alarm where the device can (D22). */
+  alarm?: boolean;
+  /**
+   * Beyond the in-app inbox: normal push to devices (default true), plus email / WhatsApp copies. A reminder that
+   * chose only email shows in the inbox but isn't pushed.
+   */
+  via?: { push?: boolean; email?: boolean; whatsapp?: boolean };
+  /** Hard notifications: come back until acknowledged (read, dismissed or an action pressed). */
+  repeat?: { everyMin: number; times: number };
 }
 
 /** Emitted when a person presses an action button anywhere; the owning module acts on it. */
@@ -40,7 +50,8 @@ export interface NotifyAction {
 }
 
 type Job =
-  { kind: 'deliver'; id: string } | { kind: 'clear'; id: string; ownerId: string; type: 'dismiss' | 'read' };
+  | { kind: 'deliver'; id: string; again?: boolean }
+  | { kind: 'clear'; id: string; ownerId: string; type: 'dismiss' | 'read' };
 const QUEUE = 'notify';
 const MAX_FAILURES = 5;
 
@@ -57,6 +68,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     @Inject(PUSH_SENDER) private readonly sender: PushSender,
     private readonly realtime: RealtimeService,
     private readonly mail: MailService,
+    private readonly whatsapp: WhatsAppService,
     private readonly events: EventEmitter2,
   ) {}
 
@@ -96,6 +108,10 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       dedupeKey: input.dedupeKey ?? null,
       sourceDeviceId: input.sourceDeviceId ?? null,
       ref: input.ref ?? null,
+      alarm: input.alarm ?? false,
+      via: input.via ?? null,
+      repeatEveryMin: input.repeat?.everyMin ?? null,
+      repeatLeft: input.repeat?.times ?? 0,
     };
     const [row] = input.dedupeKey
       ? await this.db
@@ -111,6 +127,10 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
               actions: values.actions,
               priority: values.priority,
               ref: values.ref,
+              alarm: values.alarm,
+              via: values.via,
+              repeatEveryMin: values.repeatEveryMin,
+              repeatLeft: values.repeatLeft,
               readAt: null,
               dismissedAt: null,
               updatedAt: new Date(),
@@ -156,10 +176,29 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       url: n.url,
       module: n.module,
       priority: n.priority,
+      alarm: n.alarm,
       actions: n.actions,
     };
-    await this.pushToTargets(n.ownerId, payload, n.sourceDeviceId);
-    if (settings.emailFor.includes(n.priority)) await this.emailCopy(n.ownerId, n.title, n.body, n.url);
+    const via = n.via ?? {};
+    if (via.push !== false) await this.pushToTargets(n.ownerId, payload, n.sourceDeviceId);
+    // copies go out once, not on every repeat
+    if (!job.again) {
+      if (via.email || (!n.via && settings.emailFor.includes(n.priority)))
+        await this.emailCopy(n.ownerId, n.title, n.body, n.url);
+      if (via.whatsapp) await this.whatsapp.notify(n.ownerId, `${n.title}${n.body ? ` — ${n.body}` : ''}`);
+    }
+    // a hard notification comes back until someone acts on it
+    if (n.repeatEveryMin && n.repeatLeft > 0) {
+      await this.db
+        .update(notifications)
+        .set({ repeatLeft: n.repeatLeft - 1 })
+        .where(eq(notifications.id, n.id));
+      await this.queue.add(
+        'deliver',
+        { kind: 'deliver', id: n.id, again: true },
+        { delay: n.repeatEveryMin * 60_000, jobId: `deliver-${n.id}-again-${n.repeatLeft}` },
+      );
+    }
   }
 
   private async pushToTargets(
@@ -288,6 +327,25 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'dismiss' });
   }
 
+  /** A module saying "that's handled" (e.g. the task was done on another device): clears it everywhere, quietly. */
+  async dismissByKey(ownerId: string, dedupeKey: string): Promise<void> {
+    const rows = await this.db
+      .update(notifications)
+      .set({ dismissedAt: new Date() })
+      .where(
+        and(
+          eq(notifications.ownerId, ownerId),
+          eq(notifications.dedupeKey, dedupeKey),
+          isNull(notifications.dismissedAt),
+        ),
+      )
+      .returning({ id: notifications.id });
+    for (const r of rows) {
+      await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id: r.id });
+      await this.queue.add('clear', { kind: 'clear', id: r.id, ownerId, type: 'dismiss' });
+    }
+  }
+
   async dismissAll(ownerId: string, deviceId: string): Promise<number> {
     const rows = await this.db
       .update(notifications)
@@ -392,6 +450,7 @@ function toView(n: typeof notifications.$inferSelect): NotificationView {
     url: n.url,
     actions: n.actions,
     priority: n.priority,
+    alarm: n.alarm,
     createdAt: n.createdAt.toISOString(),
     readAt: n.readAt?.toISOString() ?? null,
     dismissedAt: n.dismissedAt?.toISOString() ?? null,

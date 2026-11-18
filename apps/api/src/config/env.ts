@@ -76,6 +76,15 @@ export const EnvSchema = z.object({
   S3_BUCKET: z.string().default(''),
   S3_ACCESS_KEY_ID: z.string().default(''),
   S3_SECRET_ACCESS_KEY: z.string().default(''),
+  /**
+   * WhatsApp reminders (D23): Meta's WhatsApp Business Cloud API. A message to someone who hasn't written to you in 24 h
+   * must be an approved template with one body variable ({{1}} = the text). Without these, the WhatsApp way is off.
+   */
+  WHATSAPP_TOKEN: z.string().default(''),
+  WHATSAPP_PHONE_ID: z.string().default(''),
+  WHATSAPP_TEMPLATE: z.string().default('orvyn_reminder'),
+  WHATSAPP_LANG: z.string().default('en'),
+  WHATSAPP_API: z.string().url().default('https://graph.facebook.com/v21.0'),
   /** Email (Resend). Without a key, mail goes to the dev outbox (never in production). */
   RESEND_API_KEY: z.string().default(''),
   MAIL_FROM: z.string().default('ORVYN <orvyn@dubey.app>'),

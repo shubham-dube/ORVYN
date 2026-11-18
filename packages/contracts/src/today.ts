@@ -36,7 +36,19 @@ export const ChecklistItem = z.object({
   done: z.boolean(),
 });
 
-/** Minutes before the moment (offset) or an exact time. */
+/**
+ * The ways a reminder can reach the person (D22). Any mix: a normal notification, a hard notification (urgent: ignores
+ * quiet hours, comes back until acknowledged), an alarm (rings; full-screen on Android), email, WhatsApp.
+ */
+export const REMINDER_WAYS = ['push', 'urgent', 'alarm', 'email', 'whatsapp'] as const;
+export const ReminderWay = z.enum(REMINDER_WAYS);
+export type ReminderWay = z.infer<typeof ReminderWay>;
+const Ways = z.array(ReminderWay).min(1).max(5);
+/** Nothing chosen = a normal notification. */
+export const waysOf = (via: readonly ReminderWay[] | undefined | null): ReminderWay[] =>
+  via?.length ? [...new Set(via)] : ['push'];
+
+/** Minutes before the moment (offset) or an exact time, and how to reach the person (default: their defaults). */
 export const Reminder = z.union([
   z.object({
     kind: z.literal('before'),
@@ -45,8 +57,9 @@ export const Reminder = z.union([
       .int()
       .min(0)
       .max(60 * 24 * 14),
+    via: Ways.optional(),
   }),
-  z.object({ kind: z.literal('at'), at: isoDateTime }),
+  z.object({ kind: z.literal('at'), at: isoDateTime, via: Ways.optional() }),
 ]);
 
 export const TaskFields = z.object({
@@ -145,6 +158,10 @@ export const ReminderDefaults = z.object({
     .max(5),
   dateOnly: DateOnlyReminder,
   overdueInDigest: z.boolean(),
+  /** how timed reminders reach me (default: a normal notification) */
+  via: Ways.optional(),
+  /** how the morning summary / date-only pings reach me */
+  dateOnlyVia: Ways.optional(),
 });
 export type ReminderDefaults = z.infer<typeof ReminderDefaults>;
 
@@ -311,3 +328,21 @@ export type PlanRequest = z.infer<typeof PlanRequest>;
 
 /** Defaults for every event field but the title (a record written offline holds only what was set). */
 export const EVENT_DEFAULTS: Omit<EventFields, 'title'> = EventFields.omit({ title: true }).parse({});
+
+/**
+ * Everything a task's reminders call for: each with when (minutes before its moment, or an exact time) and the ways
+ * (its own, else the person's defaults). Empty list = "no reminder for this one".
+ */
+export function reminderPlan(
+  task: Pick<TaskFields, 'reminders' | 'dueAt' | 'scheduledStart' | 'dueDate'>,
+  defaults: ReminderDefaults,
+): { minutes?: number; at?: string; via: ReminderWay[] }[] {
+  const dflt = waysOf(defaults.via);
+  if (task.reminders !== null)
+    return task.reminders.map((r) =>
+      r.kind === 'before'
+        ? { minutes: r.minutes, via: r.via?.length ? waysOf(r.via) : dflt }
+        : { at: r.at, via: r.via?.length ? waysOf(r.via) : dflt },
+    );
+  return task.dueAt || task.scheduledStart ? defaults.timed.map((minutes) => ({ minutes, via: dflt })) : [];
+}
