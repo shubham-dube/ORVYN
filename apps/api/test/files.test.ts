@@ -73,7 +73,7 @@ describe('files people actually have (spec 0007 A1)', () => {
   });
 
   it('refuses web pages, scripts and programs, empty files and anything over 25 MB', async () => {
-    for (const [name, type] of [
+    for (const [name, type] of <[string, string][]>[
       ['page.html', 'text/html'],
       ['x.svg', 'image/svg+xml'],
       ['run.exe', 'application/x-msdownload'],

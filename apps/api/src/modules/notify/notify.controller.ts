@@ -128,18 +128,20 @@ export class NotifyController {
     return { ok: true };
   }
 
-  /** "Send me a test notification" (settings screen). */
+  /** "Send me a test notification", to every device or one; returns what each push service answered. */
   @Post('test')
-  test(@Auth() a: AuthContext) {
-    return this.notify.send({
-      userId: a.userId,
-      module: 'core',
-      kind: 'test',
-      title: 'Hello from ORVYN',
-      body: 'Notifications are working on this device.',
-      priority: 'normal',
-      actions: [{ id: 'ok', label: 'Nice' }],
-    });
+  test(@Auth() a: AuthContext, @Body() body: { deviceId?: string } = {}) {
+    const deviceId =
+      typeof body?.deviceId === 'string' && /^[0-9a-f-]{36}$/i.test(body.deviceId)
+        ? body.deviceId
+        : undefined;
+    return this.notify.test(a.userId, deviceId);
+  }
+
+  /** How notifications reach each of my devices right now (open, push, last result) and what the server can do. */
+  @Get('delivery')
+  delivery(@Auth() a: AuthContext) {
+    return this.notify.delivery(a.userId);
   }
 
   @Public()

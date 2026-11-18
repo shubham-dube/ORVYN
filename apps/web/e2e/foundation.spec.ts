@@ -21,7 +21,7 @@ test('the owner signs in with an email code and the session survives a reload', 
 test('a notification arrives live and dismissing it clears it', async ({ page }) => {
   await signInWithEmail(page, OWNER);
   await page.goto('/settings');
-  await page.getByRole('button', { name: 'Send a test' }).click();
+  await page.getByRole('button', { name: 'Test every device' }).click();
   const bell = page.getByRole('button', { name: /Notifications, \d+ unread/ }).first();
   await expect(bell).toBeVisible();
   await bell.click();

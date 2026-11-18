@@ -23,3 +23,6 @@ dump.rdb
 
 # local encrypted file store (FILES_STORE=local)
 .data/
+
+# Firebase config for Android push (see docs/guides/notifications.md)
+apps/mobile/android/app/google-services.json

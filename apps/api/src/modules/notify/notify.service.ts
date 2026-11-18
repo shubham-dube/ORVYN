@@ -11,7 +11,7 @@ import { devices, users } from '../auth/auth.schema';
 import { layout, MailService } from '../mail/mail.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { notifications, notifySettings, pushTargets, type StoredAction } from './notify.schema';
-import { PUSH_SENDER, type PushPayload, type PushSender } from './push-sender';
+import { outcomeOf, PUSH_SENDER, type PushPayload, type PushSender } from './push-sender';
 import { msUntilQuietEnds } from './quiet-hours';
 import { WhatsAppService } from './whatsapp.service';
 
@@ -206,7 +206,8 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     payload: PushPayload,
     exceptDeviceId: string | null,
     channel?: 'fcm' | 'webpush',
-  ): Promise<void> {
+    onlyDeviceId?: string,
+  ): Promise<{ targetId: string; deviceId: string; channel: string; outcome: string; detail: string }[]> {
     const rows = await this.db
       .select({ t: pushTargets })
       .from(pushTargets)
@@ -214,32 +215,122 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       .where(
         and(eq(pushTargets.ownerId, ownerId), isNull(pushTargets.disabledAt), isNull(devices.revokedAt)),
       );
+    const report: { targetId: string; deviceId: string; channel: string; outcome: string; detail: string }[] =
+      [];
     for (const { t } of rows) {
       if (exceptDeviceId && t.deviceId === exceptDeviceId) continue;
+      if (onlyDeviceId && t.deviceId !== onlyDeviceId) continue;
       if (channel && t.channel !== channel) continue;
-      const outcome = await this.sender.send(
-        { channel: t.channel, address: t.address, keys: t.keys },
-        payload,
-      );
-      if (outcome === 'gone')
-        await this.db.update(pushTargets).set({ disabledAt: new Date() }).where(eq(pushTargets.id, t.id));
-      if (outcome === 'failed') {
+      let r: { outcome: string; detail: string };
+      try {
+        r = outcomeOf(
+          await this.sender.send({ channel: t.channel, address: t.address, keys: t.keys }, payload),
+        );
+      } catch (e) {
+        r = { outcome: 'failed', detail: (e as Error).message.slice(0, 200) };
+      }
+      report.push({ targetId: t.id, deviceId: t.deviceId, channel: t.channel, ...r });
+      const last = { lastResult: r.outcome, lastError: r.detail || null, lastAt: new Date() };
+      if (r.outcome === 'gone')
+        await this.db
+          .update(pushTargets)
+          .set({ ...last, disabledAt: new Date() })
+          .where(eq(pushTargets.id, t.id));
+      else if (r.outcome === 'failed')
         await this.db
           .update(pushTargets)
           .set({
+            ...last,
             failures: sql`${pushTargets.failures} + 1`,
             disabledAt: t.failures + 1 >= MAX_FAILURES ? new Date() : null,
           })
           .where(eq(pushTargets.id, t.id));
-      }
-      if (outcome === 'sent' && t.failures)
-        await this.db.update(pushTargets).set({ failures: 0 }).where(eq(pushTargets.id, t.id));
+      else
+        await this.db
+          .update(pushTargets)
+          .set({ ...last, failures: 0 })
+          .where(eq(pushTargets.id, t.id));
     }
+    return report;
+  }
+
+  /**
+   * How notifications reach each of the person's devices (spec 0007 A3): open now (the live socket — the web app,
+   * the Windows tray, the extension), push targets (browser web push, Android FCM) with their last result, and what
+   * the server itself can do.
+   */
+  async delivery(ownerId: string) {
+    const devs = await this.db
+      .select({
+        id: devices.id,
+        name: devices.name,
+        platform: devices.platform,
+        lastSeenAt: devices.lastSeenAt,
+      })
+      .from(devices)
+      .where(and(eq(devices.ownerId, ownerId), isNull(devices.revokedAt)));
+    const targets = await this.db.select().from(pushTargets).where(eq(pushTargets.ownerId, ownerId));
+    const live = new Set(this.realtime.connectedDevices(ownerId));
+    return {
+      server: this.sender.capabilities?.() ?? { webpush: true, fcm: true },
+      devices: devs.map((d) => ({
+        id: d.id,
+        name: d.name,
+        platform: d.platform,
+        lastSeenAt: d.lastSeenAt?.toISOString() ?? null,
+        live: live.has(d.id),
+        push: targets
+          .filter((t) => t.deviceId === d.id)
+          .map((t) => ({
+            id: t.id,
+            channel: t.channel,
+            active: !t.disabledAt,
+            lastResult: t.lastResult,
+            lastError: t.lastError,
+            lastAt: t.lastAt?.toISOString() ?? null,
+          })),
+      })),
+    };
+  }
+
+  /**
+   * A test that says what happened: the notification goes to the inbox (and to every open device over the socket),
+   * and push is tried right now — to one device, or all — with each service's answer returned.
+   */
+  async test(ownerId: string, deviceId?: string) {
+    const n = await this.send({
+      userId: ownerId,
+      module: 'core',
+      kind: 'test',
+      title: 'Hello from ORVYN',
+      body: 'Notifications are working on this device.',
+      priority: 'normal',
+      via: { push: false }, // pushed below, so the result can be reported
+      actions: [{ id: 'ok', label: 'Nice' }],
+    });
+    const push = await this.pushToTargets(
+      ownerId,
+      {
+        type: 'notify',
+        id: n.id,
+        title: n.title,
+        body: n.body,
+        url: null,
+        module: 'core',
+        priority: 'normal',
+        actions: [],
+      },
+      null,
+      undefined,
+      deviceId,
+    );
+    const live = this.realtime.connectedDevices(ownerId).filter((d) => !deviceId || d === deviceId);
+    return { id: n.id, live, push };
   }
 
   /** Android renders pushes itself, so it can also remove them; browsers get this via the socket when open. */
-  private pushClear(ownerId: string, id: string, type: 'dismiss' | 'read'): Promise<void> {
-    return this.pushToTargets(ownerId, { type, id }, null, 'fcm');
+  private async pushClear(ownerId: string, id: string, type: 'dismiss' | 'read'): Promise<void> {
+    await this.pushToTargets(ownerId, { type, id }, null, 'fcm');
   }
 
   private async emailCopy(ownerId: string, title: string, body: string, url: string | null): Promise<void> {

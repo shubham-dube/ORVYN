@@ -16,6 +16,9 @@ export interface PushPayload {
 }
 
 export type SendOutcome = 'sent' | 'gone' | 'failed' | 'skipped';
+/** What happened, with the push service's own words when it refused (shown in delivery checks). */
+export type SendResult = SendOutcome | { outcome: SendOutcome; detail: string };
+export const outcomeOf = (r: SendResult) => (typeof r === 'string' ? { outcome: r, detail: '' } : r);
 
 export interface PushTargetRef {
   channel: 'webpush' | 'fcm';
@@ -25,7 +28,9 @@ export interface PushTargetRef {
 
 export const PUSH_SENDER = Symbol('PUSH_SENDER');
 export interface PushSender {
-  send(target: PushTargetRef, payload: PushPayload): Promise<SendOutcome>;
+  send(target: PushTargetRef, payload: PushPayload): Promise<SendResult>;
+  /** which push services this server can use (missing keys = can't) */
+  capabilities?(): { webpush: boolean; fcm: boolean };
 }
 
 /**
@@ -58,12 +63,18 @@ export class LivePushSender implements PushSender {
     }
   }
 
-  async send(t: PushTargetRef, payload: PushPayload): Promise<SendOutcome> {
+  capabilities() {
+    return { webpush: !!(this.env.VAPID_PUBLIC_KEY && this.env.VAPID_PRIVATE_KEY), fcm: !!this.fcm };
+  }
+
+  async send(t: PushTargetRef, payload: PushPayload): Promise<SendResult> {
     return t.channel === 'webpush' ? this.webpush(t, payload) : this.fcmSend(t, payload);
   }
 
-  private async webpush(t: PushTargetRef, payload: PushPayload): Promise<SendOutcome> {
-    if (!this.env.VAPID_PUBLIC_KEY || !t.keys) return 'skipped';
+  private async webpush(t: PushTargetRef, payload: PushPayload): Promise<SendResult> {
+    if (!this.env.VAPID_PUBLIC_KEY)
+      return { outcome: 'skipped', detail: 'VAPID keys are not set on the server' };
+    if (!t.keys) return { outcome: 'skipped', detail: 'this browser sent no keys' };
     try {
       await webpush.sendNotification({ endpoint: t.address, keys: t.keys }, JSON.stringify(payload), {
         TTL: 24 * 3600,
@@ -72,16 +83,26 @@ export class LivePushSender implements PushSender {
       });
       return 'sent';
     } catch (e) {
-      const status = (e as { statusCode?: number }).statusCode;
-      if (status === 404 || status === 410) return 'gone';
-      this.log.warn(`web push failed: ${status ?? String(e)}`);
-      return 'failed';
+      const err = e as { statusCode?: number; body?: string; message?: string };
+      const detail = `${err.statusCode ?? ''} ${(err.body ?? err.message ?? '').slice(0, 200)}`.trim();
+      if (err.statusCode === 404 || err.statusCode === 410)
+        return { outcome: 'gone', detail: 'this browser’s subscription expired' };
+      this.log.warn(`web push failed: ${detail}`);
+      return { outcome: 'failed', detail };
     }
   }
 
-  private async fcmSend(t: PushTargetRef, payload: PushPayload): Promise<SendOutcome> {
-    if (!this.fcm) return 'skipped';
-    const { token } = await this.fcm.client.getAccessToken();
+  private async fcmSend(t: PushTargetRef, payload: PushPayload): Promise<SendResult> {
+    if (!this.fcm) return { outcome: 'skipped', detail: 'FCM_SERVICE_ACCOUNT_B64 is not set on the server' };
+    let token: string | null | undefined;
+    try {
+      ({ token } = await this.fcm.client.getAccessToken());
+    } catch (e) {
+      return {
+        outcome: 'failed',
+        detail: `Google sign-in for FCM failed: ${(e as Error).message.slice(0, 160)}`,
+      };
+    }
     const data: Record<string, string> = Object.fromEntries(
       Object.entries(payload).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v ?? null)]),
     );
@@ -91,11 +112,13 @@ export class LivePushSender implements PushSender {
       body: JSON.stringify({ message: { token: t.address, data, android: { priority: 'high' } } }),
     });
     if (res.ok) return 'sent';
-    if (res.status === 404 || res.status === 400) {
-      const text = await res.text();
-      if (/UNREGISTERED|INVALID_ARGUMENT/.test(text)) return 'gone';
-    }
-    this.log.warn(`fcm failed: ${res.status}`);
-    return 'failed';
+    const text = await res.text().catch(() => '');
+    if ((res.status === 404 || res.status === 400) && /UNREGISTERED|INVALID_ARGUMENT/.test(text))
+      return {
+        outcome: 'gone',
+        detail: 'this phone’s push token is no longer valid; open the app to renew it',
+      };
+    this.log.warn(`fcm failed: ${res.status} ${text.slice(0, 200)}`);
+    return { outcome: 'failed', detail: `${res.status} ${text.slice(0, 200)}` };
   }
 }

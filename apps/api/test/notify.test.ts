@@ -6,6 +6,7 @@ import {
   type PushTargetRef,
   type SendOutcome,
 } from '../src/modules/notify/push-sender';
+import { NotifyService } from '../src/modules/notify/notify.service';
 import { msUntilQuietEnds } from '../src/modules/notify/quiet-hours';
 import { call, type Harness, openSocket, OWNER, signIn, sleep, startApp, waitFor } from './harness';
 
@@ -72,7 +73,10 @@ describe('delivery', () => {
 
   it('dismissing on one device clears it on the others', async () => {
     const ws = await openSocket(h, laptop.accessToken);
-    const n = (await call<any>(h, 'POST', '/notifications/test', { token: phone.accessToken })).body;
+    // (the test button pushes at once on purpose; an ordinary notification waits for quiet hours to end)
+    const n = await h.app
+      .get(NotifyService)
+      .send({ userId: phone.user.id, module: 'core', kind: 'test', title: 'Quiet please' });
     await call(h, 'POST', `/notifications/${n.id}/dismiss`, { token: phone.accessToken });
     await waitFor(() => ws.messages.some((m) => m.type === 'notify.dismissed' && m.id === n.id));
     await waitFor(() => sender.to(PHONE_FCM).some((p) => p.type === 'dismiss' && p.id === n.id)); // Android removes its copy
@@ -137,7 +141,9 @@ describe('quiet hours', () => {
         mutedModules: [],
       },
     });
-    const n = (await call<any>(h, 'POST', '/notifications/test', { token: phone.accessToken })).body;
+    const n = await h.app
+      .get(NotifyService)
+      .send({ userId: phone.user.id, module: 'core', kind: 'test', title: 'Shh' });
     await sleep(800);
     expect(sender.to(PHONE_FCM).some((p) => p.id === n.id)).toBe(false);
     await call(h, 'PUT', '/notifications/settings', {

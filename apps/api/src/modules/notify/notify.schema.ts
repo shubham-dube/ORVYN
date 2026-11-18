@@ -67,6 +67,10 @@ export const pushTargets = pgTable(
     keys: jsonb('keys').$type<{ p256dh: string; auth: string } | null>(),
     failures: integer('failures').notNull().default(0),
     disabledAt: ts('disabled_at'),
+    /** the last delivery: sent / gone / failed / skipped, the service's words, and when */
+    lastResult: text('last_result'),
+    lastError: text('last_error'),
+    lastAt: ts('last_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

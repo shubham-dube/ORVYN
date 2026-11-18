@@ -1,6 +1,7 @@
 'use client';
 
 import { AiUsage } from '@/components/ai-usage';
+import { DeliveryCheck } from '@/components/delivery-check';
 import { StorageHealth } from '@/components/storage-health';
 import type { ContactChannels, DeviceView, NotifySettings } from '@orvyn/contracts';
 import {
@@ -230,14 +231,8 @@ function Notifications() {
             Turn on
           </Button>
         ) : null}
-        <Button
-          onClick={async () => {
-            await api('/notifications/test', { method: 'POST' });
-          }}
-        >
-          Send a test
-        </Button>
       </div>
+      <DeliveryCheck />
       {settings ? (
         <div className="flex flex-col gap-3 border-t border-orv-hairline pt-4">
           <Switch

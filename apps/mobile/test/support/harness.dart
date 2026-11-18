@@ -1,3 +1,5 @@
+import 'package:orvyn/core/phone_checks.dart';
+
 import 'dart:async';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -84,6 +86,25 @@ class RecordingPusher implements Pusher {
   Future<void> clear(String id) async => cleared.add(id);
 }
 
+class FakePhoneChecks implements PhoneChecks {
+  bool notifications = true;
+  bool exactAlarms = false;
+  final asked = <String>[];
+  @override
+  Future<PhoneStatus> status({required bool push}) async =>
+      PhoneStatus(notifications: notifications, exactAlarms: exactAlarms, push: push);
+  @override
+  Future<void> allowNotifications() async => asked.add('notifications');
+  @override
+  Future<void> allowExactAlarms() async {
+    asked.add('exact');
+    exactAlarms = true;
+  }
+
+  @override
+  Future<void> allowFullScreen() async => asked.add('fullscreen');
+}
+
 /// The whole app over a fake API + socket, a memory store and an in-memory database.
 class AppHarness {
   AppHarness() {
@@ -133,6 +154,7 @@ class AppHarness {
   final capture = FakeCaptureChannel();
   final share = FakeShareChannel();
   final alarms = FakeAlarmScheduler();
+  final phone = FakePhoneChecks();
   PickedFile? photo;
   String? spoken;
   final widgetClicks = StreamController<Uri?>.broadcast();
@@ -169,6 +191,7 @@ class AppHarness {
           captureChannelProvider.overrideWithValue(capture),
           shareChannelProvider.overrideWithValue(share),
           alarmSchedulerProvider.overrideWithValue(alarms),
+          phoneChecksProvider.overrideWithValue(phone),
           photoPickerProvider.overrideWithValue(({required bool camera}) async => photo),
           speechProvider.overrideWithValue(FakeSpeech(() => spoken)),
           widgetClicksProvider.overrideWithValue(widgetClicks.stream),

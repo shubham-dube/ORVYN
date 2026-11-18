@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/lock.dart';
 import '../app/platform.dart';
-import '../app/notifications.dart';
 import '../app/state.dart';
 import '../app/calendar.dart';
 import '../app/today_settings.dart';
@@ -18,6 +17,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
+import 'delivery_panel.dart';
 
 final devicesProvider = FutureProvider.autoDispose<List<DeviceView>>((ref) async {
   final list = await ref.read(apiProvider).get<List<dynamic>>('/me/devices');
@@ -308,7 +308,6 @@ class _Notifications extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = context.orv;
-    final pushReady = ref.watch(pusherProvider).ready;
     final settings = ref.watch(notifySettingsProvider);
     Future<void> save(Map<String, dynamic> s) async {
       await ref.read(apiProvider).put<dynamic>('/notifications/settings', s);
@@ -319,30 +318,7 @@ class _Notifications extends ConsumerWidget {
       title: 'Notifications',
       line: 'One notification reaches every device; open or dismiss it anywhere and it clears everywhere.',
       children: [
-        Row(
-          children: [
-            Icon(LucideIcons.bell, size: 18, color: l.accent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                pushReady ? 'Push on this phone: on' : 'Push on this phone: arrives with the release build',
-                style: OrvText.body(l),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        OrvButton(
-          label: 'Send a test',
-          icon: LucideIcons.send,
-          onPressed: () {
-            final toaster = Toaster.of(context);
-            ref
-                .read(notificationsProvider.notifier)
-                .sendTest()
-                .catchError((Object e) => toaster.show(messageFor(e), tone: ToastTone.danger));
-          },
-        ),
+        const DeliveryPanel(),
         const SizedBox(height: 14),
         Divider(height: 1, color: l.c.hairline),
         const SizedBox(height: 10),

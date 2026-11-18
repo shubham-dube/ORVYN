@@ -47,3 +47,14 @@ test('Settings: what AI has used, today against the limit, and (owner) by person
   await expect(ai.getByText('Everyone today (owner)')).toBeVisible();
   await expect(ai.getByRole('img', { name: 'Your AI cost per day' })).toBeVisible();
 });
+
+test('Settings: every device with how notifications reach it, and a test that says what happened', async ({
+  page,
+}) => {
+  await signInWithEmail(page, OWNER);
+  await page.goto('/settings');
+  const panel = page.getByTestId('delivery-check');
+  await expect(panel.getByText('this device', { exact: true })).toBeVisible();
+  await panel.getByRole('button', { name: 'Test every device' }).click();
+  await expect(panel.getByText('Delivered live just now.').first()).toBeVisible();
+});
