@@ -318,3 +318,63 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     );
   }
 }
+
+/// A form in a sheet with its actions pinned at the bottom (spec 0007 B): the fields scroll, Save never does.
+/// Capped at 90% of the screen so the sheet never covers everything.
+class StickySheet extends StatelessWidget {
+  const StickySheet({super.key, required this.title, required this.children, required this.footer, this.trailing});
+  final String title;
+  final List<Widget> children;
+  final Widget footer;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final max = MediaQuery.sizeOf(context).height * 0.9 - MediaQuery.viewInsetsOf(context).bottom;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: max.clamp(240, double.infinity)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
+            child: Column(
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(2)),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: Text(title, style: OrvText.heading(l))),
+                    ?trailing,
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            ),
+          ),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: l.c.hairline)),
+            ),
+            child: Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 10), child: footer),
+          ),
+        ],
+      ),
+    );
+  }
+}

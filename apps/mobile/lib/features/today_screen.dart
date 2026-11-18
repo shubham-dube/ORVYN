@@ -862,164 +862,153 @@ class _TaskSheetState extends ConsumerState<_TaskSheet> {
       side: BorderSide(color: on ? l.accent : l.c.edge),
       backgroundColor: Colors.transparent,
     );
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return StickySheet(
+      title: 'Task',
+      footer: Row(
         children: [
-          Text('Task', style: OrvText.heading(l)),
-          const SizedBox(height: 12),
-          OrvField(label: 'Title', controller: _title),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              OrvButton(
-                small: true,
-                icon: LucideIcons.calendar,
-                label: _day == null ? 'No day' : loc.formatShortMonthDay(DateTime.parse(_day!)),
-                onPressed: () async {
-                  final now = ref.read(clockProvider)();
-                  final d = await showDatePicker(
-                    context: context,
-                    initialDate: _day == null ? now : DateTime.parse(_day!),
-                    firstDate: now.subtract(const Duration(days: 365)),
-                    lastDate: now.add(const Duration(days: 365 * 5)),
-                  );
-                  if (d != null) setState(() => _day = dayKey(d));
-                },
-              ),
-              const SizedBox(width: 8),
-              OrvButton(
-                small: true,
-                icon: LucideIcons.clock,
-                label: _time == null ? 'Any time' : loc.formatTimeOfDay(_time!),
-                onPressed: _day == null
-                    ? null
-                    : () async {
-                        final t = await showTimePicker(
-                          context: context,
-                          initialTime: _time ?? const TimeOfDay(hour: 9, minute: 0),
-                        );
-                        if (t != null) setState(() => _time = t);
-                      },
-              ),
-              const Spacer(),
-              if (_day != null)
-                OrvButton(
-                  small: true,
-                  variant: ButtonVariant.ghost,
-                  label: 'Clear',
-                  onPressed: () => setState(() {
-                    _day = null;
-                    _time = null;
-                  }),
-                ),
-            ],
+          OrvButton(
+            label: 'Delete',
+            small: true,
+            variant: ButtonVariant.danger,
+            icon: LucideIcons.trash2,
+            onPressed: () async {
+              await ref.read(todayActionsProvider).remove(widget.task.id);
+              if (context.mounted) Navigator.of(context).pop();
+            },
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 6,
-            children: [
-              for (final (v, name) in const [(0, 'None'), (1, 'Low'), (2, 'Medium'), (3, 'High')])
-                ChoiceChip(
-                  label: Text(name),
-                  selected: _priority == v,
-                  showCheckmark: false,
-                  onSelected: (_) => setState(() => _priority = v),
-                  selectedColor: l.accent.withValues(alpha: 0.16),
-                  side: BorderSide(color: _priority == v ? l.accent : l.c.edge),
-                  backgroundColor: Colors.transparent,
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('Takes', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              chip('No estimate', _duration == null, () => _duration = null),
-              for (final m in const [15, 30, 45, 60, 90, 120, 180, 240])
-                chip(
-                  m >= 60 ? '${m ~/ 60} h${m % 60 == 0 ? '' : ' 30'}' : '$m min',
-                  _duration == m,
-                  () => _duration = m,
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('Project', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              chip('No project', _projectId == null, () => _projectId = null),
-              for (final p in projects) chip(p.name, _projectId == p.id, () => _projectId = p.id),
-            ],
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: OrvField(label: 'New project', controller: _newProject),
-              ),
-              const SizedBox(width: 8),
-              OrvButton(
-                label: 'Add',
-                small: true,
-                onPressed: () async {
-                  final n = _newProject.text.trim();
-                  if (n.isEmpty) return;
-                  final id = await ref.read(todayActionsProvider).addProject(n);
-                  _newProject.clear();
-                  if (mounted) setState(() => _projectId = id);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TagsEditor(value: _tags, onChanged: (t) => setState(() => _tags = t), suggestions: allTags(allTasks)),
-          const SizedBox(height: 12),
-          ChecklistEditor(value: _steps, onChanged: (v) => setState(() => _steps = v)),
-          const SizedBox(height: 12),
-          Text('Repeats', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 4),
-          RepeatEditor(
-            value: _rrule,
-            startDate: _day ?? dayKey(ref.read(clockProvider)()),
-            onChanged: (r) => setState(() => _rrule = r),
-          ),
-          const SizedBox(height: 12),
-          if (_time != null)
-            _taskReminders(l)
-          else
-            Text(
-              'Reminders: this task has only a day, so it follows your “things with only a date” setting.',
-              style: OrvText.muted(l),
-            ),
-          const SizedBox(height: 12),
-          OrvField(label: 'Notes', controller: _notes),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              OrvButton(
-                label: 'Delete',
-                small: true,
-                variant: ButtonVariant.danger,
-                icon: LucideIcons.trash2,
-                onPressed: () async {
-                  await ref.read(todayActionsProvider).remove(widget.task.id);
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-              ),
-              const Spacer(),
-              OrvButton(label: 'Save', variant: ButtonVariant.primary, onPressed: _save),
-            ],
-          ),
+          const Spacer(),
+          OrvButton(label: 'Save', variant: ButtonVariant.primary, onPressed: _save),
         ],
       ),
+      children: [
+        OrvField(label: 'Title', controller: _title),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            OrvButton(
+              small: true,
+              icon: LucideIcons.calendar,
+              label: _day == null ? 'No day' : loc.formatShortMonthDay(DateTime.parse(_day!)),
+              onPressed: () async {
+                final now = ref.read(clockProvider)();
+                final d = await showDatePicker(
+                  context: context,
+                  initialDate: _day == null ? now : DateTime.parse(_day!),
+                  firstDate: now.subtract(const Duration(days: 365)),
+                  lastDate: now.add(const Duration(days: 365 * 5)),
+                );
+                if (d != null) setState(() => _day = dayKey(d));
+              },
+            ),
+            const SizedBox(width: 8),
+            OrvButton(
+              small: true,
+              icon: LucideIcons.clock,
+              label: _time == null ? 'Any time' : loc.formatTimeOfDay(_time!),
+              onPressed: _day == null
+                  ? null
+                  : () async {
+                      final t = await showTimePicker(
+                        context: context,
+                        initialTime: _time ?? const TimeOfDay(hour: 9, minute: 0),
+                      );
+                      if (t != null) setState(() => _time = t);
+                    },
+            ),
+            const Spacer(),
+            if (_day != null)
+              OrvButton(
+                small: true,
+                variant: ButtonVariant.ghost,
+                label: 'Clear',
+                onPressed: () => setState(() {
+                  _day = null;
+                  _time = null;
+                }),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 6,
+          children: [
+            for (final (v, name) in const [(0, 'None'), (1, 'Low'), (2, 'Medium'), (3, 'High')])
+              ChoiceChip(
+                label: Text(name),
+                selected: _priority == v,
+                showCheckmark: false,
+                onSelected: (_) => setState(() => _priority = v),
+                selectedColor: l.accent.withValues(alpha: 0.16),
+                side: BorderSide(color: _priority == v ? l.accent : l.c.edge),
+                backgroundColor: Colors.transparent,
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('Takes', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            chip('No estimate', _duration == null, () => _duration = null),
+            for (final m in const [15, 30, 45, 60, 90, 120, 180, 240])
+              chip(m >= 60 ? '${m ~/ 60} h${m % 60 == 0 ? '' : ' 30'}' : '$m min', _duration == m, () => _duration = m),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('Project', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            chip('No project', _projectId == null, () => _projectId = null),
+            for (final p in projects) chip(p.name, _projectId == p.id, () => _projectId = p.id),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: OrvField(label: 'New project', controller: _newProject),
+            ),
+            const SizedBox(width: 8),
+            OrvButton(
+              label: 'Add',
+              small: true,
+              onPressed: () async {
+                final n = _newProject.text.trim();
+                if (n.isEmpty) return;
+                final id = await ref.read(todayActionsProvider).addProject(n);
+                _newProject.clear();
+                if (mounted) setState(() => _projectId = id);
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TagsEditor(value: _tags, onChanged: (t) => setState(() => _tags = t), suggestions: allTags(allTasks)),
+        const SizedBox(height: 12),
+        ChecklistEditor(value: _steps, onChanged: (v) => setState(() => _steps = v)),
+        const SizedBox(height: 12),
+        Text('Repeats', style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        RepeatEditor(
+          value: _rrule,
+          startDate: _day ?? dayKey(ref.read(clockProvider)()),
+          onChanged: (r) => setState(() => _rrule = r),
+        ),
+        const SizedBox(height: 12),
+        if (_time != null)
+          _taskReminders(l)
+        else
+          Text(
+            'Reminders: this task has only a day, so it follows your “things with only a date” setting.',
+            style: OrvText.muted(l),
+          ),
+        const SizedBox(height: 12),
+        OrvField(label: 'Notes', controller: _notes),
+      ],
     );
   }
 

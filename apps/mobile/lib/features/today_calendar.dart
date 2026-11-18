@@ -887,103 +887,94 @@ class _EventSheetState extends ConsumerState<EventSheet> {
       });
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return StickySheet(
+      title: _d.id == null ? 'New event' : 'Event',
+      footer: Row(
         children: [
-          Text(_d.id == null ? 'New event' : 'Event', style: OrvText.heading(l)),
-          const SizedBox(height: 12),
-          OrvField(label: 'Title', controller: _title),
-          OrvSwitchRow(label: 'All day', value: _d.allDay, onChanged: (v) => setState(() => _d.allDay = v)),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
+          if (_d.id != null)
+            OrvButton(
+              label: 'Delete',
+              small: true,
+              variant: ButtonVariant.danger,
+              icon: LucideIcons.trash2,
+              onPressed: _delete,
+            ),
+          const Spacer(),
+          OrvButton(label: 'Save', variant: ButtonVariant.primary, onPressed: _save),
+        ],
+      ),
+      children: [
+        OrvField(label: 'Title', controller: _title),
+        OrvSwitchRow(label: 'All day', value: _d.allDay, onChanged: (v) => setState(() => _d.allDay = v)),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OrvButton(
+              label: loc.formatMediumDate(DateTime.parse(_d.day)),
+              small: true,
+              variant: ButtonVariant.secondary,
+              icon: LucideIcons.calendar,
+              onPressed: () => pickDate(false),
+            ),
+            if (_d.allDay)
               OrvButton(
-                label: loc.formatMediumDate(DateTime.parse(_d.day)),
+                label: 'until ${loc.formatMediumDate(DateTime.parse(_d.lastDay))}',
                 small: true,
                 variant: ButtonVariant.secondary,
-                icon: LucideIcons.calendar,
-                onPressed: () => pickDate(false),
+                onPressed: () => pickDate(true),
+              )
+            else ...[
+              OrvButton(
+                label: 'Starts ${_d.start.format(context)}',
+                small: true,
+                variant: ButtonVariant.secondary,
+                onPressed: () => pickTime(false),
               ),
-              if (_d.allDay)
-                OrvButton(
-                  label: 'until ${loc.formatMediumDate(DateTime.parse(_d.lastDay))}',
-                  small: true,
-                  variant: ButtonVariant.secondary,
-                  onPressed: () => pickDate(true),
-                )
-              else ...[
-                OrvButton(
-                  label: 'Starts ${_d.start.format(context)}',
-                  small: true,
-                  variant: ButtonVariant.secondary,
-                  onPressed: () => pickTime(false),
-                ),
-                OrvButton(
-                  label: 'Ends ${_d.end.format(context)}',
-                  small: true,
-                  variant: ButtonVariant.secondary,
-                  onPressed: () => pickTime(true),
-                ),
-              ],
+              OrvButton(
+                label: 'Ends ${_d.end.format(context)}',
+                small: true,
+                variant: ButtonVariant.secondary,
+                onPressed: () => pickTime(true),
+              ),
             ],
-          ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Text('Repeat', style: OrvText.label(l)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final (v, name) in repeatPresets(_d.day))
+              if (!_inSeries || _all || v == _d.rrule) chip(name, _d.rrule == v, () => _d.rrule = v),
+            if (_d.rrule != null && !repeatPresets(_d.day).any((p) => p.$1 == _d.rrule)) chip('Custom', true, () {}),
+          ],
+        ),
+        if (calendars.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text('Repeat', style: OrvText.label(l)),
+          Text('Calendar', style: OrvText.label(l)),
           const SizedBox(height: 4),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              for (final (v, name) in repeatPresets(_d.day))
-                if (!_inSeries || _all || v == _d.rrule) chip(name, _d.rrule == v, () => _d.rrule = v),
-              if (_d.rrule != null && !repeatPresets(_d.day).any((p) => p.$1 == _d.rrule)) chip('Custom', true, () {}),
-            ],
-          ),
-          if (calendars.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text('Calendar', style: OrvText.label(l)),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                chip('ORVYN', _d.calendarId == null, () => _d.calendarId = null),
-                for (final c in calendars) chip(c.name, _d.calendarId == c.id, () => _d.calendarId = c.id),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          OrvField(label: 'Where', controller: _where),
-          if (_inSeries) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              children: [
-                chip('Only this one', !_all, () => _all = false),
-                chip('All of them', _all, () => _all = true),
-              ],
-            ),
-          ],
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              if (_d.id != null)
-                OrvButton(
-                  label: 'Delete',
-                  small: true,
-                  variant: ButtonVariant.danger,
-                  icon: LucideIcons.trash2,
-                  onPressed: _delete,
-                ),
-              const Spacer(),
-              OrvButton(label: 'Save', variant: ButtonVariant.primary, onPressed: _save),
+              chip('ORVYN', _d.calendarId == null, () => _d.calendarId = null),
+              for (final c in calendars) chip(c.name, _d.calendarId == c.id, () => _d.calendarId = c.id),
             ],
           ),
         ],
-      ),
+        const SizedBox(height: 12),
+        OrvField(label: 'Where', controller: _where),
+        if (_inSeries) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            children: [chip('Only this one', !_all, () => _all = false), chip('All of them', _all, () => _all = true)],
+          ),
+        ],
+      ],
     );
   }
 }

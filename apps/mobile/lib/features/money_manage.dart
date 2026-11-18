@@ -179,148 +179,133 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     );
     final yesterday = _day(DateTime(now.year, now.month, now.day - 1));
     final before = DateTime(now.year, now.month, now.day - 2);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(widget.recurring != null ? 'Scheduled' : 'Add transaction', style: OrvText.heading(l)),
+    return StickySheet(
+      title: widget.recurring != null ? 'Scheduled' : 'Add transaction',
+      footer: Align(
+        alignment: Alignment.centerRight,
+        child: OrvButton(label: repeats ? 'Save schedule' : 'Add', variant: ButtonVariant.primary, onPressed: _submit),
+      ),
+      children: [
+        OrvField(
+          label: 'Amount (₹)',
+          controller: _amount,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          children: [chip('Spent', !_credit, () => _credit = false), chip('Came in', _credit, () => _credit = true)],
+        ),
+        const SizedBox(height: 8),
+        OrvField(label: 'Merchant or what for', controller: _merchant),
+        const SizedBox(height: 10),
+        Text(repeats ? 'Starts' : 'When', style: OrvText.label(l)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            if (!repeats) ...[
+              chip('Today', _date == today, () => _date = today),
+              chip('Yesterday', _date == yesterday, () => _date = yesterday),
+              chip(
+                MaterialLocalizations.of(context).formatShortDate(before),
+                _date == _day(before),
+                () => _date = _day(before),
+              ),
+            ],
+            ActionChip(
+              key: const Key('money-pick-date'),
+              avatar: Icon(LucideIcons.calendar, size: 14, color: l.accent),
+              label: Text(
+                [today, yesterday, _day(before)].contains(_date) && !repeats
+                    ? 'Pick a day'
+                    : MaterialLocalizations.of(context).formatMediumDate(DateTime.parse(_date)),
+              ),
+              onPressed: _pickDate,
+              backgroundColor: Colors.transparent,
+              side: BorderSide(color: l.c.edge),
+            ),
+            ActionChip(
+              key: const Key('money-pick-time'),
+              avatar: Icon(LucideIcons.clock, size: 14, color: l.accent),
+              label: Text(_time ?? (repeats ? '09:00' : 'Add a time')),
+              onPressed: _pickTime,
+              backgroundColor: Colors.transparent,
+              side: BorderSide(color: l.c.edge),
+            ),
+            if (_time != null && !repeats)
+              ActionChip(
+                label: const Text('Clear time'),
+                onPressed: () => setState(() => _time = null),
+                backgroundColor: Colors.transparent,
+                side: BorderSide(color: l.c.edge),
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text('Category', style: OrvText.label(l)),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final c in cats.where((c) => c.kind == (_credit ? 'income' : 'expense') || c.kind == 'transfer'))
+              chip(c.name, _categoryId == c.id, () => _categoryId = _categoryId == c.id ? null : c.id),
+          ],
+        ),
+        if (accounts.isNotEmpty) ...[
           const SizedBox(height: 10),
-          OrvField(
-            label: 'Amount (₹)',
-            controller: _amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            autofocus: true,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            children: [chip('Spent', !_credit, () => _credit = false), chip('Came in', _credit, () => _credit = true)],
-          ),
-          const SizedBox(height: 8),
-          OrvField(label: 'Merchant or what for', controller: _merchant),
-          const SizedBox(height: 10),
-          Text(repeats ? 'Starts' : 'When', style: OrvText.label(l)),
+          Text('Account', style: OrvText.label(l)),
           const SizedBox(height: 4),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (!repeats) ...[
-                chip('Today', _date == today, () => _date = today),
-                chip('Yesterday', _date == yesterday, () => _date = yesterday),
+              for (final a in accounts.where((a) => a.data['archived'] != true))
                 chip(
-                  MaterialLocalizations.of(context).formatShortDate(before),
-                  _date == _day(before),
-                  () => _date = _day(before),
-                ),
-              ],
-              ActionChip(
-                key: const Key('money-pick-date'),
-                avatar: Icon(LucideIcons.calendar, size: 14, color: l.accent),
-                label: Text(
-                  [today, yesterday, _day(before)].contains(_date) && !repeats
-                      ? 'Pick a day'
-                      : MaterialLocalizations.of(context).formatMediumDate(DateTime.parse(_date)),
-                ),
-                onPressed: _pickDate,
-                backgroundColor: Colors.transparent,
-                side: BorderSide(color: l.c.edge),
-              ),
-              ActionChip(
-                key: const Key('money-pick-time'),
-                avatar: Icon(LucideIcons.clock, size: 14, color: l.accent),
-                label: Text(_time ?? (repeats ? '09:00' : 'Add a time')),
-                onPressed: _pickTime,
-                backgroundColor: Colors.transparent,
-                side: BorderSide(color: l.c.edge),
-              ),
-              if (_time != null && !repeats)
-                ActionChip(
-                  label: const Text('Clear time'),
-                  onPressed: () => setState(() => _time = null),
-                  backgroundColor: Colors.transparent,
-                  side: BorderSide(color: l.c.edge),
+                  '${a.name}${a.last4 == null ? '' : ' ··${a.last4}'}',
+                  _accountId == a.id,
+                  () => _accountId = _accountId == a.id ? null : a.id,
                 ),
             ],
-          ),
-          const SizedBox(height: 10),
-          Text('Category', style: OrvText.label(l)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final c in cats.where((c) => c.kind == (_credit ? 'income' : 'expense') || c.kind == 'transfer'))
-                chip(c.name, _categoryId == c.id, () => _categoryId = _categoryId == c.id ? null : c.id),
-            ],
-          ),
-          if (accounts.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text('Account', style: OrvText.label(l)),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final a in accounts.where((a) => a.data['archived'] != true))
-                  chip(
-                    '${a.name}${a.last4 == null ? '' : ' ··${a.last4}'}',
-                    _accountId == a.id,
-                    () => _accountId = _accountId == a.id ? null : a.id,
-                  ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 8),
-          OrvField(label: 'Note', controller: _note),
-          const SizedBox(height: 4),
-          OrvSwitchRow(
-            label: 'Repeats',
-            subtitle: 'Rent, a subscription, your salary…',
-            value: repeats,
-            onChanged: (v) => setState(() {
-              _rrule = v ? 'FREQ=MONTHLY;BYMONTHDAY=${int.parse(_date.substring(8, 10))}' : '';
-            }),
-          ),
-          if (repeats) ...[
-            RepeatEditor(
-              value: _rrule,
-              startDate: _date,
-              allowNone: false,
-              onChanged: (r) => setState(() => _rrule = r),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              children: [
-                chip('Add it for me', _mode == 'add', () => _mode = 'add'),
-                chip('Just remind me', _mode == 'remind', () => _mode = 'remind'),
-              ],
-            ),
-            Text(
-              _mode == 'add'
-                  ? 'Each time it’s due it appears under “New”, so you can fix the amount if it changed.'
-                  : 'You get a reminder on the day and add the real amount yourself.',
-              style: OrvText.muted(l).copyWith(fontSize: 12),
-            ),
-          ],
-          if (_problem != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_problem!, style: OrvText.muted(l).copyWith(color: l.c.danger)),
-            ),
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OrvButton(
-              label: repeats ? 'Save schedule' : 'Add',
-              variant: ButtonVariant.primary,
-              onPressed: _submit,
-            ),
           ),
         ],
-      ),
+        const SizedBox(height: 8),
+        OrvField(label: 'Note', controller: _note),
+        const SizedBox(height: 4),
+        OrvSwitchRow(
+          label: 'Repeats',
+          subtitle: 'Rent, a subscription, your salary…',
+          value: repeats,
+          onChanged: (v) => setState(() {
+            _rrule = v ? 'FREQ=MONTHLY;BYMONTHDAY=${int.parse(_date.substring(8, 10))}' : '';
+          }),
+        ),
+        if (repeats) ...[
+          RepeatEditor(value: _rrule, startDate: _date, allowNone: false, onChanged: (r) => setState(() => _rrule = r)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            children: [
+              chip('Add it for me', _mode == 'add', () => _mode = 'add'),
+              chip('Just remind me', _mode == 'remind', () => _mode = 'remind'),
+            ],
+          ),
+          Text(
+            _mode == 'add'
+                ? 'Each time it’s due it appears under “New”, so you can fix the amount if it changed.'
+                : 'You get a reminder on the day and add the real amount yourself.',
+            style: OrvText.muted(l).copyWith(fontSize: 12),
+          ),
+        ],
+        if (_problem != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_problem!, style: OrvText.muted(l).copyWith(color: l.c.danger)),
+          ),
+      ],
     );
   }
 }
