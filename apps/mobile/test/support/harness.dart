@@ -137,6 +137,9 @@ class AppHarness {
   String? spoken;
   final widgetClicks = StreamController<Uri?>.broadcast();
 
+  /// Extra provider overrides a test wants (e.g. a light key derivation for the Vault).
+  final extraOverrides = <Object>[];
+
   /// Starts already signed in (a stored refresh token the fake server accepts).
   void signedInAs(Map<String, dynamic> user) {
     store.values['refresh'] = 'refresh-0';
@@ -173,6 +176,7 @@ class AppHarness {
             opened.add(u);
             return true;
           }),
+          ...extraOverrides.cast(),
         ],
         child: const OrvynApp(),
       ),

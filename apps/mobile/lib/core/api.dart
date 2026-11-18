@@ -121,7 +121,12 @@ class Api {
   }
 
   /// Uploads a file's bytes (files module, ADR-0011); returns `{id, name, …}`.
-  Future<Map<String, dynamic>> upload(List<int> bytes, {required String name, required String mime}) async {
+  Future<Map<String, dynamic>> upload(
+    List<int> bytes, {
+    required String name,
+    required String mime,
+    String? purpose,
+  }) async {
     Future<Response<dynamic>> send() => dio.post<dynamic>(
       '/files',
       data: Stream.fromIterable([bytes]),
@@ -130,6 +135,7 @@ class Api {
         headers: {
           'content-length': bytes.length,
           'x-file-name': Uri.encodeComponent(name),
+          'x-file-purpose': ?purpose,
           if (_access != null) 'authorization': 'Bearer $_access',
         },
       ),

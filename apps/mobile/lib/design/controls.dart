@@ -134,7 +134,11 @@ class OrvField extends StatelessWidget {
     this.autofillHints,
     this.onSubmitted,
     this.autofocus = false,
+    this.obscure = false,
+    this.maxLines = 1,
   });
+  final bool obscure;
+  final int maxLines;
   final String label;
   final TextEditingController controller;
   final String? hint;
@@ -159,6 +163,10 @@ class OrvField extends StatelessWidget {
         TextField(
           controller: controller,
           autofocus: autofocus,
+          obscureText: obscure,
+          enableSuggestions: !obscure,
+          autocorrect: !obscure,
+          maxLines: obscure ? 1 : maxLines,
           keyboardType: keyboardType,
           autofillHints: autofillHints,
           onSubmitted: onSubmitted,

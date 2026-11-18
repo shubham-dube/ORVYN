@@ -4,7 +4,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../design/orb.dart';
 import '../features/drop_screen.dart';
+import '../features/library_screen.dart';
 import '../features/money_screen.dart';
+import '../features/vault_screen.dart';
 import '../features/gallery_screen.dart';
 import '../features/home_screen.dart';
 import '../features/settings_screen.dart';
@@ -70,6 +72,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/money',
             pageBuilder: (_, _) => const NoTransitionPage(child: MoneyScreen()),
+          ),
+          GoRoute(
+            path: '/library',
+            pageBuilder: (_, _) => const NoTransitionPage(child: LibraryScreen()),
+          ),
+          GoRoute(
+            path: '/vault',
+            pageBuilder: (_, _) => const NoTransitionPage(child: VaultScreen()),
           ),
           GoRoute(
             path: '/settings',

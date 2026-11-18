@@ -16,6 +16,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import '../drop/drop.dart';
+import '../library/library.dart';
 import '../money/money.dart';
 import '../money/spend_date.dart';
 
@@ -584,6 +585,56 @@ class _QuickAddCardState extends ConsumerState<QuickAddCard> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Documents that run out soon (or already have).
+class ExpiringCard extends ConsumerWidget {
+  const ExpiringCard({super.key});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final docs = ref.watch(docsProvider).value ?? const <DocItem>[];
+    final today = dayKey(ref.watch(clockProvider)());
+    final soon = expiringSoon(docs, today).take(3).toList();
+    return _card(
+      context,
+      'Running out',
+      LucideIcons.fileClock,
+      route: '/library',
+      children: [
+        if (soon.isEmpty)
+          Text(
+            docs.isEmpty
+                ? 'Add a document and ORVYN will remind you before it expires.'
+                : 'Nothing runs out in the next two months.',
+            style: OrvText.muted(l),
+          ),
+        for (final d in soon)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    d.title.isEmpty ? 'Document' : d.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  expiryLabel(expiry(d.expiresOn, today).days),
+                  style: OrvText.muted(l).copyWith(
+                    color: expiry(d.expiresOn, today).urgency == Urgency.expired ? l.c.danger : l.c.warning,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

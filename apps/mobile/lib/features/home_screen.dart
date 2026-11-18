@@ -103,6 +103,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           if (me?.can('money') ?? false) const MoneyCard(),
           if (me?.can('today') ?? false) const WeekCard(),
           if (me?.can('drop') ?? false) const DropCard(),
+          if (me?.can('library') ?? false) const ExpiringCard(),
           Glass(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -117,7 +118,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       builder: (context) {
                         final ml = context.orv;
                         final (name, line) = moduleInfo[k]!;
-                        const routes = {'today': '/today', 'drop': '/drop', 'money': '/money'};
+                        const routes = {
+                          'today': '/today',
+                          'drop': '/drop',
+                          'money': '/money',
+                          'library': '/library',
+                          'vault': '/vault',
+                        };
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: routes[k] == null ? null : () => context.go(routes[k]!),
