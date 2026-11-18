@@ -1,0 +1,79 @@
+{
+  "$comment": "Shared by TypeScript (packages/library/test/library.test.ts) and Dart (apps/mobile/test/library_test.dart): the same words find the same documents in the same order.",
+  "today": "2026-11-18",
+  "docs": [
+    {
+      "id": "pan",
+      "title": "PAN card",
+      "category": "Identity",
+      "tags": ["pan", "income tax"],
+      "summary": "Permanent Account Number card",
+      "text": "Income Tax Department",
+      "fileName": "pan.jpg",
+      "expiresOn": null
+    },
+    {
+      "id": "ins",
+      "title": "Star Health insurance policy",
+      "category": "Insurance",
+      "tags": ["health", "family"],
+      "summary": "Family floater, sum insured 10 lakh",
+      "text": "Premium due every December",
+      "fileName": "policy.pdf",
+      "expiresOn": "2026-12-10"
+    },
+    {
+      "id": "rent",
+      "title": "Rent agreement",
+      "category": "Property",
+      "tags": ["flat"],
+      "summary": "11 month agreement for the flat",
+      "text": "The tenant shall pay rent of 22000 on the 5th",
+      "fileName": "agreement.pdf",
+      "expiresOn": "2027-03-31"
+    },
+    {
+      "id": "car",
+      "title": "Car insurance",
+      "category": "Insurance",
+      "tags": ["car"],
+      "summary": "Comprehensive cover",
+      "text": "",
+      "fileName": "",
+      "expiresOn": "2026-11-10"
+    },
+    {
+      "id": "note",
+      "title": "Passport renewal steps",
+      "category": "Notes",
+      "tags": [],
+      "summary": "",
+      "text": "Book a slot, carry the old passport and PAN card copy",
+      "fileName": "",
+      "expiresOn": null
+    }
+  ],
+  "searches": [
+    { "q": "pan card", "ids": ["pan", "note"] },
+    { "q": "PAN", "ids": ["pan", "note"] },
+    { "q": "insurance", "ids": ["car", "ins"] },
+    { "q": "health insurance", "ids": ["ins"] },
+    { "q": "flat", "ids": ["rent"] },
+    { "q": "22000", "ids": ["rent"] },
+    { "q": "passport", "ids": ["note"] },
+    { "q": "identity", "ids": ["pan"] },
+    { "q": "agreement.pdf", "ids": ["rent"] },
+    { "q": "agreement", "ids": ["rent"] },
+    { "q": "  ", "ids": ["pan", "ins", "rent", "car", "note"] },
+    { "q": "nothing like this", "ids": [] }
+  ],
+  "expiry": [
+    { "on": "2026-11-18", "days": 0, "urgency": "soon", "label": "Expires today" },
+    { "on": "2026-11-19", "days": 1, "urgency": "soon", "label": "Expires tomorrow" },
+    { "on": "2026-12-10", "days": 22, "urgency": "soon", "label": "Expires in 22 days" },
+    { "on": "2027-03-31", "days": 133, "urgency": "later", "label": "Expires in 133 days" },
+    { "on": "2026-11-10", "days": -8, "urgency": "expired", "label": "Expired 8 days ago" },
+    { "on": "2026-11-17", "days": -1, "urgency": "expired", "label": "Expired yesterday" }
+  ],
+  "expiringSoon": ["car", "ins"]
+}

@@ -14,10 +14,12 @@
   "dependencies": {
     "@orvyn/contracts": "workspace:*",
     "@orvyn/design-tokens": "workspace:*",
+    "@orvyn/library": "workspace:*",
     "@orvyn/money": "workspace:*",
     "@orvyn/sync-client": "workspace:*",
     "@orvyn/today-parse": "workspace:*",
     "@orvyn/today-plan": "workspace:*",
+    "@orvyn/vault-crypto": "workspace:*",
     "@simplewebauthn/browser": "^13.3.0",
     "geist": "^1.9.2",
     "lucide-react": "^0.460.0",

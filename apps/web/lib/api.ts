@@ -143,3 +143,16 @@ export async function uploadFile(
     );
   return data!;
 }
+
+/** An uploaded file's bytes (the server decrypts it for its owner), as a blob the page can open or save. */
+export async function downloadFile(id: string): Promise<Blob> {
+  const send = () =>
+    fetch(`${API_URL}/files/${id}`, {
+      credentials: 'include',
+      headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+    });
+  let res = await send();
+  if (res.status === 401 && (await refreshSession())) res = await send();
+  if (!res.ok) throw new ApiError(res.status, 'error', 'The file couldn’t be opened.');
+  return res.blob();
+}

@@ -3,8 +3,10 @@
 import {
   ArrowDownToLine,
   Bell,
+  BookOpen,
   CirclePlus,
   Home,
+  KeyRound,
   LogOut,
   Moon,
   Settings,
@@ -59,6 +61,12 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
         : []),
       ...(me?.role === 'owner' || me?.entitlements.includes('money')
         ? [{ id: 'go-money', label: 'Open Money', icon: <Wallet size={16} />, run: go('/money') }]
+        : []),
+      ...(me?.role === 'owner' || me?.entitlements.includes('library')
+        ? [{ id: 'go-library', label: 'Open Library', icon: <BookOpen size={16} />, run: go('/library') }]
+        : []),
+      ...(me?.role === 'owner' || me?.entitlements.includes('vault')
+        ? [{ id: 'go-vault', label: 'Open Vault', icon: <KeyRound size={16} />, run: go('/vault') }]
         : []),
       {
         id: 'devices',

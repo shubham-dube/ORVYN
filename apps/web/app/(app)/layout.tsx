@@ -1,6 +1,16 @@
 'use client';
 
-import { ArrowDownToLine, Bell, CheckCircle2, Home, Settings, Shield, Wallet } from 'lucide-react';
+import {
+  ArrowDownToLine,
+  Bell,
+  BookOpen,
+  CheckCircle2,
+  Home,
+  KeyRound,
+  Settings,
+  Shield,
+  Wallet,
+} from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -12,6 +22,8 @@ import { cn } from '@/lib/cn';
 import { NotificationsProvider, useNotifications } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
 import { DropProvider } from '@/lib/drop';
+import { LibraryProvider } from '@/lib/library';
+import { VaultProvider } from '@/lib/vault';
 import { MoneyProvider } from '@/lib/money';
 import { SyncProvider } from '@/lib/sync';
 import { TodayProvider } from '@/lib/today';
@@ -29,7 +41,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <MaybeToday>
           <MaybeMoney>
             <MaybeDrop>
-              <Shell>{children}</Shell>
+              <MaybeLibrary>
+                <MaybeVault>
+                  <Shell>{children}</Shell>
+                </MaybeVault>
+              </MaybeLibrary>
             </MaybeDrop>
           </MaybeMoney>
         </MaybeToday>
@@ -61,6 +77,24 @@ function MaybeDrop({ children }: { children: ReactNode }) {
   const { me } = useSession();
   return me?.role === 'owner' || me?.entitlements.includes('drop') ? (
     <DropProvider>{children}</DropProvider>
+  ) : (
+    children
+  );
+}
+
+function MaybeLibrary({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  return me?.role === 'owner' || me?.entitlements.includes('library') ? (
+    <LibraryProvider>{children}</LibraryProvider>
+  ) : (
+    children
+  );
+}
+
+function MaybeVault({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  return me?.role === 'owner' || me?.entitlements.includes('vault') ? (
+    <VaultProvider>{children}</VaultProvider>
   ) : (
     children
   );
@@ -102,6 +136,12 @@ function Shell({ children }: { children: ReactNode }) {
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('money')
       ? [{ href: '/money', label: 'Money', icon: Wallet }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('library')
+      ? [{ href: '/library', label: 'Library', icon: BookOpen }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('vault')
+      ? [{ href: '/vault', label: 'Vault', icon: KeyRound }]
       : []),
     { href: '/settings', label: 'Settings', icon: Settings },
     ...(me?.role === 'owner' ? [{ href: '/admin', label: 'People', icon: Shield }] : []),

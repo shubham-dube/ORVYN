@@ -226,6 +226,9 @@ importers:
       '@orvyn/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@orvyn/library':
+        specifier: workspace:*
+        version: link:../../packages/library
       '@orvyn/money':
         specifier: workspace:*
         version: link:../../packages/money
@@ -238,6 +241,9 @@ importers:
       '@orvyn/today-plan':
         specifier: workspace:*
         version: link:../../packages/today-plan
+      '@orvyn/vault-crypto':
+        specifier: workspace:*
+        version: link:../../packages/vault-crypto
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0
@@ -294,6 +300,15 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+
+  packages/library:
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.16.22)(jiti@2.7.0)(postcss@8.5.33)(tsx@4.23.15)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)
 
   packages/money:
     dependencies:

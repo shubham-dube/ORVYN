@@ -16,7 +16,15 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { DropCard, MoneyCard, NeedsYouCard, QuickAddCard, TodayCard, WeekCard } from '@/components/dashboard';
+import {
+  DropCard,
+  ExpiringCard,
+  MoneyCard,
+  NeedsYouCard,
+  QuickAddCard,
+  TodayCard,
+  WeekCard,
+} from '@/components/dashboard';
 import { useTheme } from '@/components/theme-provider';
 import { Badge, Label } from '@/components/ui/bits';
 import { cn } from '@/lib/cn';
@@ -78,7 +86,7 @@ const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon
   },
 };
 /** Modules that are built; the rest show as "soon". */
-const BUILT = new Set(['today', 'drop', 'money']);
+const BUILT = new Set(['today', 'drop', 'money', 'library', 'vault']);
 
 export default function Home() {
   const { me } = useSession();
@@ -125,6 +133,7 @@ export default function Home() {
         <MoneyCard now={now} />
         <WeekCard now={now} />
         <DropCard />
+        <ExpiringCard now={now} />
       </div>
 
       <section aria-label="Your ORVYN">

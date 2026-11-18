@@ -2,8 +2,18 @@
 
 import { formatMoney, type Transaction } from '@orvyn/contracts';
 import { budgetProgress, dailySpend, monthOf, parseSpend, summarise } from '@orvyn/money';
+import { expiringSoon, expiry, expiryLabel } from '@orvyn/library';
 import { dayShape, expandEvents, type NextItem, weekAhead } from '@orvyn/today-plan';
-import { ArrowRight, CalendarDays, CircleDollarSign, Inbox, ListTodo, Plus, Sparkles } from 'lucide-react';
+import {
+  ArrowRight,
+  CalendarDays,
+  CircleDollarSign,
+  FileClock,
+  Inbox,
+  ListTodo,
+  Plus,
+  Sparkles,
+} from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
@@ -11,6 +21,7 @@ import { Badge, Glass, Label, Segmented, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/cn';
 import { useDropMaybe } from '@/lib/drop';
+import { useLibraryMaybe } from '@/lib/library';
 import { useMoneyMaybe } from '@/lib/money';
 import { spring } from '@/lib/motion';
 import { useNotifications } from '@/lib/notifications';
@@ -364,6 +375,43 @@ export function DropCard() {
             'Something dropped'}
         </p>
       ))}
+    </Card>
+  );
+}
+
+/** Documents that run out soon (or already have). */
+export function ExpiringCard({ now }: { now: Date }) {
+  const lib = useLibraryMaybe();
+  if (!lib) return null;
+  const today = localDay(now);
+  const soon = expiringSoon(lib.docs, today, 60).slice(0, 3);
+  return (
+    <Card
+      title="Running out"
+      icon={<FileClock size={15} aria-hidden />}
+      href="/library"
+      action="Library"
+      testId="dash-expiring"
+    >
+      {soon.length ? (
+        <ul className="flex flex-col gap-2">
+          {soon.map((d) => {
+            const e = expiry(d.expiresOn, today);
+            return (
+              <li key={d.id} className="flex items-center justify-between gap-3 text-[14px]">
+                <span className="truncate font-medium">{d.title || 'Document'}</span>
+                <Badge tone={e.urgency === 'expired' ? 'danger' : 'warning'}>{expiryLabel(e.days)}</Badge>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-small text-orv-muted">
+          {lib.docs.length
+            ? 'Nothing runs out in the next two months.'
+            : 'Add a document and ORVYN will remind you before it expires.'}
+        </p>
+      )}
     </Card>
   );
 }
