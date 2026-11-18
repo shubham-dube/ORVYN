@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../design/orb.dart';
+import '../features/money_screen.dart';
 import '../features/gallery_screen.dart';
 import '../features/home_screen.dart';
 import '../features/settings_screen.dart';
@@ -60,6 +61,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/today',
             pageBuilder: (_, _) => const NoTransitionPage(child: TodayScreen()),
+          ),
+          GoRoute(
+            path: '/money',
+            pageBuilder: (_, _) => const NoTransitionPage(child: MoneyScreen()),
           ),
           GoRoute(
             path: '/settings',

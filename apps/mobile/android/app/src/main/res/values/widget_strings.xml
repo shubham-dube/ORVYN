@@ -7,4 +7,5 @@
     <string name="widget_signed_out">Open ORVYN to sign in.</string>
     <string name="widget_plus" translatable="false">+</string>
     <string name="widget_more">+%1$d more</string>
+    <string name="capture_label">ORVYN Money: read bank and UPI payment messages</string>
 </resources>

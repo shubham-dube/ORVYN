@@ -73,6 +73,7 @@ class _ShellState extends ConsumerState<Shell> {
     final unread = ref.watch(notificationsProvider).where((n) => n.readAt == null).length;
     final session = ref.watch(sessionProvider);
     final canToday = session is SignedIn && session.me.can('today');
+    final canMoney = session is SignedIn && session.me.can('money');
     return Scaffold(
       extendBody: true,
       body: SafeArea(
@@ -126,6 +127,13 @@ class _ShellState extends ConsumerState<Shell> {
                             onTap: () => context.go('/today'),
                           ),
                         const Spacer(flex: 3),
+                        if (canMoney)
+                          _DockItem(
+                            icon: LucideIcons.wallet,
+                            label: 'Money',
+                            active: widget.location.startsWith('/money'),
+                            onTap: () => context.go('/money'),
+                          ),
                         _DockItem(
                           icon: LucideIcons.settings,
                           label: 'Settings',

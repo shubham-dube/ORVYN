@@ -1,7 +1,7 @@
 /**
  * Merchant clean-up: what a bank or UPI message calls a payee ("UPI-RAZ*SWIGGY", "spotify.upi@hdfcbank",
  * "AMAZON PAY INDIA") → a name people recognise and a starting category (slugs of DEFAULT_CATEGORIES).
- * The person's own corrections win over these (see `learned` in categorise).
+ * The person can always change the category; their choice is what stays.
  */
 const KNOWN: [RegExp, string, string][] = [
   // food

@@ -42,6 +42,16 @@
             </intent-filter>
             <meta-data android:name="flutter_deeplinking_enabled" android:value="true"/>
         </activity>
+        <!-- Money capture (spec 0003, ADR-0012): only with the notification access the person turns on -->
+        <service
+            android:name=".MoneyListener"
+            android:label="@string/capture_label"
+            android:exported="false"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
         <!-- Today on the home screen (spec 0002 M5) -->
         <receiver android:name=".TodayWidget" android:exported="false">
             <intent-filter>

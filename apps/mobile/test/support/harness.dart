@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:orvyn/app/calendar.dart';
 import 'package:orvyn/app/home_widget.dart';
+import 'package:orvyn/money/capture.dart';
 import 'package:orvyn/app/app.dart';
 import 'package:orvyn/app/lock.dart';
 import 'package:orvyn/app/state.dart';
@@ -127,6 +128,7 @@ class AppHarness {
   DateTime now = DateTime(2026, 11, 16, 9, 30);
   final opened = <Uri>[];
   final widget = RecordingWidgetPublisher();
+  final capture = FakeCaptureChannel();
   final widgetClicks = StreamController<Uri?>.broadcast();
 
   /// Starts already signed in (a stored refresh token the fake server accepts).
@@ -155,6 +157,7 @@ class AppHarness {
           authenticatorProvider.overrideWithValue(auth),
           clockProvider.overrideWithValue(() => now),
           widgetPublisherProvider.overrideWithValue(widget),
+          captureChannelProvider.overrideWithValue(capture),
           widgetClicksProvider.overrideWithValue(widgetClicks.stream),
           urlOpenerProvider.overrideWithValue((u) async {
             opened.add(u);
@@ -190,4 +193,27 @@ class RecordingWidgetPublisher implements WidgetPublisher {
   Map<String, dynamic>? get last => snapshots.isEmpty ? null : snapshots.last;
   @override
   Future<void> publish(Map<String, dynamic> snapshot) async => snapshots.add(snapshot);
+}
+
+/// Stands in for MoneyListener.kt: a queue of kept notifications, the access switch, "arrived" pings.
+class FakeCaptureChannel implements CaptureChannel {
+  bool on = false;
+  int settingsOpened = 0;
+  final items = <Captured>[];
+  final _arrived = StreamController<void>.broadcast();
+  void deliver(Captured c) {
+    items.add(c);
+    _arrived.add(null);
+  }
+
+  @override
+  Stream<void> get arrived => _arrived.stream;
+  @override
+  Future<bool> enabled() async => on;
+  @override
+  Future<void> openSettings() async => settingsOpened++;
+  @override
+  Future<List<Captured>> pending() async => [...items];
+  @override
+  Future<void> ack(int count) async => items.removeRange(0, count.clamp(0, items.length));
 }
