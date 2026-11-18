@@ -37,6 +37,8 @@ export default defineConfig({
         WEBAUTHN_RP_ID: 'localhost',
         WEBAUTHN_ORIGINS: WEB,
         LOG_LEVEL: 'warn',
+        // the deterministic model (no key, no network): Drop and the parser fallback are exercised end to end
+        AI_PROVIDER: 'fake',
         EXTENSION_IDS: 'hapijaoahockgcidibcnbghpajpnnanh',
       },
     },

@@ -13,13 +13,22 @@ test('Money: typed entries, budgets, a statement import that skips what is alrea
   await page.getByRole('link', { name: 'Money' }).first().click();
   await expect(page.getByRole('heading', { name: 'Money', level: 1 })).toBeVisible();
 
+  // other tests may have spent already: compare with what's there now
+  const spent = async () =>
+    Number(((await page.getByLabel('Spent this month').textContent()) ?? '0').replace(/[^\d]/g, ''));
+  await expect(page.getByLabel('Spent this month')).toBeVisible();
+  await page.waitForLoadState('networkidle'); // this device has caught up with what others recorded
+  const before = await spent();
+
   // typed: the chip shows what was understood
   await page.getByLabel('New transaction').fill('spent 240 on lunch at swiggy');
   await expect(page.getByText('₹240 · Swiggy · Food & dining')).toBeVisible();
   await page.keyboard.press('Enter');
   const list = page.getByRole('list', { name: 'Transactions this month' });
-  await expect(list.getByText('Swiggy')).toBeVisible();
-  await expect(page.getByLabel('Spent this month')).toHaveText('₹240');
+  await expect(list.getByText('Swiggy', { exact: true }).first()).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  const swiggies = await list.getByText('Swiggy', { exact: true }).count();
+  await expect.poll(spent).toBe(before + 240);
 
   await page.getByLabel('New transaction').fill('got 500 from rahul');
   await page.keyboard.press('Enter');
@@ -30,7 +39,7 @@ test('Money: typed entries, budgets, a statement import that skips what is alrea
   await budgets.getByLabel('Budget for').selectOption({ label: 'Food & dining' });
   await budgets.getByLabel('Budget amount').fill('200');
   await budgets.getByRole('button', { name: 'Set' }).click();
-  await expect(page.getByLabel('Budgets').getByText('₹240 / ₹200')).toBeVisible();
+  await expect(page.getByLabel('Budgets').getByText(/ \/ ₹200$/)).toBeVisible();
 
   // a statement with the same lunch (same day, same amount) and one new row
   const csv = `Date,Narration,Chq./Ref.No.,Value Dt,Withdrawal Amt.,Deposit Amt.,Closing Balance
@@ -47,18 +56,19 @@ ${today()},UPI-UBER INDIA-uber@axis-UTIB0000001-432112345690-UPI,000043211234569
   await expect(page.getByText('Imported 1')).toBeVisible();
   await expect(page.getByText('1 were already here')).toBeVisible();
   await expect(list.getByText('Uber')).toBeVisible();
-  await expect(list.getByText('Swiggy')).toHaveCount(1);
+  await expect(list.getByText('Swiggy', { exact: true })).toHaveCount(swiggies); // the statement's lunch was the one already here
+  expect(await spent()).toBe(before + 240 + 180);
   // imported rows wait in "New" for a look
   await page.getByRole('button', { name: 'Looks right: Uber' }).click();
   await expect(page.getByRole('list', { name: 'New transactions' })).toHaveCount(0);
 
   // edit: Swiggy was a team dinner on the card → note it, then delete Rahul's
-  await list.getByText('Swiggy').click();
+  await list.getByText('Swiggy', { exact: true }).first().click();
   const tx = page.getByRole('dialog', { name: 'Transaction' });
   await tx.getByLabel('Note').fill('team dinner');
   await tx.getByRole('button', { name: 'Save' }).click();
   await list.getByText('Rahul').click();
   await tx.getByRole('button', { name: 'Delete' }).click();
   await expect(list.getByText('Rahul')).toHaveCount(0);
-  await expect(page.getByLabel('Spent this month')).toHaveText('₹420');
+  await expect.poll(spent).toBe(before + 420);
 });

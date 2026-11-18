@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  ArrowDownToLine,
   Bell,
   CirclePlus,
   Home,
@@ -12,6 +13,7 @@ import {
   Sun,
   Sunrise,
   Sunset,
+  Wallet,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
@@ -23,6 +25,7 @@ import { cn } from '@/lib/cn';
 import { spring } from '@/lib/motion';
 import { useSession } from '@/lib/session';
 import { chipLabel, smartParse, taskFields } from '@/lib/smart-task';
+import { useDropMaybe } from '@/lib/drop';
 import { localDay, useTodayMaybe } from '@/lib/today';
 
 interface Command {
@@ -51,6 +54,12 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
     const list: Command[] = [
       { id: 'home', label: 'Go to Home', icon: <Home size={16} />, run: go('/') },
       { id: 'settings', label: 'Open Settings', icon: <Settings size={16} />, run: go('/settings') },
+      ...(me?.role === 'owner' || me?.entitlements.includes('drop')
+        ? [{ id: 'go-drop', label: 'Open Drop', icon: <ArrowDownToLine size={16} />, run: go('/drop') }]
+        : []),
+      ...(me?.role === 'owner' || me?.entitlements.includes('money')
+        ? [{ id: 'go-money', label: 'Open Money', icon: <Wallet size={16} />, run: go('/money') }]
+        : []),
       {
         id: 'devices',
         label: 'Devices and passkeys',
@@ -100,6 +109,23 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
   const understood = parsed
     ? parsed.spans.map((sp) => chipLabel(sp, parsed, today!.projects)).join(' · ')
     : '';
+  const drop = useDropMaybe();
+  // with Drop, anything typed can also be dropped: the AI suggests what it is (task, event, expense, note)
+  const dropCmd: Command[] =
+    drop && typed.length > 1
+      ? [
+          {
+            id: 'drop',
+            label: `Drop “${typed.length > 60 ? `${typed.slice(0, 60)}…` : typed}”`,
+            hint: 'Drop',
+            icon: <ArrowDownToLine size={16} />,
+            run: async () => {
+              await drop.dropText(typed, { source: 'orb' });
+              toast({ title: 'Dropped', body: 'A suggestion is on its way in Drop.', tone: 'success' });
+            },
+          },
+        ]
+      : [];
   const filtered: Command[] =
     today && parsed
       ? [
@@ -120,8 +146,9 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
               });
             },
           },
+          ...dropCmd,
         ]
-      : matches;
+      : [...matches, ...dropCmd];
 
   useEffect(() => {
     if (open) {

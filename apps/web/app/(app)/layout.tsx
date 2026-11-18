@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, CheckCircle2, Home, Settings, Shield, Wallet } from 'lucide-react';
+import { ArrowDownToLine, Bell, CheckCircle2, Home, Settings, Shield, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -11,6 +11,7 @@ import { Orb } from '@/components/ui/orb';
 import { cn } from '@/lib/cn';
 import { NotificationsProvider, useNotifications } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
+import { DropProvider } from '@/lib/drop';
 import { MoneyProvider } from '@/lib/money';
 import { SyncProvider } from '@/lib/sync';
 import { TodayProvider } from '@/lib/today';
@@ -27,7 +28,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <SyncProvider>
         <MaybeToday>
           <MaybeMoney>
-            <Shell>{children}</Shell>
+            <MaybeDrop>
+              <Shell>{children}</Shell>
+            </MaybeDrop>
           </MaybeMoney>
         </MaybeToday>
       </SyncProvider>
@@ -49,6 +52,15 @@ function MaybeMoney({ children }: { children: ReactNode }) {
   const { me } = useSession();
   return me?.role === 'owner' || me?.entitlements.includes('money') ? (
     <MoneyProvider>{children}</MoneyProvider>
+  ) : (
+    children
+  );
+}
+
+function MaybeDrop({ children }: { children: ReactNode }) {
+  const { me } = useSession();
+  return me?.role === 'owner' || me?.entitlements.includes('drop') ? (
+    <DropProvider>{children}</DropProvider>
   ) : (
     children
   );
@@ -84,6 +96,9 @@ function Shell({ children }: { children: ReactNode }) {
     { href: '/', label: 'Home', icon: Home },
     ...(me?.role === 'owner' || me?.entitlements.includes('today')
       ? [{ href: '/today', label: 'Today', icon: CheckCircle2 }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('drop')
+      ? [{ href: '/drop', label: 'Drop', icon: ArrowDownToLine }]
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('money')
       ? [{ href: '/money', label: 'Money', icon: Wallet }]

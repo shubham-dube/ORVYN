@@ -110,3 +110,36 @@ export function thisDevice(): DeviceInfo {
     appVersion: '0.1.0',
   };
 }
+
+/** Upload a file's bytes (files module, ADR-0011); returns its id. Refreshes the session once on 401. */
+export async function uploadFile(
+  file: Blob & { name?: string },
+  purpose: 'drop' | 'money' = 'drop',
+): Promise<{ id: string; name: string }> {
+  const send = () =>
+    fetch(`${API_URL}/files`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        'x-file-name': encodeURIComponent(file.name ?? 'file'),
+        'x-file-purpose': purpose,
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: file,
+    });
+  let res = await send();
+  if (res.status === 401 && (await refreshSession())) res = await send();
+  const data = (await res.json().catch(() => null)) as {
+    id: string;
+    name: string;
+    error?: { code?: string; message?: string };
+  } | null;
+  if (!res.ok)
+    throw new ApiError(
+      res.status,
+      data?.error?.code ?? 'error',
+      data?.error?.message ?? 'The upload failed.',
+    );
+  return data!;
+}
