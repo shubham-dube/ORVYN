@@ -74,6 +74,7 @@ void main() {
       await settle(tester);
     }
     expect(find.text('Uber'), findsWidgets);
+    await tapIt(tester, find.bySemanticsLabel('Search transactions'));
     await tester.enterText(find.byKey(const Key('money-search')), 'swig');
     await settle(tester);
     expect(find.textContaining('1 found · ₹240 spent'), findsOneWidget);

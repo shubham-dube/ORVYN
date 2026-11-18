@@ -33,6 +33,7 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
   String? _accountFilter;
   String? _directionFilter;
   bool _allTime = false;
+  bool _searchOpen = false;
 
   bool get _filtering =>
       _search.text.trim().isNotEmpty ||
@@ -93,8 +94,22 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
         shownOut += t.amountMinor;
       }
     }
-    final thisMonth = monthKey(ref.watch(clockProvider)());
+    final now = ref.watch(clockProvider)();
+    final thisMonth = monthKey(now);
     CategoryItem? cat(String? id) => cats.where((c) => c.id == id).firstOrNull;
+    final filters =
+        (_categoryFilter != null ? 1 : 0) +
+        (_accountFilter != null ? 1 : 0) +
+        (_directionFilter != null ? 1 : 0) +
+        (_allTime ? 1 : 0);
+    final days = _month == thisMonth
+        ? now.day
+        : DateUtils.getDaysInMonth(int.parse(_month.substring(0, 4)), int.parse(_month.substring(5, 7)));
+    // the list, by day: "Today · 16 Nov", then the rows, each day with what it cost
+    final byDay = <String, List<TxItem>>{};
+    for (final t in inMonth) {
+      byDay.putIfAbsent(dayKeyOf(t.occurredAt), () => []).add(t);
+    }
     return OrvModule(
       module: 'money',
       child: Builder(
@@ -106,69 +121,83 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
               children: [
-                PageTitle('Money', overline: loc.formatMonthYear(DateTime.parse('$_month-01'))),
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    IconButton(
-                      tooltip: 'Previous month',
-                      icon: Icon(LucideIcons.chevronLeft, color: l.c.muted),
-                      onPressed: () => setState(() => _month = _shift(-1)),
+                    Expanded(child: PageTitle('Money', overline: loc.formatMonthYear(DateTime.parse('$_month-01')))),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: l.c.glassStrong,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: l.c.edge),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Previous month',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(LucideIcons.chevronLeft, size: 18, color: l.c.muted),
+                              onPressed: () => setState(() => _month = _shift(-1)),
+                            ),
+                            if (_month != thisMonth)
+                              GestureDetector(
+                                onTap: () => setState(() => _month = thisMonth),
+                                child: Text('Now', style: OrvText.muted(l).copyWith(color: l.accent)),
+                              ),
+                            IconButton(
+                              tooltip: 'Next month',
+                              visualDensity: VisualDensity.compact,
+                              icon: Icon(LucideIcons.chevronRight, size: 18, color: l.c.muted),
+                              onPressed: _month.compareTo(thisMonth) >= 0
+                                  ? null
+                                  : () => setState(() => _month = _shift(1)),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    TextButton(
-                      onPressed: () => setState(() => _month = thisMonth),
-                      child: Text('This month', style: OrvText.muted(l)),
-                    ),
-                    IconButton(
-                      tooltip: 'Next month',
-                      icon: Icon(LucideIcons.chevronRight, color: l.c.muted),
-                      onPressed: _month.compareTo(thisMonth) >= 0 ? null : () => setState(() => _month = _shift(1)),
-                    ),
-                    const Spacer(),
-                    PopupMenuButton<String>(
-                      tooltip: 'More',
-                      icon: Icon(LucideIcons.ellipsis, color: l.c.muted),
-                      onSelected: (v) async {
-                        if (v == 'copy') {
-                          final toaster = Toaster.of(context);
-                          await Clipboard.setData(ClipboardData(text: transactionsCsv(inMonth, cats, accounts)));
-                          toaster.show('Copied ${inMonth.length} rows', body: 'Paste them into Sheets or Excel.');
-                        } else if (context.mounted) {
-                          await showGlassSheet<void>(context, (_) => const ManageSheet());
-                        }
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'copy', child: Text('Copy as spreadsheet text')),
-                        PopupMenuItem(value: 'manage', child: Text('Accounts, categories, repeating')),
-                      ],
-                    ),
-                    OrvButton(
-                      key: const Key('money-open-add'),
-                      label: 'Add',
-                      small: true,
-                      variant: ButtonVariant.primary,
-                      icon: LucideIcons.plus,
-                      onPressed: () => showAddTransaction(context),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: PopupMenuButton<String>(
+                        tooltip: 'More',
+                        icon: Icon(LucideIcons.ellipsisVertical, color: l.c.muted),
+                        onSelected: (v) async {
+                          if (v == 'copy') {
+                            final toaster = Toaster.of(context);
+                            await Clipboard.setData(ClipboardData(text: transactionsCsv(inMonth, cats, accounts)));
+                            toaster.show('Copied ${inMonth.length} rows', body: 'Paste them into Sheets or Excel.');
+                          } else if (context.mounted) {
+                            await showGlassSheet<void>(context, (_) => const ManageSheet());
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'copy', child: Text('Copy as spreadsheet text')),
+                          PopupMenuItem(value: 'manage', child: Text('Accounts, categories, repeating')),
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 const _QuickEntry(),
-                const SizedBox(height: 12),
                 const _CaptureCard(),
                 if (fresh.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Glass(
-                    padding: const EdgeInsets.all(14),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Row(
                           children: [
+                            Icon(LucideIcons.sparkles, size: 15, color: l.accent),
+                            const SizedBox(width: 6),
                             Expanded(child: Text('New · ${fresh.length}', style: OrvText.label(l))),
-                            OrvButton(
-                              label: 'All fine',
-                              small: true,
-                              variant: ButtonVariant.ghost,
-                              icon: LucideIcons.check,
+                            TextButton.icon(
+                              icon: const Icon(LucideIcons.checkCheck, size: 15),
+                              label: const Text('All fine'),
                               onPressed: () async {
                                 for (final t in fresh) {
                                   await ref.read(moneyActionsProvider).update(t.id, {'reviewed': true});
@@ -183,89 +212,101 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                   ),
                 ],
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _Stat(label: 'Spent', value: formatMoney(s.spent), semantics: 'Spent this month'),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _Stat(label: 'Came in', value: formatMoney(s.earned)),
-                    ),
-                  ],
-                ),
+                _Hero(spent: s.spent, earned: s.earned, days: days, byCategory: s.byCategory, cat: cat),
                 const SizedBox(height: 12),
                 _Budgets(month: _month, txs: txs, budgets: budgets, cats: cats),
-                const SizedBox(height: 12),
-                if (s.byCategory.isNotEmpty)
-                  Glass(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text('By category', style: OrvText.label(l)),
-                        const SizedBox(height: 6),
-                        for (final (id, minor) in s.byCategory)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 3),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                    color: labelColour(l, cat(id)?.colour),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(cat(id)?.name ?? 'Uncategorised', style: OrvText.body(l))),
-                                Text(formatMoney(minor), style: OrvText.muted(l)),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 18),
                 Row(
                   children: [
                     Expanded(
                       child: Text(
-                        _allTime ? 'All time' : loc.formatMonthYear(DateTime.parse('$_month-01')),
-                        style: OrvText.label(l),
+                        _allTime ? 'All time' : 'Transactions',
+                        style: OrvText.heading(l).copyWith(fontSize: 17),
                       ),
                     ),
-                    if (_filtering)
-                      Text(
-                        '${inMonth.length} found · ${formatMoney(shownOut)} spent${shownIn > 0 ? ' · ${formatMoney(shownIn)} came in' : ''}',
-                        style: OrvText.muted(l).copyWith(fontSize: 12),
+                    _ToolIcon(
+                      icon: _searchOpen ? LucideIcons.x : LucideIcons.search,
+                      label: _searchOpen ? 'Close search' : 'Search transactions',
+                      on: _searchOpen,
+                      onTap: () => setState(() {
+                        if (_searchOpen) _search.clear();
+                        _searchOpen = !_searchOpen;
+                      }),
+                    ),
+                    _ToolIcon(
+                      icon: LucideIcons.slidersHorizontal,
+                      label: 'Filters',
+                      on: filters > 0,
+                      badge: filters,
+                      onTap: () => showGlassSheet<void>(
+                        context,
+                        (_) => _MoneyFilterSheet(
+                          cats: cats.where((c) => !c.archived).toList(),
+                          accounts: accounts.where((a) => a.data['archived'] != true).toList(),
+                          value: (
+                            category: _categoryFilter,
+                            account: _accountFilter,
+                            direction: _directionFilter,
+                            allTime: _allTime,
+                          ),
+                          onChanged: (f) => setState(() {
+                            _categoryFilter = f.category;
+                            _accountFilter = f.account;
+                            _directionFilter = f.direction;
+                            _allTime = f.allTime;
+                          }),
+                        ),
                       ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                _FilterBar(
-                  search: _search,
-                  cats: cats.where((c) => !c.archived).toList(),
-                  accounts: accounts.where((a) => a.data['archived'] != true).toList(),
-                  category: _categoryFilter,
-                  account: _accountFilter,
-                  direction: _directionFilter,
-                  allTime: _allTime,
-                  dirty: _filtering,
-                  onChanged: (f) => setState(() {
-                    _categoryFilter = f.category;
-                    _accountFilter = f.account;
-                    _directionFilter = f.direction;
-                    _allTime = f.allTime;
-                  }),
-                  onSearch: () => setState(() {}),
-                  onClear: () => setState(() {
-                    _search.clear();
-                    _categoryFilter = _accountFilter = _directionFilter = null;
-                    _allTime = false;
-                  }),
-                ),
+                if (_searchOpen)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: TextField(
+                      key: const Key('money-search'),
+                      controller: _search,
+                      autofocus: true,
+                      onChanged: (_) => setState(() {}),
+                      style: OrvText.body(l),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: l.c.field,
+                        prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                        hintText: 'Merchant, note or amount',
+                        hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: l.c.edge),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: l.c.edge),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_filtering)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${inMonth.length} found · ${formatMoney(shownOut)} spent${shownIn > 0 ? ' · ${formatMoney(shownIn)} came in' : ''}',
+                          style: OrvText.muted(l).copyWith(fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => setState(() {
+                          _search.clear();
+                          _searchOpen = false;
+                          _categoryFilter = _accountFilter = _directionFilter = null;
+                          _allTime = false;
+                        }),
+                        child: const Text('Clear'),
+                      ),
+                    ],
+                  ),
                 if (inMonth.isEmpty && _filtering)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -279,7 +320,32 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                       style: OrvText.muted(l),
                     ),
                   ),
-                for (final t in inMonth) _TxRow(tx: t, category: cat(t.categoryId)),
+                for (final list in byDay.values) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(2, 12, 2, 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _dayHeading(list.first.occurredAt, now, loc),
+                            style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600, fontSize: 12.5),
+                          ),
+                        ),
+                        Text(
+                          formatMoney(list.where((t) => !t.credit && !t.transfer).fold(0, (a, t) => a + t.amountMinor)),
+                          style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Glass(
+                    blur: false,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    child: Column(
+                      children: [for (final t in list) _TxRow(tx: t, category: cat(t.categoryId))],
+                    ),
+                  ),
+                ],
               ],
             ),
           );
@@ -289,24 +355,271 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
   }
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value, this.semantics});
+String dayKeyOf(DateTime t) => '${t.year}-${t.month}-${t.day}';
+
+/// "Today · 16 Nov", "Yesterday · 15 Nov", "Fri · 13 Nov".
+String _dayHeading(DateTime t, DateTime now, MaterialLocalizations loc) {
+  final d = DateTime(t.year, t.month, t.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = today.difference(d).inDays;
+  final md = loc.formatShortMonthDay(t);
+  if (diff == 0) return 'Today · $md';
+  if (diff == 1) return 'Yesterday · $md';
+  const wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return '${wd[t.weekday - 1]} · $md';
+}
+
+class _ToolIcon extends StatelessWidget {
+  const _ToolIcon({required this.icon, required this.label, required this.on, required this.onTap, this.badge = 0});
+  final IconData icon;
   final String label;
-  final String value;
-  final String? semantics;
+  final bool on;
+  final VoidCallback onTap;
+  final int badge;
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
+    return Semantics(
+      container: true,
+      button: true,
+      selected: on,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: on ? l.accent.withValues(alpha: 0.14) : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 18, color: on ? l.accent : l.c.muted),
+            ),
+            if (badge > 0)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 15,
+                  height: 15,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(gradient: l.accentGradient, shape: BoxShape.circle),
+                  child: Text(
+                    '$badge',
+                    style: const TextStyle(
+                      fontFamily: fontFamily,
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The month in one card: what went out (big), what came in, the daily pace, and where it went as one bar.
+class _Hero extends StatelessWidget {
+  const _Hero({
+    required this.spent,
+    required this.earned,
+    required this.days,
+    required this.byCategory,
+    required this.cat,
+  });
+  final int spent;
+  final int earned;
+  final int days;
+  final List<(String?, int)> byCategory;
+  final CategoryItem? Function(String?) cat;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final top = byCategory.take(4).toList();
+    final rest = byCategory.skip(4).fold(0, (a, e) => a + e.$2);
+    final total = byCategory.fold(0, (a, e) => a + e.$2);
     return Glass(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Spent', style: OrvText.label(l)),
+          const SizedBox(height: 2),
+          Semantics(
+            label: 'Spent this month: ${formatMoney(spent)}',
+            excludeSemantics: true,
+            child: Text(formatMoney(spent), style: OrvText.display(l).copyWith(fontSize: 38)),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 14,
+            children: [
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '+${formatMoney(earned)} ',
+                      style: TextStyle(color: l.c.success, fontWeight: FontWeight.w600),
+                    ),
+                    const TextSpan(text: 'came in'),
+                  ],
+                ),
+                style: OrvText.muted(l),
+              ),
+              if (spent > 0 && days > 0)
+                Text('${formatMoney((spent ~/ days ~/ 100) * 100)} a day', style: OrvText.muted(l)),
+            ],
+          ),
+          if (total > 0) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: SizedBox(
+                height: 10,
+                child: Row(
+                  children: [
+                    for (final (id, minor) in top)
+                      Expanded(
+                        flex: (minor * 1000 ~/ total).clamp(1, 1000),
+                        child: Container(color: labelColour(l, cat(id)?.colour)),
+                      ),
+                    if (rest > 0)
+                      Expanded(
+                        flex: (rest * 1000 ~/ total).clamp(1, 1000),
+                        child: Container(color: l.c.track),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (final (id, minor) in top)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(color: labelColour(l, cat(id)?.colour), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(cat(id)?.name ?? 'Uncategorised', style: OrvText.body(l).copyWith(fontSize: 14)),
+                    ),
+                    Text('${(minor * 100 / total).round()}%  ', style: OrvText.muted(l).copyWith(fontSize: 12)),
+                    Text(
+                      formatMoney(minor),
+                      style: OrvText.body(l).copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+typedef _Filters = ({String? category, String? account, String? direction, bool allTime});
+
+/// Which transactions: category, account, in or out, and any month — choices in a sheet, applied as you tap.
+class _MoneyFilterSheet extends StatefulWidget {
+  const _MoneyFilterSheet({required this.cats, required this.accounts, required this.value, required this.onChanged});
+  final List<CategoryItem> cats;
+  final List<AccountItem> accounts;
+  final _Filters value;
+  final ValueChanged<_Filters> onChanged;
+  @override
+  State<_MoneyFilterSheet> createState() => _MoneyFilterSheetState();
+}
+
+class _MoneyFilterSheetState extends State<_MoneyFilterSheet> {
+  late _Filters _f = widget.value;
+  void _set(_Filters f) {
+    setState(() => _f = f);
+    widget.onChanged(f);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    Widget group<T>(String label, T value, List<(T, String)> options, ValueChanged<T> pick) => Padding(
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: OrvText.label(l)),
-          Semantics(
-            label: semantics == null ? null : '$semantics: $value',
-            excludeSemantics: semantics != null,
-            child: Text(value, style: OrvText.title(l)),
+          SectionLabel(label),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final (v, t) in options)
+                ChoiceChip(
+                  label: Text(t),
+                  selected: value == v,
+                  showCheckmark: false,
+                  onSelected: (_) => pick(v),
+                  selectedColor: l.accent.withValues(alpha: 0.16),
+                  side: BorderSide(color: value == v ? l.accent : l.c.edge),
+                  backgroundColor: Colors.transparent,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Filter transactions', style: OrvText.heading(l)),
+          const SizedBox(height: 10),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  group<String?>('Money', _f.direction, const [
+                    (null, 'Spent & came in'),
+                    ('debit', 'Spent'),
+                    ('credit', 'Came in'),
+                  ], (v) => _set((category: _f.category, account: _f.account, direction: v, allTime: _f.allTime))),
+                  group<bool>('Period', _f.allTime, const [
+                    (false, 'This month'),
+                    (true, 'All time'),
+                  ], (v) => _set((category: _f.category, account: _f.account, direction: _f.direction, allTime: v))),
+                  group<String?>('Category', _f.category, [
+                    (null, 'All categories'),
+                    ('none', 'Uncategorised'),
+                    for (final c in widget.cats) (c.id, c.name),
+                  ], (v) => _set((category: v, account: _f.account, direction: _f.direction, allTime: _f.allTime))),
+                  if (widget.accounts.isNotEmpty)
+                    group<String?>('Account', _f.account, [
+                      (null, 'All accounts'),
+                      for (final a in widget.accounts) (a.id, a.name),
+                    ], (v) => _set((category: _f.category, account: v, direction: _f.direction, allTime: _f.allTime))),
+                ],
+              ),
+            ),
+          ),
+          OrvButton(
+            label: 'Show transactions',
+            variant: ButtonVariant.primary,
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -324,116 +637,6 @@ String? _dayLabel(String? date, DateTime now) {
   const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return '${d.day} ${m[d.month - 1]}';
 }
-
-typedef _Filters = ({String? category, String? account, String? direction, bool allTime});
-
-class _FilterBar extends StatelessWidget {
-  const _FilterBar({
-    required this.search,
-    required this.cats,
-    required this.accounts,
-    required this.category,
-    required this.account,
-    required this.direction,
-    required this.allTime,
-    required this.dirty,
-    required this.onChanged,
-    required this.onSearch,
-    required this.onClear,
-  });
-  final TextEditingController search;
-  final List<CategoryItem> cats;
-  final List<AccountItem> accounts;
-  final String? category;
-  final String? account;
-  final String? direction;
-  final bool allTime;
-  final bool dirty;
-  final ValueChanged<_Filters> onChanged;
-  final VoidCallback onSearch;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    _Filters f({Object? cat = _keep, Object? acct = _keep, Object? dir = _keep, bool? all}) => (
-      category: cat == _keep ? category : cat as String?,
-      account: acct == _keep ? account : acct as String?,
-      direction: dir == _keep ? direction : dir as String?,
-      allTime: all ?? allTime,
-    );
-    Widget menu(String label, String? value, List<(String?, String)> options, ValueChanged<String?> pick) =>
-        PopupMenuButton<String?>(
-          tooltip: label,
-          onSelected: pick,
-          itemBuilder: (_) => [for (final (v, t) in options) PopupMenuItem<String?>(value: v, child: Text(t))],
-          child: Chip(
-            label: Text(options.where((o) => o.$1 == value).firstOrNull?.$2 ?? label),
-            side: BorderSide(color: value == null ? l.c.edge : l.accent),
-            backgroundColor: value == null ? Colors.transparent : l.accent.withValues(alpha: 0.12),
-          ),
-        );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          key: const Key('money-search'),
-          controller: search,
-          onChanged: (_) => onSearch(),
-          style: OrvText.body(l),
-          decoration: InputDecoration(
-            isDense: true,
-            prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-            hintText: 'Search merchant, note, amount',
-            hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: l.c.edge),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: l.c.edge),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 0,
-          children: [
-            menu('All categories', category, [
-              (null, 'All categories'),
-              ('none', 'Uncategorised'),
-              for (final c in cats) (c.id, c.name),
-            ], (v) => onChanged(f(cat: v))),
-            if (accounts.isNotEmpty)
-              menu('All accounts', account, [
-                (null, 'All accounts'),
-                for (final a in accounts) (a.id, a.name),
-              ], (v) => onChanged(f(acct: v))),
-            menu('Spent & came in', direction, const [
-              (null, 'Spent & came in'),
-              ('debit', 'Spent'),
-              ('credit', 'Came in'),
-            ], (v) => onChanged(f(dir: v))),
-            FilterChip(
-              label: const Text('All time'),
-              selected: allTime,
-              showCheckmark: false,
-              onSelected: (v) => onChanged(f(all: v)),
-              selectedColor: l.accent.withValues(alpha: 0.16),
-              side: BorderSide(color: allTime ? l.accent : l.c.edge),
-              backgroundColor: Colors.transparent,
-            ),
-            if (dirty) ActionChip(label: const Text('Clear'), onPressed: onClear, backgroundColor: Colors.transparent),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-const Object _keep = Object();
 
 class _QuickEntry extends ConsumerStatefulWidget {
   const _QuickEntry();
@@ -506,7 +709,20 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
                   ),
                 ),
               ),
-              OrvButton(label: 'Add', small: true, variant: ButtonVariant.primary, onPressed: p == null ? null : _add),
+              if (_c.text.trim().isEmpty)
+                IconButton(
+                  key: const Key('money-open-add'),
+                  tooltip: 'Add with details',
+                  icon: Icon(LucideIcons.listPlus, color: l.accent, size: 20),
+                  onPressed: () => showAddTransaction(context),
+                )
+              else
+                OrvButton(
+                  label: 'Add',
+                  small: true,
+                  variant: ButtonVariant.primary,
+                  onPressed: p == null ? null : _add,
+                ),
             ],
           ),
           if (p != null)
@@ -562,32 +778,32 @@ class _CaptureCardState extends ConsumerState<_CaptureCard> with WidgetsBindingO
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
-    if (_on == null) return const SizedBox.shrink();
-    return Glass(
-      blur: false,
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          Icon(_on! ? LucideIcons.shieldCheck : LucideIcons.messageSquareText, color: l.accent),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _on! ? 'Reading bank & UPI messages' : 'Fill Money automatically',
-                  style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  _on! ? 'Only payment messages, read on this phone. The messages themselves never leave it.' : 'Let ORVYN read payment notifications from your bank SMS, GPay, PhonePe and Paytm — on this phone only.',
-                  style: OrvText.muted(l),
-                ),
-              ],
+    // once on, it stays out of the way (Settings shows it); off, it is one quiet line
+    if (_on == null || _on!) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Glass(
+        blur: false,
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(
+          children: [
+            Icon(LucideIcons.messageSquareText, color: l.accent, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Fill Money from bank & UPI alerts',
+                    style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  Text('Read on this phone only.', style: OrvText.muted(l).copyWith(fontSize: 12)),
+                ],
+              ),
             ),
-          ),
-          if (!_on!)
             OrvButton(label: 'Turn on', small: true, onPressed: () => ref.read(captureChannelProvider).openSettings()),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -603,6 +819,32 @@ class _Budgets extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = context.orv;
     final progress = budgetProgress(budgets, txs, month);
+    if (progress.isEmpty) {
+      return Semantics(
+        button: true,
+        label: 'Set a monthly budget',
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+          onTap: () => showGlassSheet<void>(context, (_) => _BudgetSheet(cats: cats, budgets: budgets)),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+              border: Border.all(color: l.c.hairline),
+            ),
+            child: Row(
+              children: [
+                Icon(LucideIcons.target, size: 18, color: l.accent),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Set a monthly budget', style: OrvText.body(l).copyWith(fontSize: 14))),
+                Icon(LucideIcons.chevronRight, size: 16, color: l.c.muted),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Glass(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -768,7 +1010,7 @@ class _TxRow extends ConsumerWidget {
                   Text(name, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w500)),
                   Text(
                     '${category?.name ?? 'Uncategorised'} · ${tx.source == 'manual' ? 'typed' : tx.source} · '
-                    '${loc.formatShortMonthDay(tx.occurredAt)}',
+                    '${fresh ? loc.formatShortMonthDay(tx.occurredAt) : loc.formatTimeOfDay(TimeOfDay.fromDateTime(tx.occurredAt))}',
                     style: OrvText.muted(l).copyWith(fontSize: 12),
                   ),
                 ],
