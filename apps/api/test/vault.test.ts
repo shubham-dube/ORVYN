@@ -51,7 +51,7 @@ describe('Vault: the server stores only what it cannot read (spec 0004 AC2, AC3)
 
   it('keys and items go up as ciphertext, come back on another device, and open with the passphrase', async () => {
     keys = await createVault(PASSPHRASE, { ops: 1, memKiB: 256 });
-    expect((await push(me, 'vault.keys', me.user.id, keys.keys)).body.rejected).toEqual([]);
+    expect((await push(me, 'vault.keys', me.user.id, { ...keys.keys })).body.rejected).toEqual([]);
     const blob = await encryptItem(keys.vaultKey, item, { kind: 'login', title: 'Bank', password: SECRET });
     expect((await push(me, 'vault.item', item, { blob })).body.rejected).toEqual([]);
 
@@ -74,7 +74,9 @@ describe('Vault: the server stores only what it cannot read (spec 0004 AC2, AC3)
   });
 
   it('only accepts the shapes it should: own id for keys, ciphertext for items, no deleting the keys', async () => {
-    expect((await push(me, 'vault.keys', v7(), keys.keys)).body.rejected[0]?.reason).toMatch(/your own id/);
+    expect((await push(me, 'vault.keys', v7(), { ...keys.keys })).body.rejected[0]?.reason).toMatch(
+      /your own id/,
+    );
     expect(
       (await push(me, 'vault.item', v7(), { blob: JSON.stringify({ title: 'plain' }) })).body.rejected,
     ).toHaveLength(1);
@@ -97,11 +99,11 @@ describe('Vault: the server stores only what it cannot read (spec 0004 AC2, AC3)
   it('is private to its owner and needs the Vault switched on', async () => {
     expect(await pull(friend)).toHaveLength(0);
     const own = await createVault('friend pass', { ops: 1, memKiB: 256 });
-    expect((await push(friend, 'vault.keys', friend.user.id, own.keys)).body.rejected).toEqual([]);
+    expect((await push(friend, 'vault.keys', friend.user.id, { ...own.keys })).body.rejected).toEqual([]);
     expect(
       (await pull(me)).filter((c) => c.entity === 'vault.keys').every((c) => c.entityId === me.user.id),
     ).toBe(true);
-    expect((await push(guest, 'vault.keys', guest.user.id, own.keys)).body.rejected[0]?.reason).toBe(
+    expect((await push(guest, 'vault.keys', guest.user.id, { ...own.keys })).body.rejected[0]?.reason).toBe(
       'feature_not_enabled',
     );
     // someone else's item id can't be overwritten
