@@ -145,3 +145,66 @@ it("desktop notification buttons: the reminder's own first two, else Open/Dismis
     notificationButtons({ actions: [{ id: 'see', label: 'See', open: '/today' }] }).map((b) => b.title),
   ).toEqual(['Open', 'Dismiss']);
 });
+
+describe('quick capture from the popup', () => {
+  let n = 0;
+  const o = {
+    stamp: () => `00000000000000${n}:00000:x`,
+    id: () => `00000000-0000-4000-8000-00000000000${n++ % 10}`,
+    today: '2026-11-18',
+  };
+  it('a parsed task, with an unknown @project made on the way; no day named → today', async () => {
+    const { captureMutations } = await import('../src/core');
+    const m = captureMutations(
+      'today',
+      'buy milk @Errands',
+      {
+        title: 'Buy milk',
+        dueDate: null,
+        dueAt: null,
+        durationMin: null,
+        rrule: null,
+        priority: 0,
+        tags: [],
+        projectId: null,
+        projectName: 'Errands',
+      },
+      o,
+    );
+    expect(m.map((x) => x.entity)).toEqual(['today.project', 'today.task']);
+    expect(m[1]!.fields).toMatchObject({
+      title: 'Buy milk',
+      dueDate: '2026-11-18',
+      projectId: m[0]!.entityId,
+      source: 'extension',
+    });
+  });
+  it('a timed task keeps its moment; a link dropped is a link', async () => {
+    const { captureMutations } = await import('../src/core');
+    const [t] = captureMutations(
+      'today',
+      'x',
+      {
+        title: 'Call mom',
+        dueDate: null,
+        dueAt: '2026-11-19T12:30:00.000Z',
+        durationMin: null,
+        rrule: null,
+        priority: 2,
+        tags: [],
+        projectId: null,
+        projectName: null,
+      },
+      o,
+    );
+    expect(t!.fields).toMatchObject({ dueAt: '2026-11-19T12:30:00.000Z', dueDate: null, priority: 2 });
+    const [d] = captureMutations('drop', ' https://example.test/a ', null, o);
+    expect(d!.fields).toEqual({
+      kind: 'link',
+      text: '',
+      url: 'https://example.test/a',
+      source: 'extension',
+      status: 'new',
+    });
+  });
+});

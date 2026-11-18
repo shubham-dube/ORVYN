@@ -90,6 +90,8 @@ function Popup() {
         </a>
       </header>
 
+      <Capture s={s} onDone={setS} />
+
       <section className="halo m-4 p-3" aria-label="Notifications">
         <div className="mb-2 flex items-center justify-between px-1">
           <h2 className="flex items-center gap-2 text-[13px] font-semibold">
@@ -194,6 +196,60 @@ function Popup() {
         </button>
       </footer>
     </Shell>
+  );
+}
+
+/** Quick capture from any page: to Today (read like everywhere else) or to Drop (the AI suggests what it is). */
+function Capture({ s, onDone }: { s: Status; onDone(s: Status): void }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState<null | 'quickAdd' | 'drop'>(null);
+  const can = (k: string) => s.me?.role === 'owner' || !!s.me?.entitlements.includes(k as never);
+  if (!can('today') && !can('drop')) return null;
+  const go = async (type: 'quickAdd' | 'drop') => {
+    if (!text.trim()) return;
+    setBusy(type);
+    const r = await ask({ type, text });
+    setBusy(null);
+    onDone(r);
+    if (!r.error) setText('');
+  };
+  return (
+    <section className="halo mx-4 mt-4 p-3" aria-label="Capture">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && void go(can('today') ? 'quickAdd' : 'drop')}
+        aria-label="Add or drop"
+        placeholder="“call mom tomorrow 6pm”, “spent 240 on lunch”, a link…"
+        maxLength={500}
+        className="h-10 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px] outline-none focus:border-orv-accent"
+      />
+      <div className="mt-2 flex gap-2">
+        {can('today') ? (
+          <PrimaryButton onClick={() => void go('quickAdd')} busy={busy === 'quickAdd'}>
+            Add to Today
+          </PrimaryButton>
+        ) : null}
+        {can('drop') ? (
+          <button
+            onClick={() => void go('drop')}
+            disabled={busy !== null}
+            className="h-9 flex-1 rounded-full border border-orv-edge text-[13px] font-semibold hover:bg-orv-track"
+          >
+            {busy === 'drop' ? 'Dropping…' : 'Drop'}
+          </button>
+        ) : null}
+      </div>
+      {s.saved ? (
+        <p role="status" className="mt-2 text-[12px] text-orv-success">
+          {s.saved}
+        </p>
+      ) : s.error && s.error !== 'cancelled' ? (
+        <p role="alert" className="mt-2 text-[12px] text-orv-danger">
+          That didn’t save: {s.error}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

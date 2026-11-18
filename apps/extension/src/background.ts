@@ -1,8 +1,9 @@
 /// <reference types="chrome" />
-import type { NotificationView, ServerMessage } from '@orvyn/contracts';
+import { Hlc, type NotificationView, type ServerMessage } from '@orvyn/contracts';
 import { API_URL, VERSION, WEB_URL } from './config';
 import {
   badgeText,
+  captureMutations,
   Client,
   codeFromCallback,
   connectUrl,
@@ -156,8 +157,34 @@ async function render(): Promise<void> {
   await chrome.action.setTitle({ title: n ? `ORVYN — ${n} new` : 'ORVYN' });
 }
 
-async function status(error?: string): Promise<Status> {
-  return { connected: await client.isConnected(), me: await client.me(), live, notifications, error };
+async function status(error?: string, saved?: string): Promise<Status> {
+  return { connected: await client.isConnected(), me: await client.me(), live, notifications, error, saved };
+}
+
+const clock = new Hlc(`x${crypto.randomUUID().replace(/-/g, '').slice(0, 10)}`);
+const localDay = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+/** The popup's field: to Today (read by the same parser as everywhere, AI only for what it can't read) or to Drop. */
+async function capture(target: 'today' | 'drop', text: string): Promise<string> {
+  if (!text.trim()) throw new Error('Type something first');
+  const parsed =
+    target === 'today'
+      ? await client.call<Parameters<typeof captureMutations>[2]>('POST', '/today/parse', { text, ai: true })
+      : null;
+  const mutations = captureMutations(target, text, parsed, {
+    stamp: () => clock.tick(),
+    id: () => crypto.randomUUID(),
+    today: localDay(),
+  });
+  const r = await client.call<{ rejected: { reason: string }[] }>('POST', '/sync/push', { mutations });
+  if (r.rejected.length)
+    throw new Error(r.rejected[0]!.reason === 'feature_not_enabled' ? 'not enabled for you' : 'not saved');
+  return target === 'today'
+    ? `Added to Today: ${parsed?.title ?? text}`
+    : 'Dropped — a suggestion is on its way';
 }
 
 // ------------------------------------------------------------------ wiring
@@ -171,6 +198,8 @@ chrome.runtime.onMessage.addListener((req: Request, _sender, reply) => {
       if (req.type === 'act') await act(req.id, req.action);
       if (req.type === 'test') await client.call('POST', '/notifications/test');
       if (req.type === 'status' && !ws) await startLive();
+      if (req.type === 'quickAdd') return await status(undefined, await capture('today', req.text));
+      if (req.type === 'drop') return await status(undefined, await capture('drop', req.text));
       return await status();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'failed';

@@ -24,7 +24,7 @@ from the messages the bank and UPI apps already send.
 
 ## Scope
 
-**In:** Drop items (text, voice transcribed on the device, photo, file, link) with AI proposals and one-tap
+**In:** Drop items (text, voice turned into words by the device's speech recognition, photo, file, link) with AI proposals and one-tap
 confirm/correct, share sheet on Android, Drop from the Orb / command bar / extension popup; Money accounts,
 transactions, categories (editable defaults), budgets (monthly, per category or overall), automatic capture on
 Android from bank SMS and UPI/card notifications (notification access, on-device parsing), manual and
@@ -55,8 +55,8 @@ possible), bank account aggregation APIs.
 ## Decisions
 
 D18 banks and apps first; D19 $1/day AI cap; D20 captured transactions are added directly with easy undo; D21
-photos may be read by the AI, proposals still need a tap. Voice is transcribed **on the device** (Android speech
-recognition, the browser's speech recognition) — audio never reaches the server (no extra cost, better privacy).
+photos may be read by the AI, proposals still need a tap. Voice is turned into words by the device's own speech
+recognition (Android's recogniser, the browser's) — audio never reaches ORVYN's server (no extra cost).
 Currency: INR by default, each transaction keeps its own currency.
 
 ## Open questions

@@ -1,4 +1,4 @@
-import type { Me, NotificationView, SessionResponse } from '@orvyn/contracts';
+import type { Me, Mutation, NotificationView, SessionResponse } from '@orvyn/contracts';
 
 /** chrome.storage.local in the extension; a Map in tests. Holds only the refresh token and cached profile. */
 export interface Store {
@@ -179,7 +179,9 @@ export type Request =
   | { type: 'disconnect' }
   | { type: 'dismiss'; id: string }
   | { type: 'act'; id: string; action: string }
-  | { type: 'test' };
+  | { type: 'test' }
+  | { type: 'quickAdd'; text: string }
+  | { type: 'drop'; text: string };
 
 export interface Status {
   connected: boolean;
@@ -187,6 +189,8 @@ export interface Status {
   live: boolean;
   notifications: NotificationView[];
   error?: string;
+  /** what the last quick add / drop saved, to say so */
+  saved?: string;
 }
 
 /** Buttons for a desktop notification: the notification's own (Done, Snooze…) when it has them, else Open/Dismiss. */
@@ -198,4 +202,75 @@ export function notificationButtons(n: Pick<NotificationView, 'actions'>): { id:
         { id: 'orvyn:open', title: 'Open' },
         { id: 'orvyn:dismiss', title: 'Dismiss' },
       ];
+}
+
+/** What the popup's field turns into (step 2/3 quick capture): a Today task from the parser's reading, or a Drop item. */
+export function captureMutations(
+  target: 'today' | 'drop',
+  text: string,
+  parsed: {
+    title: string;
+    dueDate: string | null;
+    dueAt: string | null;
+    durationMin: number | null;
+    rrule: string | null;
+    priority: number;
+    tags: string[];
+    projectId: string | null;
+    projectName: string | null;
+  } | null,
+  o: { stamp(): string; id(): string; today: string },
+): Mutation[] {
+  const m = (entity: string, fields: Record<string, unknown>, entityId = o.id()): Mutation => ({
+    mutationId: o.id(),
+    entity,
+    entityId,
+    op: 'upsert',
+    fields,
+    hlc: o.stamp(),
+  });
+  const t = text.trim();
+  if (target === 'drop') {
+    const link = /^https?:\/\/\S+$/i.test(t);
+    return [
+      m('drop.item', {
+        kind: link ? 'link' : 'text',
+        text: link ? '' : t,
+        url: link ? t : null,
+        source: 'extension',
+        status: 'new',
+      }),
+    ];
+  }
+  const p = parsed ?? {
+    title: t,
+    dueDate: null,
+    dueAt: null,
+    durationMin: null,
+    rrule: null,
+    priority: 0,
+    tags: [],
+    projectId: null,
+    projectName: null,
+  };
+  const out: Mutation[] = [];
+  let projectId = p.projectId;
+  if (!projectId && p.projectName) {
+    projectId = o.id();
+    out.push(m('today.project', { name: p.projectName }, projectId));
+  }
+  out.push(
+    m('today.task', {
+      title: p.title,
+      dueAt: p.dueAt,
+      dueDate: p.dueAt ? null : (p.dueDate ?? o.today),
+      durationMin: p.durationMin,
+      rrule: p.rrule,
+      priority: p.priority,
+      tags: p.tags,
+      projectId,
+      source: 'extension',
+    }),
+  );
+  return out;
 }

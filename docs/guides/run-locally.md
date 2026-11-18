@@ -68,6 +68,18 @@ want to connect as a test user). Then Settings → Calendars → _Connect a Goog
 Changes arrive within 5 minutes locally (Google can only push changes instantly to a public https address, so in
 production they arrive within seconds). `CALENDAR_TOKEN_KEY` is optional locally.
 
+### Drop and Money (step 3)
+
+- **AI for Drop** (and for dates the task parser can't read): put ORVYN's own OpenRouter key in `.env` as
+  `OPENROUTER_API_KEY` (D13). The cap is `AI_DAILY_BUDGET_USD=1` (D19); when it's reached, Drop items wait and
+  continue the next day. To try everything without a key, set `AI_PROVIDER=fake` (simple rules stand in for the
+  model).
+- **Files** (photos, receipts) are stored encrypted under `apps/api/.data/files` locally; `FILES_MASTER_KEY` is
+  optional locally.
+- **Money on your phone**: open Money → _Turn on_ and allow ORVYN in Android's "Notification access". From then on,
+  payment messages from your bank SMS and GPay/PhonePe/Paytm become transactions (read on the phone only). For
+  older months, Money on the web → _Import statement_ (CSV from your bank's net banking).
+
 ### Real emails (optional)
 
 Add `RESEND_API_KEY` and a `MAIL_FROM` on a domain verified in Resend.
