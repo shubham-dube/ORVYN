@@ -289,6 +289,19 @@ importers:
         specifier: ^4.23.15
         version: 4.23.15
 
+  packages/money:
+    dependencies:
+      '@orvyn/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.16.22)(jiti@2.7.0)(postcss@8.5.33)(tsx@4.23.15)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)
+
   packages/sync-client:
     dependencies:
       '@orvyn/contracts':

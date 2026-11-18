@@ -1,0 +1,651 @@
+{
+  "$comment": "Made-up messages in each bank's and app's real format (no real data). Shared by the TypeScript and Dart readers (spec 0003 AC1). 'expect: null' = must be ignored. Categories are slugs from DEFAULT_CATEGORIES.",
+  "cases": [
+    {
+      "id": "hdfc-upi-sent",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Sent Rs.240.00\nFrom HDFC Bank A/C *1234\nTo SWIGGY\nOn 17/11/26\nRef 432112345678\nNot You?\nCall 18002586161/SMS BLOCK UPI to 7308080808",
+      "expect": {
+        "amountMinor": 24000,
+        "direction": "debit",
+        "rawMerchant": "SWIGGY",
+        "merchant": "Swiggy",
+        "category": "food",
+        "last4": "1234",
+        "refNo": "432112345678",
+        "institution": "HDFC",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "hdfc-upi-vpa",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Rs.89.00 debited from a/c **1234 on 17-11-26 to VPA spotify.upi@hdfcbank (UPI Ref No 432112345679). Not you? Call 18002586161 -HDFC Bank",
+      "expect": {
+        "amountMinor": 8900,
+        "direction": "debit",
+        "rawMerchant": "spotify.upi@hdfcbank",
+        "merchant": "Spotify",
+        "category": "subscriptions",
+        "last4": "1234",
+        "refNo": "432112345679",
+        "institution": "HDFC",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "hdfc-card-spent",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Spent Rs.1,499.00 From HDFC Bank Card x5678 At AMAZON PAY INDIA On 2026-11-17:14:22:10 Bal Rs.48,501.00 Not You? Call 18002586161/SMS BLOCK CC 5678 to 7308080808",
+      "expect": {
+        "amountMinor": 149900,
+        "direction": "debit",
+        "rawMerchant": "AMAZON PAY INDIA",
+        "merchant": "Amazon",
+        "category": "shopping",
+        "last4": "5678",
+        "refNo": null,
+        "institution": "HDFC",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "hdfc-received",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Money Received - INR 25,000.00 in your HDFC Bank A/c xx1234 on 16-11-26 by A/c linked to VPA rahul.k@okaxis (UPI Ref No 432198765432).",
+      "expect": {
+        "amountMinor": 2500000,
+        "direction": "credit",
+        "rawMerchant": "rahul.k@okaxis",
+        "merchant": "Rahul K",
+        "category": null,
+        "last4": "1234",
+        "refNo": "432198765432",
+        "institution": "HDFC",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "hdfc-salary",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Update! INR 85,000.00 deposited in HDFC Bank A/c XX1234 on 01-NOV-26 for NEFT Cr-CITI0000001-ACME TECHNOLOGIES PVT LTD-SALARY NOV 2026.Avl bal INR 1,12,345.00. Cheque deposits in A/C are subject to clearing",
+      "expect": {
+        "amountMinor": 8500000,
+        "direction": "credit",
+        "rawMerchant": "ACME TECHNOLOGIES PVT LTD",
+        "merchant": "Acme Technologies",
+        "category": "salary",
+        "last4": "1234",
+        "refNo": null,
+        "institution": "HDFC",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "hdfc-card-refund",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Refund of Rs.499.00 from MYNTRA credited to your HDFC Bank Credit Card ending 5678 on 16-11-26.",
+      "expect": {
+        "amountMinor": 49900,
+        "direction": "credit",
+        "rawMerchant": "MYNTRA",
+        "merchant": "Myntra",
+        "category": "refunds",
+        "last4": "5678",
+        "refNo": null,
+        "institution": "HDFC",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "icici-upi-debit",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "ICICI Bank Acct XX234 debited for Rs 350.00 on 17-Nov-26; Zomato credited. UPI:432145678901. Call 18002662 for dispute. SMS BLOCK 234 to 9215676766.",
+      "expect": {
+        "amountMinor": 35000,
+        "direction": "debit",
+        "rawMerchant": "Zomato",
+        "merchant": "Zomato",
+        "category": "food",
+        "last4": "234",
+        "refNo": "432145678901",
+        "institution": "ICICI",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "icici-card",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "INR 2,340.00 spent using ICICI Bank Card XX9876 on 17-Nov-26 on BIGBASKET. Avl Limit: INR 1,47,660.00. If not you, call 1800 2662/SMS BLOCK 9876 to 9215676766",
+      "expect": {
+        "amountMinor": 234000,
+        "direction": "debit",
+        "rawMerchant": "BIGBASKET",
+        "merchant": "BigBasket",
+        "category": "groceries",
+        "last4": "9876",
+        "refNo": null,
+        "institution": "ICICI",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "icici-credit",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Dear Customer, Acct XX234 is credited with Rs 1,200.00 on 16-Nov-26 from PRIYA SHARMA. UPI:432156789012-ICICI Bank.",
+      "expect": {
+        "amountMinor": 120000,
+        "direction": "credit",
+        "rawMerchant": "PRIYA SHARMA",
+        "merchant": "Priya Sharma",
+        "category": null,
+        "last4": "234",
+        "refNo": "432156789012",
+        "institution": "ICICI",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "icici-atm",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "ICICI Bank Acct XX234 debited with INR 2,000.00 on 15-Nov-26 at ATM WDL MG ROAD BANGALORE. Avl Bal INR 10,234.00.",
+      "expect": {
+        "amountMinor": 200000,
+        "direction": "debit",
+        "rawMerchant": "ATM WDL MG ROAD BANGALORE",
+        "merchant": "Cash withdrawal",
+        "category": null,
+        "last4": "234",
+        "refNo": null,
+        "institution": "ICICI",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "sbi-upi-debit",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Dear UPI user A/C X5678 debited by 120.0 on date 17Nov26 trf to CHAI POINT Refno 432167890123. If not u? call 1800111109. -SBI",
+      "expect": {
+        "amountMinor": 12000,
+        "direction": "debit",
+        "rawMerchant": "CHAI POINT",
+        "merchant": "Chai Point",
+        "category": "food",
+        "last4": "5678",
+        "refNo": "432167890123",
+        "institution": "SBI",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "sbi-upi-credit",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Dear SBI UPI User, ur A/cX5678 credited by Rs500 on 16Nov26 by  (Ref no 432178901234)",
+      "expect": {
+        "amountMinor": 50000,
+        "direction": "credit",
+        "rawMerchant": "",
+        "merchant": "",
+        "category": null,
+        "last4": "5678",
+        "refNo": "432178901234",
+        "institution": "SBI",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "sbi-imps",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Your A/C XXXXX5678 Debited INR 2,000.00 on 15/11/26 -Transferred to Mr. ROHAN VERMA. Avl Balance INR 18,234.50-SBI",
+      "expect": {
+        "amountMinor": 200000,
+        "direction": "debit",
+        "rawMerchant": "ROHAN VERMA",
+        "merchant": "Rohan Verma",
+        "category": null,
+        "last4": "5678",
+        "refNo": null,
+        "institution": "SBI",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "sbi-card",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Rs.799.00 spent on your SBI Credit Card ending 4321 at NETFLIX on 17/11/26. Trxn. not done by you? Report at https://sbicard.com/Dispute",
+      "expect": {
+        "amountMinor": 79900,
+        "direction": "debit",
+        "rawMerchant": "NETFLIX",
+        "merchant": "Netflix",
+        "category": "subscriptions",
+        "last4": "4321",
+        "refNo": null,
+        "institution": "SBI",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "axis-upi-p2m",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "INR 450.00 debited\nA/c no. XX7890\n17-11-26, 13:05:22\nUPI/P2M/432189012345/UBER INDIA\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expect": {
+        "amountMinor": 45000,
+        "direction": "debit",
+        "rawMerchant": "UBER INDIA",
+        "merchant": "Uber",
+        "category": "transport",
+        "last4": "7890",
+        "refNo": "432189012345",
+        "institution": "Axis",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "axis-card",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Spent\nCard no. XX1111\nINR 3,200\n17-11-26 20:15:44\nDECATHLON SPORTS\nAvl Lmt INR 96,800\nSMS BLOCK 1111 to 919951860002, if not you - Axis Bank",
+      "expect": {
+        "amountMinor": 320000,
+        "direction": "debit",
+        "rawMerchant": "DECATHLON SPORTS",
+        "merchant": "Decathlon",
+        "category": "shopping",
+        "last4": "1111",
+        "refNo": null,
+        "institution": "Axis",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "axis-upi-credit",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "INR 10,000.00 credited\nA/c no. XX7890\n16-11-26, 10:00:01\nUPI/P2A/432190123456/AMIT KUMAR\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expect": {
+        "amountMinor": 1000000,
+        "direction": "credit",
+        "rawMerchant": "AMIT KUMAR",
+        "merchant": "Amit Kumar",
+        "category": null,
+        "last4": "7890",
+        "refNo": "432190123456",
+        "institution": "Axis",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "axis-fuel",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "INR 2,000.00 debited\nA/c no. XX7890\n14-11-26, 08:12:09\nUPI/P2M/432191234567/INDIAN OIL CORPORATION\nNot you? SMS BLOCKUPI Cust ID to 919951860002\nAxis Bank",
+      "expect": {
+        "amountMinor": 200000,
+        "direction": "debit",
+        "rawMerchant": "INDIAN OIL CORPORATION",
+        "merchant": "Indian Oil",
+        "category": "fuel",
+        "last4": "7890",
+        "refNo": "432191234567",
+        "institution": "Axis",
+        "accountKind": "bank"
+      }
+    },
+    {
+      "id": "kotak-card",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Rs.1,250.00 spent on Kotak Credit Card x2222 at DOMINOS PIZZA on 17/11/2026. Avl limit Rs.48,750.00. Not you? Call 18602662666",
+      "expect": {
+        "amountMinor": 125000,
+        "direction": "debit",
+        "rawMerchant": "DOMINOS PIZZA",
+        "merchant": "Domino's",
+        "category": "food",
+        "last4": "2222",
+        "refNo": null,
+        "institution": "Kotak",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "amex-card",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Alert: You've spent INR 5,600.00 on your AMEX card ** 31009 at MAKEMYTRIP on 17 November 2026 at 09:15 PM IST.",
+      "expect": {
+        "amountMinor": 560000,
+        "direction": "debit",
+        "rawMerchant": "MAKEMYTRIP",
+        "merchant": "MakeMyTrip",
+        "category": "travel",
+        "last4": "31009",
+        "refNo": null,
+        "institution": "Amex",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "idfc-card",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Your IDFC FIRST Bank Credit Card ending 7777 has been used for INR 649.00 at APOLLO PHARMACY on 17/11/2026 18:40.",
+      "expect": {
+        "amountMinor": 64900,
+        "direction": "debit",
+        "rawMerchant": "APOLLO PHARMACY",
+        "merchant": "Apollo Pharmacy",
+        "category": "health",
+        "last4": "7777",
+        "refNo": null,
+        "institution": "IDFC",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "card-bill-paid",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Payment of Rs.12,345.00 has been received towards your HDFC Bank Credit Card ending 5678. Thank you.",
+      "expect": {
+        "amountMinor": 1234500,
+        "direction": "credit",
+        "rawMerchant": "",
+        "merchant": "Card bill payment",
+        "category": null,
+        "last4": "5678",
+        "refNo": null,
+        "institution": "HDFC",
+        "accountKind": "card"
+      }
+    },
+    {
+      "id": "gpay-paid",
+      "source": "notification",
+      "app": "gpay",
+      "title": "Payment successful",
+      "text": "You paid ₹240.00 to Swiggy",
+      "expect": {
+        "amountMinor": 24000,
+        "direction": "debit",
+        "rawMerchant": "Swiggy",
+        "merchant": "Swiggy",
+        "category": "food",
+        "last4": null,
+        "refNo": null,
+        "institution": "GPay",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "gpay-paid-short",
+      "source": "notification",
+      "app": "gpay",
+      "title": "Google Pay",
+      "text": "₹1,099 paid to Airtel",
+      "expect": {
+        "amountMinor": 109900,
+        "direction": "debit",
+        "rawMerchant": "Airtel",
+        "merchant": "Airtel",
+        "category": "bills",
+        "last4": null,
+        "refNo": null,
+        "institution": "GPay",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "gpay-received",
+      "source": "notification",
+      "app": "gpay",
+      "title": "Money received",
+      "text": "Rahul Kumar paid you ₹500",
+      "expect": {
+        "amountMinor": 50000,
+        "direction": "credit",
+        "rawMerchant": "Rahul Kumar",
+        "merchant": "Rahul Kumar",
+        "category": null,
+        "last4": null,
+        "refNo": null,
+        "institution": "GPay",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "phonepe-paid",
+      "source": "notification",
+      "app": "phonepe",
+      "title": "PhonePe",
+      "text": "Paid ₹350 to Zomato",
+      "expect": {
+        "amountMinor": 35000,
+        "direction": "debit",
+        "rawMerchant": "Zomato",
+        "merchant": "Zomato",
+        "category": "food",
+        "last4": null,
+        "refNo": null,
+        "institution": "PhonePe",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "phonepe-received",
+      "source": "notification",
+      "app": "phonepe",
+      "title": "PhonePe",
+      "text": "Received ₹1,200 from Priya Sharma",
+      "expect": {
+        "amountMinor": 120000,
+        "direction": "credit",
+        "rawMerchant": "Priya Sharma",
+        "merchant": "Priya Sharma",
+        "category": null,
+        "last4": null,
+        "refNo": null,
+        "institution": "PhonePe",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "phonepe-sent",
+      "source": "notification",
+      "app": "phonepe",
+      "title": "Payment successful",
+      "text": "₹99 sent to Spotify India successfully",
+      "expect": {
+        "amountMinor": 9900,
+        "direction": "debit",
+        "rawMerchant": "Spotify India",
+        "merchant": "Spotify",
+        "category": "subscriptions",
+        "last4": null,
+        "refNo": null,
+        "institution": "PhonePe",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "paytm-paid",
+      "source": "notification",
+      "app": "paytm",
+      "title": "Paytm",
+      "text": "Paid Rs.120 to Chai Point",
+      "expect": {
+        "amountMinor": 12000,
+        "direction": "debit",
+        "rawMerchant": "Chai Point",
+        "merchant": "Chai Point",
+        "category": "food",
+        "last4": null,
+        "refNo": null,
+        "institution": "Paytm",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "paytm-received",
+      "source": "notification",
+      "app": "paytm",
+      "title": "Paytm",
+      "text": "Rs.500 received from Amit",
+      "expect": {
+        "amountMinor": 50000,
+        "direction": "credit",
+        "rawMerchant": "Amit",
+        "merchant": "Amit",
+        "category": null,
+        "last4": null,
+        "refNo": null,
+        "institution": "Paytm",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "paytm-sent",
+      "source": "notification",
+      "app": "paytm",
+      "title": "Paytm",
+      "text": "Money sent: Rs 2,000 to Rohan Verma",
+      "expect": {
+        "amountMinor": 200000,
+        "direction": "debit",
+        "rawMerchant": "Rohan Verma",
+        "merchant": "Rohan Verma",
+        "category": null,
+        "last4": null,
+        "refNo": null,
+        "institution": "Paytm",
+        "accountKind": "upi"
+      }
+    },
+    {
+      "id": "otp",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "123456 is the OTP for txn of INR 1,499.00 at AMAZON on HDFC Bank card ending 5678. Valid for 10 mins. Do not share it with anyone.",
+      "expect": null
+    },
+    {
+      "id": "otp-2",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Use OTP 482913 to authorise Rs.2,000 transfer from A/c XX1234. Never share your OTP. -HDFC Bank",
+      "expect": null
+    },
+    {
+      "id": "declined",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Txn of Rs.500.00 on HDFC Bank card xx5678 at ABC STORE declined due to insufficient funds.",
+      "expect": null
+    },
+    {
+      "id": "failed-upi",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Your UPI transaction of Rs.300 to ZOMATO has failed. Amount if debited will be reversed in 48 hrs. -SBI",
+      "expect": null
+    },
+    {
+      "id": "balance",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Available balance in A/c XX1234 is Rs 12,345.00 as on 17-11-26. -HDFC Bank",
+      "expect": null
+    },
+    {
+      "id": "offer",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Get up to Rs.5,000 cashback on your next flight booking with ICICI Bank Cards! T&C apply. Book now.",
+      "expect": null
+    },
+    {
+      "id": "statement",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "HDFC Bank Credit Card XX5678 statement: Total due Rs.12,345.00, minimum due Rs.620.00, due by 05-12-26.",
+      "expect": null
+    },
+    {
+      "id": "collect-request",
+      "source": "notification",
+      "app": "gpay",
+      "title": "Payment request",
+      "text": "Rohan Verma has requested ₹300 from you",
+      "expect": null
+    },
+    {
+      "id": "emi-reminder",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Your EMI of Rs.4,500 for loan XX9012 is due on 05-12-26. Please keep sufficient balance. -Axis Bank",
+      "expect": null
+    },
+    {
+      "id": "bank-chatter",
+      "source": "sms",
+      "app": null,
+      "title": null,
+      "text": "Dear Customer, your KYC is due. Update now to avoid account freeze. -SBI",
+      "expect": null
+    },
+    {
+      "id": "gpay-reward",
+      "source": "notification",
+      "app": "gpay",
+      "title": "Rewards",
+      "text": "You won ₹10 cashback! Scratch your card",
+      "expect": null
+    }
+  ]
+}
