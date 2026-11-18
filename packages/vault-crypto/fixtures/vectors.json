@@ -1,0 +1,28 @@
+{
+  "$comment": "Shared by TypeScript (test/vectors.test.ts) and Dart (apps/mobile/test/vault_crypto_test.dart). Argon2id is kept light here so tests are quick.",
+  "kdf": {
+    "ops": 2,
+    "memKiB": 1024
+  },
+  "passphrase": "correct horse battery staple ünïcode",
+  "vaultKey": "AQgPFh0kKzI5QEdOVVxjanF4f4aNlJuiqbC3vsXM09o",
+  "recoveryKeyBytes": "ZGtyeYCHjpWco6qxuL_GzdTb4unw9_4FDBMaISgvNj0",
+  "recoveryKeyText": "CHNQ-4YC0-GY79-B753-NARV-HFY6-SQAD-QRQ9-Y3VZ-W18C-2CD2-2A1F-6RYG",
+  "salt": "yM_W3eTr8vkABw4VHCMqMQ",
+  "keys": {
+    "pass": "{\"v\":1,\"salt\":\"yM_W3eTr8vkABw4VHCMqMQ\",\"ops\":2,\"memKiB\":1024,\"wrap\":\"v1.ChEYHyYtNDtCSVBXXmVsc3qBiI-WnaSr.NwA2rKWHQXE_q4fqiwCs-a4e_JJJC6wRt4ssmrGV7TiMrmE9XvfA8h9LBJu0jcDa\"}",
+    "recovery": "v1.KC82PURLUllgZ251fIOKkZifpq20u8LJ.gkO7Av9CyMIQFbBpuayO_UIm_2awuL_UbZ1PQ9BhcZkcxdwEhb7eapQM5AdfC6jj"
+  },
+  "rewrap": {
+    "newPassphrase": "a second passphrase",
+    "salt": "AwoRGB8mLTQ7QklQV15lbA",
+    "nonce": "CRAXHiUsMzpBSE9WXWRrcnmAh46VnKOq",
+    "pass": "{\"v\":1,\"salt\":\"AwoRGB8mLTQ7QklQV15lbA\",\"ops\":2,\"memKiB\":1024,\"wrap\":\"v1.CRAXHiUsMzpBSE9WXWRrcnmAh46VnKOq.nsdWP88Xu7RKPrHkXtIpuiiPg7l52J1v5VBvyfYcLdcVwzDoM6A_aa45O4003E5M\"}"
+  },
+  "item": {
+    "id": "0193b2f0-7c3a-7a11-9d6e-0a1b2c3d4e5f",
+    "plaintext": "{\"kind\":\"login\",\"title\":\"Bank\",\"username\":\"me@example.test\",\"password\":\"p@ss ✓\",\"notes\":\"\"}",
+    "nonce": "TVRbYmlwd36FjJOaoaivtr3Ey9LZ4Ofu",
+    "blob": "v1.TVRbYmlwd36FjJOaoaivtr3Ey9LZ4Ofu.lmJXhiRbEzl34VTWxOoEcJlV6FVYCEQkDtkd7SHMJCFTGMPeR3TB10jL6sDR3tmRvBQSp9DjPAlFu0OmAQn1ecZg2fiAwAJNe11SmzwX032O6Lqmt5HybhuByueO0DKGFTk_GrTN3zDWnrOczA"
+  }
+}

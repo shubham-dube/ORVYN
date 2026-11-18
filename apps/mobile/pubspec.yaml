@@ -7,6 +7,7 @@ environment:
   sdk: ^3.14.0
 
 dependencies:
+  cryptography: ^2.9.0
   device_info_plus: ^13.3.0
   dio: ^5.11.1
   drift: ^2.35.4
@@ -31,6 +32,7 @@ dependencies:
   rrule: ^0.2.18
   speech_to_text: ^7.5.0
   timezone: ^0.11.2
+  unorm_dart: ^0.3.3
   url_launcher: ^6.3.3
   uuid: ^4.6.0
   web_socket_channel: ^3.0.3

@@ -8,7 +8,11 @@ import { aiUsage } from './ai.schema';
 import { FakeModel } from './fake.model';
 
 /** A part of what is sent: text, or an image (data URL). */
-export type Part = { type: 'text'; text: string } | { type: 'image'; dataUrl: string; name?: string };
+export type Part =
+  | { type: 'text'; text: string }
+  | { type: 'image'; dataUrl: string; name?: string }
+  /** a document the model reads itself (a PDF) */
+  | { type: 'file'; dataUrl: string; name: string };
 
 export interface ModelReply {
   text: string;
@@ -41,6 +45,7 @@ const DEFAULT_ROUTES: Record<string, string> = {
   default: 'anthropic/claude-haiku-5.5',
   'drop.understand': 'anthropic/claude-fable-5.2', // D13
   'today.parse': 'anthropic/claude-haiku-5.5',
+  'library.read': 'anthropic/claude-fable-5.2', // reads photos and PDFs, like Drop (D13, D26)
 };
 
 /** A model call that takes longer than this is given up on (and retried once if it looks transient). */
@@ -74,7 +79,9 @@ class OpenRouterModel implements Model {
     const content = o.parts.map((p) =>
       p.type === 'text'
         ? { type: 'text', text: p.text }
-        : { type: 'image_url', image_url: { url: p.dataUrl } },
+        : p.type === 'file'
+          ? { type: 'file', file: { filename: p.name, file_data: p.dataUrl } }
+          : { type: 'image_url', image_url: { url: p.dataUrl } },
     );
     const r = await fetch(`${this.url}/chat/completions`, {
       signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),

@@ -33,7 +33,7 @@ export class FilesController {
       name: decoded,
       mime: (type ?? '').split(';')[0]!.trim().toLowerCase(),
       bytes: new Uint8Array(body),
-      purpose: purpose === 'money' ? 'money' : 'drop',
+      purpose: purpose === 'money' || purpose === 'library' ? purpose : 'drop',
     });
   }
 

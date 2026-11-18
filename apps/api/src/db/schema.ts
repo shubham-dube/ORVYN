@@ -10,3 +10,5 @@ export * from '../modules/ai/ai.schema';
 export * from '../modules/files/files.schema';
 export * from '../modules/money/money.schema';
 export * from '../modules/drop/drop.schema';
+export * from '../modules/library/library.schema';
+export * from '../modules/vault/vault.schema';

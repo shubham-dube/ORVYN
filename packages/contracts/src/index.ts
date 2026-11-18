@@ -7,3 +7,5 @@ export * from './notify';
 export * from './today';
 export * from './money';
 export * from './drop';
+export * from './library';
+export * from './vault';

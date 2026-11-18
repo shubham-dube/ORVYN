@@ -1,0 +1,30 @@
+{
+  "name": "@orvyn/vault-crypto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src test"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "0.7.15"
+  },
+  "devDependencies": {
+    "@types/libsodium-wrappers-sumo": "0.7.8",
+    "tsup": "^8.5.1",
+    "vitest": "^3.2.7"
+  }
+}

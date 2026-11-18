@@ -42,7 +42,9 @@ export async function configureApp(
   });
   // uploads (files module): raw bytes for images, PDFs and plain octet streams, up to 15 MB
   const fastify = app.getHttpAdapter().getInstance();
-  for (const type of [/^image\/.*/, 'application/pdf', 'application/octet-stream'])
+  // (plain text is a built-in string parser in Fastify; swap it so a .txt file arrives as bytes too)
+  fastify.removeContentTypeParser('text/plain');
+  for (const type of [/^image\/.*/, 'application/pdf', 'application/octet-stream', 'text/plain'])
     fastify.addContentTypeParser(
       type,
       { parseAs: 'buffer', bodyLimit: 15 * 1024 * 1024 + 1 },

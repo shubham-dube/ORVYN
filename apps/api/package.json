@@ -25,6 +25,7 @@
     "@nestjs/websockets": "^11.2.10",
     "@orvyn/contracts": "workspace:*",
     "@orvyn/today-parse": "workspace:*",
+    "@orvyn/vault-crypto": "workspace:*",
     "@orvyn/today-plan": "workspace:*",
     "@sentry/node": "^10.78.0",
     "@simplewebauthn/server": "^13.3.3",

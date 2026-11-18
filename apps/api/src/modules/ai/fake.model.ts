@@ -25,7 +25,9 @@ export class FakeModel implements Model {
       ? h(text, o.parts)
       : o.task === 'drop.understand'
         ? understand(text, o.parts)
-        : { ok: true };
+        : o.task === 'library.read'
+          ? libraryRead(text, o.parts)
+          : { ok: true };
     return {
       text: typeof answer === 'string' ? answer : JSON.stringify(answer),
       inputTokens: Math.ceil(text.length / 4),
@@ -33,6 +35,55 @@ export class FakeModel implements Model {
       costUsd: this.costPerCall,
     };
   }
+}
+
+/** Reads a document with simple rules: a title, a category by words, an expiry date and an amount if it says so. */
+function libraryRead(text: string, parts: Part[]): unknown {
+  const fileName =
+    parts
+      .map((p) =>
+        p.type === 'text'
+          ? /^File: (.+?) \(/.exec(p.text)?.[1]
+          : p.type === 'image' || p.type === 'file'
+            ? p.name
+            : undefined,
+      )
+      .find(Boolean) ?? '';
+  const body = text.replace(/^File: .*$/m, '').trim();
+  const first = body.split('\n').find((l) => l.trim()) ?? '';
+  const all = `${fileName} ${body}`;
+  const cat = /pan|aadhaar|passport|driving licen[cs]e|voter/i.test(all)
+    ? 'Identity'
+    : /insurance|policy|premium/i.test(all)
+      ? 'Insurance'
+      : /rent|agreement|lease|property/i.test(all)
+        ? 'Property'
+        : /warranty/i.test(all)
+          ? 'Warranty'
+          : /invoice|receipt|bill/i.test(all)
+            ? 'Receipts'
+            : /tax|itr|form 16/i.test(all)
+              ? 'Tax'
+              : 'Other';
+  const expiry =
+    /(?:expir\w*|valid (?:till|until|upto)|renewal)[^0-9]{0,20}(\d{4}-\d{2}-\d{2})/i.exec(all)?.[1] ?? null;
+  const amount =
+    /(?:premium|amount due|due|total)[^0-9₹]{0,20}(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d{1,2})?)/i.exec(all)?.[1];
+  const title =
+    (first || fileName.replace(/\.[a-z0-9]+$/i, '').replace(/[-_]+/g, ' ')).slice(0, 80) || 'Document';
+  const words = [...new Set(all.toLowerCase().match(/[a-z]{4,}/g) ?? [])].slice(0, 4);
+  return {
+    title: title.charAt(0).toUpperCase() + title.slice(1),
+    category: cat,
+    tags: [cat.toLowerCase(), ...words].slice(0, 6),
+    summary: body.slice(0, 160) || `A ${cat.toLowerCase()} document`,
+    keyDates: expiry ? [{ label: 'Expires', date: expiry }] : [],
+    expiresOn: expiry,
+    amounts: amount
+      ? [{ label: 'Amount due', amount: Number(amount.replace(/,/g, '')), currency: 'INR' }]
+      : [],
+    text: body.slice(0, 2000),
+  };
 }
 
 const MONEY =

@@ -71,6 +71,9 @@ importers:
       '@orvyn/today-plan':
         specifier: workspace:*
         version: link:../../packages/today-plan
+      '@orvyn/vault-crypto':
+        specifier: workspace:*
+        version: link:../../packages/vault-crypto
       '@sentry/node':
         specifier: ^10.78.0
         version: 10.78.0(@opentelemetry/core@2.12.0(@opentelemetry/api@1.9.1))
@@ -349,6 +352,22 @@ importers:
         specifier: ^2.8.1
         version: 2.8.1
     devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.16.22)(jiti@2.7.0)(postcss@8.5.33)(tsx@4.23.15)(typescript@5.9.3)
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(tsx@4.23.15)
+
+  packages/vault-crypto:
+    dependencies:
+      libsodium-wrappers-sumo:
+        specifier: 0.7.15
+        version: 0.7.15
+    devDependencies:
+      '@types/libsodium-wrappers-sumo':
+        specifier: 0.7.8
+        version: 0.7.8
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@swc/core@1.16.22)(jiti@2.7.0)(postcss@8.5.33)(tsx@4.23.15)(typescript@5.9.3)
@@ -2501,6 +2520,9 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
+  '@types/libsodium-wrappers-sumo@0.7.8':
+    resolution: {integrity: sha512-N2+df4MB/A+W0RAcTw7A5oxKgzD+Vh6Ye7lfjWIi5SdTzVLfHPzxUjhwPqHLO5Ev9fv/+VHl+sUaUuTg4fUPqw==}
+
   '@types/libsodium-wrappers@0.7.14':
     resolution: {integrity: sha512-5Kv68fXuXK0iDuUir1WPGw2R9fOZUlYlSAa0ztMcL0s0BfIDTqg9GXz8K30VJpPP3sxWhbolnQma2x+/TfkzDQ==}
 
@@ -3325,6 +3347,12 @@ packages:
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
+
+  libsodium-sumo@0.7.16:
+    resolution: {integrity: sha512-x6atrz2AdXCJg6G709x9W9TTJRI6/0NcL5dD0l5GGVqNE48UJmDsjO4RUWYTeyXXUpg+NXZ2SHECaZnFRYzwGA==}
+
+  libsodium-wrappers-sumo@0.7.15:
+    resolution: {integrity: sha512-aSWY8wKDZh5TC7rMvEdTHoyppVq/1dTSAeAR7H6pzd6QRT3vQWcT5pGwCotLcpPEOLXX6VvqihSPkpEhYAjANA==}
 
   libsodium-wrappers@0.7.15:
     resolution: {integrity: sha512-E4anqJQwcfiC6+Yrl01C1m8p99wEhLmJSs0VQqST66SbQXXBoaJY0pF4BNjRYa/sOQAxx6lXAaAFIlx+15tXJQ==}
@@ -6409,6 +6437,10 @@ snapshots:
 
   '@types/json-schema@7.0.15': {}
 
+  '@types/libsodium-wrappers-sumo@0.7.8':
+    dependencies:
+      '@types/libsodium-wrappers': 0.7.14
+
   '@types/libsodium-wrappers@0.7.14': {}
 
   '@types/node@22.20.5':
@@ -7260,6 +7292,12 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
+
+  libsodium-sumo@0.7.16: {}
+
+  libsodium-wrappers-sumo@0.7.15:
+    dependencies:
+      libsodium-sumo: 0.7.16
 
   libsodium-wrappers@0.7.15:
     dependencies:

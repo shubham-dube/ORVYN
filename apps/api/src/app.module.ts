@@ -11,6 +11,8 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { AiModule } from './modules/ai/ai.module';
 import { MoneyModule } from './modules/money/money.module';
 import { DropModule } from './modules/drop/drop.module';
+import { LibraryModule } from './modules/library/library.module';
+import { VaultModule } from './modules/vault/vault.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -56,6 +58,8 @@ export class AppModule {
         CalendarModule,
         MoneyModule,
         DropModule,
+        LibraryModule,
+        VaultModule,
         ...(extra ?? []),
       ],
       controllers: [HealthController],
