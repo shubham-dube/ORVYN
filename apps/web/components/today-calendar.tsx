@@ -856,9 +856,28 @@ function EventSheet({ draft, onClose }: { draft: EventDraft | null; onClose(): v
   const custom = d && d.rrule && !presets.some((p) => p.value === d.rrule);
 
   return (
-    <Sheet open={!!draft} onClose={onClose} title={draft?.id ? 'Event' : 'New event'}>
+    <Sheet
+      open={!!draft}
+      onClose={onClose}
+      title={draft?.id ? 'Event' : 'New event'}
+      footer={
+        d ? (
+          <>
+            {d.id ? (
+              <Button type="button" variant="ghost" onClick={() => void remove()}>
+                Delete
+              </Button>
+            ) : null}
+            <Button type="submit" form="event-form" disabled={!!problem}>
+              Save
+            </Button>
+          </>
+        ) : undefined
+      }
+    >
       {d ? (
         <form
+          id="event-form"
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -1009,18 +1028,6 @@ function EventSheet({ draft, onClose }: { draft: EventDraft | null; onClose(): v
             </div>
           ) : null}
           {problem && d.title.trim() ? <p className="text-small text-orv-danger">{problem}</p> : null}
-          <div className="flex justify-between gap-2 pt-1">
-            {d.id ? (
-              <Button type="button" variant="ghost" onClick={() => void remove()}>
-                Delete
-              </Button>
-            ) : (
-              <span />
-            )}
-            <Button type="submit" disabled={!!problem}>
-              Save
-            </Button>
-          </div>
         </form>
       ) : null}
     </Sheet>

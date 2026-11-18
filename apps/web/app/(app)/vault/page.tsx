@@ -547,6 +547,18 @@ function ItemSheet({
       open
       onClose={onClose}
       title={state.id ? (editing ? 'Edit item' : d.title || 'Vault item') : 'New Vault item'}
+      footer={
+        editing || !state.id ? (
+          <>
+            <Button type="button" variant="ghost" onClick={() => (state.id ? setEditing(false) : onClose())}>
+              Cancel
+            </Button>
+            <Button type="submit" form="vault-item-form" variant="primary">
+              <Check size={14} /> Save
+            </Button>
+          </>
+        ) : undefined
+      }
     >
       {!editing && state.id ? (
         <div className="flex flex-col gap-2">
@@ -584,6 +596,7 @@ function ItemSheet({
         </div>
       ) : (
         <form
+          id="vault-item-form"
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -687,14 +700,6 @@ function ItemSheet({
                 </button>
               </span>
             ))}
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button type="button" variant="ghost" onClick={() => (state.id ? setEditing(false) : onClose())}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              <Check size={14} /> Save
-            </Button>
           </div>
         </form>
       )}

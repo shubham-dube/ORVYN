@@ -1,5 +1,6 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
@@ -195,6 +196,8 @@ export function Sheet({
   title,
   children,
   wide,
+  footer,
+  subtitle,
 }: {
   open: boolean;
   onClose(): void;
@@ -202,6 +205,9 @@ export function Sheet({
   children: ReactNode;
   /** a viewer or a big table: more room */
   wide?: boolean;
+  /** the actions (Save, Cancel…): pinned to the bottom so they never scroll away on a long form */
+  footer?: ReactNode;
+  subtitle?: ReactNode;
 }) {
   useEffect(() => {
     if (!open) return;
@@ -213,14 +219,15 @@ export function Sheet({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center p-3 sm:items-center"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-3"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <button
-            aria-label="Close"
-            className="absolute inset-0 bg-orv-scrim backdrop-blur-[6px]"
+            aria-hidden
+            tabIndex={-1}
+            className="absolute inset-0 cursor-default bg-orv-scrim backdrop-blur-[6px]"
             onClick={onClose}
           />
           <motion.div
@@ -232,12 +239,34 @@ export function Sheet({
             exit={{ y: 30, opacity: 0 }}
             transition={spring.smooth}
             className={cn(
-              'glass-halo edge-light relative max-h-[calc(100dvh-1.5rem)] w-full overflow-y-auto overscroll-contain p-5',
+              'glass-halo edge-light relative flex max-h-[calc(100dvh-0.75rem)] w-full flex-col overflow-hidden !rounded-b-none sm:max-h-[calc(100dvh-1.5rem)] sm:!rounded-b-[var(--orv-glass-halo-radius)]',
               wide ? 'max-w-4xl' : 'max-w-lg',
             )}
           >
-            <h2 className="mb-4 text-heading font-semibold">{title}</h2>
-            {children}
+            <div className="flex shrink-0 items-start gap-3 px-5 pb-3 pt-4">
+              <span
+                aria-hidden
+                className="absolute left-1/2 top-1.5 h-1 w-10 -translate-x-1/2 rounded-full bg-orv-track sm:hidden"
+              />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-heading font-semibold">{title}</h2>
+                {subtitle ? <p className="mt-0.5 text-small text-orv-muted">{subtitle}</p> : null}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="-mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-orv-muted transition-colors hover:bg-orv-track hover:text-orv-text"
+              >
+                <X size={16} aria-hidden />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5">{children}</div>
+            {footer ? (
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-orv-hairline bg-[color-mix(in_srgb,var(--orv-glass-strong)_60%,transparent)] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                {footer}
+              </div>
+            ) : null}
           </motion.div>
         </motion.div>
       ) : null}
@@ -309,5 +338,67 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         </AnimatePresence>
       </div>
     </ToastCtx.Provider>
+  );
+}
+
+// ---------------------------------------------------------------- loading (spec 0007 B: every data view has one)
+/** A shimmering block; give it the size of what will appear so nothing jumps when data lands. */
+export function Skeleton({ className }: { className?: string }) {
+  return <span aria-hidden className={cn('skeleton block', className)} />;
+}
+
+/** Rows shaped like list items (avatar/icon, two lines, a trailing value). */
+export function SkeletonRows({
+  rows = 4,
+  icon = true,
+  label = 'Loading',
+  className,
+}: {
+  rows?: number;
+  icon?: boolean;
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <div role="status" aria-label={label} aria-busy className={cn('flex flex-col gap-2', className)}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="glass-pane flex items-center gap-3 p-3" style={{ opacity: 1 - i * 0.14 }}>
+          {icon ? <Skeleton className="h-9 w-9 shrink-0 !rounded-full" /> : null}
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <Skeleton className="h-3.5" />
+            <Skeleton className="h-3 w-2/5" />
+          </div>
+          <Skeleton className="h-4 w-14" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Cards in a grid (dashboard tiles, people, documents). */
+export function SkeletonCards({
+  count = 3,
+  className,
+  label = 'Loading',
+}: {
+  count?: number;
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <div role="status" aria-label={label} aria-busy className={cn('grid gap-3 md:grid-cols-2', className)}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="glass-pane flex flex-col gap-3 p-5">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 shrink-0 !rounded-full" />
+            <div className="flex flex-1 flex-col gap-2">
+              <Skeleton className="h-3.5 w-1/2" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+          </div>
+          <Skeleton className="h-16" />
+        </div>
+      ))}
+    </div>
   );
 }

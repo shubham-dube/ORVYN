@@ -168,8 +168,23 @@ export function AddTransactionSheet({
   };
 
   return (
-    <Sheet open={open} onClose={onClose} title={recurring ? 'Scheduled' : 'Add transaction'}>
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={recurring ? 'Scheduled' : 'Add transaction'}
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="add-tx-form" variant="primary">
+            {repeats ? 'Save schedule' : 'Add'}
+          </Button>
+        </>
+      }
+    >
       <form
+        id="add-tx-form"
         noValidate
         className="flex flex-col gap-3"
         onSubmit={(e) => {
@@ -336,14 +351,6 @@ export function AddTransactionSheet({
             {problem}
           </p>
         ) : null}
-        <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary">
-            {repeats ? 'Save schedule' : 'Add'}
-          </Button>
-        </div>
       </form>
     </Sheet>
   );

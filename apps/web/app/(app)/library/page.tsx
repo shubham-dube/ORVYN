@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { TagsInput } from '@/components/task-views';
-import { Badge, Glass, Label, Sheet, Switch, useToast } from '@/components/ui/bits';
+import { Badge, Glass, Label, Sheet, SkeletonCards, Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
@@ -156,7 +156,7 @@ function LibraryView() {
       ) : null}
 
       {!ready ? (
-        <div className="skeleton h-28 rounded-orv-md" />
+        <SkeletonCards count={4} label="Loading documents" />
       ) : shown.length ? (
         <ul className="grid gap-3 md:grid-cols-2" aria-label="Documents">
           {shown.map((d) => (
@@ -488,8 +488,23 @@ function NoteSheet({ open, onClose }: { open: boolean; onClose(): void }) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
   return (
-    <Sheet open={open} onClose={onClose} title="New note">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title="New note"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="note-form" variant="primary" disabled={!text.trim() && !title.trim()}>
+            Save note
+          </Button>
+        </>
+      }
+    >
       <form
+        id="note-form"
         className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault();
@@ -521,14 +536,6 @@ function NoteSheet({ open, onClose }: { open: boolean; onClose(): void }) {
           ORVYN reads notes to title and tag them, so they can be found. Secrets belong in the Vault, not
           here.
         </p>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" disabled={!text.trim() && !title.trim()}>
-            Save note
-          </Button>
-        </div>
       </form>
     </Sheet>
   );

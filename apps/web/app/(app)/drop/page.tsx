@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
-import { Badge, Glass, Label, Segmented, useToast } from '@/components/ui/bits';
+import { Badge, Glass, Label, Segmented, SkeletonRows, useToast } from '@/components/ui/bits';
 import { Button, Spinner } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
@@ -215,8 +215,9 @@ function Composer() {
 const KIND_ICON = { task: CheckCircle2, event: CalendarDays, expense: Receipt, note: StickyNote } as const;
 
 function Items() {
-  const { items } = useDrop();
+  const { ready, items } = useDrop();
   const [showAll, setShowAll] = useState(false);
+  if (!ready) return <SkeletonRows rows={3} label="Loading Drop" />;
   const open = items.filter((i) => !['done', 'kept', 'dismissed'].includes(i.status));
   const past = items.filter((i) => ['done', 'kept'].includes(i.status)).slice(0, showAll ? 50 : 6);
   return (

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { useTheme } from '@/components/theme-provider';
-import { Badge, Glass, Label, Switch, useToast } from '@/components/ui/bits';
+import { Badge, Glass, Label, SkeletonRows, Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { api, ApiError } from '@/lib/api';
@@ -285,7 +285,9 @@ function Notifications() {
             </div>
           ) : null}
         </div>
-      ) : null}
+      ) : (
+        <SkeletonRows rows={1} icon={false} label="Loading notification settings" />
+      )}
     </Section>
   );
 }
@@ -305,11 +307,13 @@ function Security() {
   const toast = useToast();
   const [devices, setDevices] = useState<DeviceView[]>([]);
   const [keys, setKeys] = useState<PasskeyView[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [adding, setAdding] = useState(false);
   const load = useCallback(async () => {
     const [d, k] = await Promise.all([api<DeviceView[]>('/me/devices'), api<PasskeyView[]>('/me/passkeys')]);
     setDevices(d);
     setKeys(k);
+    setLoaded(true);
   }, []);
   useEffect(() => void load(), [load]);
 
@@ -356,10 +360,12 @@ function Security() {
             removeLabel={`Remove passkey ${k.name}`}
           />
         ))}
-        {!keys.length ? <p className="text-small text-orv-muted">No passkeys yet.</p> : null}
+        {!loaded ? <SkeletonRows rows={1} label="Loading passkeys" /> : null}
+        {loaded && !keys.length ? <p className="text-small text-orv-muted">No passkeys yet.</p> : null}
       </div>
       <div className="flex flex-col gap-2 border-t border-orv-hairline pt-4">
         <Label>Signed-in devices</Label>
+        {!loaded ? <SkeletonRows rows={2} label="Loading devices" /> : null}
         {devices.map((d) => (
           <Row
             key={d.id}
@@ -395,7 +401,7 @@ function ReachMe() {
   useEffect(() => {
     void refreshChannels().then(setCh);
   }, []);
-  if (!ch) return null;
+  if (!ch) return <SkeletonRows rows={1} label="Loading channels" />;
   const wa = ch.whatsapp;
   const run = async (fn: () => Promise<ContactChannels['whatsapp']>, ok?: string) => {
     setBusy(true);

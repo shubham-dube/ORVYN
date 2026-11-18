@@ -153,3 +153,106 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------- selects (spec 0007 B)
+   Native selects stay (phones get their own picker, forms and tests keep working); they are themed so the list
+   is never white-on-white: options get a solid surface in every phase, and Chromium's customizable select
+   (appearance: base-select) turns the popup into an ORVYN menu. */
+:root {
+  --orv-menu: color-mix(in srgb, var(--orv-base) 90%, var(--orv-text) 4%);
+}
+select {
+  cursor: pointer;
+  color: var(--orv-text);
+}
+select option,
+select optgroup {
+  background-color: var(--orv-menu);
+  color: var(--orv-text);
+}
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+@supports (appearance: base-select) {
+  select,
+  select::picker(select) {
+    appearance: base-select;
+  }
+  select {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  select::picker-icon {
+    content: '';
+    width: 14px;
+    height: 14px;
+    margin-left: auto;
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")
+      center / contain no-repeat;
+    color: var(--orv-muted);
+    transition: rotate 180ms var(--orv-ease-out);
+  }
+  select:open::picker-icon {
+    rotate: 180deg;
+  }
+  select::picker(select) {
+    margin-block: 6px;
+    padding: 6px;
+    min-width: anchor-size(width);
+    max-height: min(360px, 60dvh);
+    border: 1px solid var(--orv-hairline);
+    border-radius: 16px;
+    background: var(--orv-menu);
+    color: var(--orv-text);
+    box-shadow: var(--orv-shadow-big);
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity 140ms ease,
+      translate 160ms var(--orv-ease-out),
+      overlay 160ms allow-discrete,
+      display 160ms allow-discrete;
+  }
+  @starting-style {
+    select:open::picker(select) {
+      opacity: 0;
+      translate: 0 -4px;
+    }
+  }
+  select option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 38px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    font-size: 15px;
+    background: transparent;
+    cursor: pointer;
+  }
+  select option:hover,
+  select option:focus-visible {
+    background: color-mix(in srgb, var(--orv-accent) 14%, transparent);
+    outline: none;
+  }
+  select option:checked {
+    font-weight: 600;
+    color: var(--orv-accent);
+  }
+  select option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: var(--orv-accent);
+  }
+  select optgroup {
+    background: transparent;
+  }
+  select optgroup legend {
+    padding: 8px 12px 4px;
+    font-size: 12px;
+    color: var(--orv-muted);
+  }
+}

@@ -46,7 +46,7 @@ import {
   Utensils,
 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
-import { Badge, Glass, Label, Segmented, Sheet, Switch, useToast } from '@/components/ui/bits';
+import { Badge, Glass, Label, Segmented, Sheet, SkeletonRows, Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { AddTransactionSheet, ManageSheet, transactionsCsv } from '@/components/money-extras';
@@ -257,7 +257,7 @@ function MoneyView() {
           </div>
           <FilterBar f={f} setF={setF} categories={categories} accounts={accounts} />
           {!ready ? (
-            <div className="skeleton h-24 rounded-orv-md" />
+            <SkeletonRows rows={5} label="Loading transactions" />
           ) : inMonth.length ? (
             <TxList items={inMonth} cat={cat} onOpen={setEditing} />
           ) : filtering ? (
@@ -622,9 +622,34 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
     return new Date(x.getTime() - x.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   };
   return (
-    <Sheet open={!!tx} onClose={onClose} title="Transaction">
+    <Sheet
+      open={!!tx}
+      onClose={onClose}
+      title="Transaction"
+      footer={
+        d ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={async () => {
+                await removeTransaction(d.id);
+                toast({ title: 'Deleted', body: d.merchant || formatMoney(d.amountMinor) });
+                onClose();
+              }}
+            >
+              <Trash2 size={14} /> Delete
+            </Button>
+            <Button type="submit" form="tx-form" variant="primary">
+              Save
+            </Button>
+          </>
+        ) : undefined
+      }
+    >
       {d ? (
         <form
+          id="tx-form"
           className="flex flex-col gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -737,22 +762,6 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
           {d.rawMerchant && d.rawMerchant !== d.merchant ? (
             <p className="text-[12px] text-orv-faint">The message said: {d.rawMerchant}</p>
           ) : null}
-          <div className="flex justify-between gap-2 pt-1">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={async () => {
-                await removeTransaction(d.id);
-                toast({ title: 'Deleted', body: d.merchant || formatMoney(d.amountMinor) });
-                onClose();
-              }}
-            >
-              <Trash2 size={14} /> Delete
-            </Button>
-            <Button type="submit" variant="primary">
-              Save
-            </Button>
-          </div>
         </form>
       ) : null}
     </Sheet>

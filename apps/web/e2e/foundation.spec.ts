@@ -45,7 +45,7 @@ test('the command bar opens with Ctrl-K and navigates', async ({ page }) => {
 test('an invited friend joins and sees only the modules they were given', async ({ page, browser }) => {
   await signInWithEmail(page, OWNER);
   await page.goto('/admin');
-  await page.getByRole('radio', { name: 'Invites' }).click();
+  await page.getByRole('button', { name: 'Invite someone' }).first().click();
   await page.getByLabel('Their email (optional)').fill('friend@example.test');
   // default grant is Today + Chat; turn Chat off so the friend gets Today only
   await page.getByRole('switch', { name: 'Chat' }).click();
@@ -78,9 +78,8 @@ test('an invited friend joins and sees only the modules they were given', async 
 
   // the owner sees the friend joined and can switch a module on live
   await page.reload();
-  await page.getByRole('radio', { name: 'People' }).click();
   await expect(page.getByText('friend@example.test', { exact: true })).toBeVisible();
-  const card = page.locator('div.glass-pane', { hasText: 'friend@example.test ·' });
+  const card = page.getByTestId('person-friend@example.test');
   await card.getByRole('switch', { name: 'Chat' }).click();
   // pushed over the socket: the friend's home gains Chat without a reload
   await expect(friend.getByText('End-to-end encrypted conversations with friends')).toBeVisible();

@@ -4,7 +4,7 @@ import type { ReminderWay, Task } from '@orvyn/contracts';
 import { CalendarDays, Check, CheckCheck, Inbox, Plus, Repeat, Sun, Trash2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Glass, Label, Segmented, Sheet } from '@/components/ui/bits';
+import { Badge, Glass, Label, Segmented, Sheet, SkeletonRows } from '@/components/ui/bits';
 import { CalendarViews } from '@/components/today-calendar';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
@@ -134,10 +134,7 @@ function TodayView() {
       {ready && mode === 'calendar' ? (
         <CalendarViews onOpenTask={setEditing} />
       ) : !ready ? (
-        <Glass className="p-5">
-          <div className="skeleton h-4 w-2/3 rounded" />
-          <div className="skeleton mt-3 h-4 w-1/2 rounded" />
-        </Glass>
+        <SkeletonRows rows={5} label="Loading tasks" />
       ) : mode === 'board' ? (
         <Board tasks={filtered} projects={projects} onOpen={open} />
       ) : (
@@ -544,8 +541,31 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
     onClose();
   };
   return (
-    <Sheet open={!!task} onClose={onClose} title="Task">
+    <Sheet
+      open={!!task}
+      onClose={onClose}
+      title="Task"
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            onClick={async () => {
+              await removeTask(draft.id);
+              onClose();
+            }}
+          >
+            <Trash2 size={14} /> Delete
+          </Button>
+          <Button type="submit" form="task-form" variant="primary">
+            Save
+          </Button>
+        </>
+      }
+    >
       <form
+        id="task-form"
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
@@ -701,22 +721,6 @@ function TaskSheet({ task, onClose }: { task: Task | null; onClose(): void }) {
             />
           )}
         </Field>
-        <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="danger"
-            size="sm"
-            onClick={async () => {
-              await removeTask(draft.id);
-              onClose();
-            }}
-          >
-            <Trash2 size={14} /> Delete
-          </Button>
-          <Button type="submit" variant="primary">
-            Save
-          </Button>
-        </div>
       </form>
     </Sheet>
   );

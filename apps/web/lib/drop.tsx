@@ -16,6 +16,8 @@ import { voiceFileName } from './voice';
 import { useSync } from './sync';
 
 interface DropCtx {
+  /** false until the first read from the local store */
+  ready: boolean;
   items: DropItem[];
   dropText(
     text: string,
@@ -37,11 +39,13 @@ const URL_ONLY = /^https?:\/\/\S+$/i;
 export function DropProvider({ children }: { children: ReactNode }) {
   const { client, version, write } = useSync();
   const [items, setItems] = useState<DropItem[]>([]);
+  const [ready, setReady] = useState(false);
 
   const reload = useCallback(async () => {
     const list = await client.list<DropItem & { createdAt?: string }>(DROP_ITEM);
     // newest first: ids are time-ordered (uuid v7)
     setItems([...list].sort((a, b) => b.id.localeCompare(a.id)));
+    setReady(true);
   }, [client]);
   useEffect(() => {
     void reload();
@@ -51,6 +55,7 @@ export function DropProvider({ children }: { children: ReactNode }) {
     const set = (id: string, f: Partial<DropItem>) =>
       write(async (c) => void (await c.upsert(DROP_ITEM, f, id)));
     return {
+      ready,
       items,
       dropText: (text, o = {}) =>
         write((c) =>
@@ -146,7 +151,7 @@ export function DropProvider({ children }: { children: ReactNode }) {
       dismiss: (item) => set(item.id, { status: 'dismissed' }),
       retry: (item) => set(item.id, { status: 'new' }),
     };
-  }, [items, write]);
+  }, [ready, items, write]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
