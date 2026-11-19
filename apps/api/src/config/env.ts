@@ -31,6 +31,8 @@ export const EnvSchema = z.object({
   TOKEN_PEPPER: z.string().min(32),
   /** Sign-in codes that can be sent to one email per 15 minutes. */
   AUTH_CODE_LIMIT: z.coerce.number().int().min(1).default(3),
+  /** sign-in codes one IP may ask for per hour (shared offices / NAT may need more) */
+  AUTH_IP_CODE_LIMIT: z.coerce.number().int().min(1).default(30),
   ACCESS_TOKEN_TTL_S: z.coerce.number().int().default(900),
   REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().default(60),
   /** Cookie domain for the web refresh cookie, e.g. ".orvyn.dubey.app" in production; empty = host-only. */

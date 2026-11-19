@@ -52,7 +52,8 @@ export class AuthService {
   /** Always answers the same way, so it can't be used to find out who has an account. */
   async startEmail(email: string, invite: string | undefined, client: ClientInfo): Promise<void> {
     if (!(await this.limiter.hit(`code:email:${email}`, this.env.AUTH_CODE_LIMIT, 15 * 60))) throw tooMany();
-    if (!(await this.limiter.hit(`code:ip:${client.ip}`, 30, 60 * 60))) throw tooMany();
+    if (!(await this.limiter.hit(`code:ip:${client.ip}`, this.env.AUTH_IP_CODE_LIMIT, 60 * 60)))
+      throw tooMany();
     if (!(await this.mayEnter(email, invite))) return;
     const code = randomCode();
     await this.db.insert(emailCodes).values({

@@ -29,7 +29,11 @@ export function middleware(req: NextRequest) {
   ].join('; ');
   const headers = new Headers(req.headers);
   headers.set('x-nonce', nonce);
-  const res = NextResponse.next({ request: { headers } });
+  // a first visit to "/" (nobody signed in here before) is the landing page, served without a redirect
+  const landing = req.nextUrl.pathname === '/' && !req.cookies.get('orvyn_member');
+  const res = landing
+    ? NextResponse.rewrite(new URL('/welcome', req.url), { request: { headers } })
+    : NextResponse.next({ request: { headers } });
   res.headers.set('Content-Security-Policy', csp);
   return res;
 }

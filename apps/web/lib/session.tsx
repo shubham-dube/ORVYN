@@ -15,6 +15,9 @@ import {
 import { api, API_URL, onSession, refreshSession, setSession, thisDevice } from './api';
 import { realtime } from './realtime';
 
+/** Set while someone uses ORVYN in this browser: "/" opens the app; without it "/" is the landing page. */
+export const MEMBER_COOKIE = 'orvyn_member';
+
 type Status = 'loading' | 'signedOut' | 'signedIn';
 
 interface SessionCtx {
@@ -53,6 +56,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setMe(s.user);
         setDeviceId(s.deviceId);
         setStatus('signedIn');
+        // not a secret: only tells the site to open the app (not the landing page) at "/"
+        document.cookie = `${MEMBER_COOKIE}=1; path=/; max-age=31536000; samesite=lax`;
         realtime?.start();
         // refresh a minute before the access token expires
         timer.current = setTimeout(() => void refreshSession(), Math.max(10, s.expiresIn - 60) * 1000);
@@ -122,6 +127,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       await api('/auth/sign-out', { method: 'POST' });
     } finally {
+      document.cookie = `${MEMBER_COOKIE}=; path=/; max-age=0`;
       setSession(null);
     }
   }, []);

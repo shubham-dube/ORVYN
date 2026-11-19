@@ -1,0 +1,112 @@
+# Builds what people download and attaches it to a GitHub Release under fixed names, so the website's
+# Download page always points at the newest (spec 0007 C4):
+#   orvyn-android.apk · orvyn-chrome-extension.zip · orvyn-windows-setup.exe
+#
+# Run it: push a tag `v1.2.3`, or Actions → Release → Run workflow.
+# Repository variables (Settings → Secrets and variables → Actions → Variables):
+#   ORVYN_API_URL, ORVYN_WEB_URL — your deployment (e.g. https://api.example.com, https://example.com)
+# Optional secrets:
+#   GOOGLE_SERVICES_JSON_B64 — base64 of android/app/google-services.json (push notifications on Android)
+#   ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD — a stable signature, so
+#   updates install over the old app (without them the APK is debug-signed and each build needs a reinstall)
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.2.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  API_URL: ${{ vars.ORVYN_API_URL || 'https://api.orvyn.dubey.app' }}
+  WEB_URL: ${{ vars.ORVYN_WEB_URL || 'https://orvyn.dubey.app' }}
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { flutter-version: '3.50.0', channel: stable, cache: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21' }
+      - name: Firebase config (push), when provided
+        env: { GS: '${{ secrets.GOOGLE_SERVICES_JSON_B64 }}' }
+        run: if [ -n "$GS" ]; then echo "$GS" | base64 -d > android/app/google-services.json; fi
+      - name: Signing key, when provided
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > android/app/release.jks
+            printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KS_PASS" "$KEY_ALIAS" "$KEY_PASS" > android/key.properties
+          fi
+      - run: flutter pub get
+      - run: >-
+          flutter build apk --release
+          --dart-define=ORVYN_API_URL=$API_URL --dart-define=ORVYN_WEB_URL=$WEB_URL
+          --dart-define=ORVYN_APP_VERSION=${TAG#v}
+      - run: cp build/app/outputs/flutter-apk/app-release.apk ../../orvyn-android.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: orvyn-android.apk }
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --filter @orvyn/extension...
+      - run: pnpm --filter @orvyn/extension... build
+        env: { VITE_API_URL: '${{ env.API_URL }}', VITE_WEB_URL: '${{ env.WEB_URL }}' }
+      - run: cd apps/extension/dist && zip -r ../../../orvyn-chrome-extension.zip .
+      - uses: actions/upload-artifact@v4
+        with: { name: extension, path: orvyn-chrome-extension.zip }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: apps/desktop/src-tauri }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --filter @orvyn/desktop
+      - run: pnpm --filter @orvyn/desktop desktop:build
+        env: { ORVYN_API_URL: '${{ env.API_URL }}', ORVYN_WEB_URL: '${{ env.WEB_URL }}' }
+      - shell: bash
+        run: cp apps/desktop/src-tauri/target/release/bundle/nsis/*.exe orvyn-windows-setup.exe
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: orvyn-windows-setup.exe }
+
+  publish:
+    needs: [android, extension, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: ORVYN ${{ env.TAG }}
+          make_latest: true
+          files: |
+            orvyn-android.apk
+            orvyn-chrome-extension.zip
+            orvyn-windows-setup.exe

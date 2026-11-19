@@ -1,5 +1,7 @@
 'use client';
 
+import { smartParse, taskFields } from '@/lib/smart-task';
+
 import { formatMoney, type Transaction } from '@orvyn/contracts';
 import { budgetProgress, dailySpend, monthOf, parseSpend, summarise } from '@orvyn/money';
 import { expiringSoon, expiry, expiryLabel } from '@orvyn/library';
@@ -460,8 +462,13 @@ export function QuickAddCard() {
     const t = text.trim();
     if (!t) return;
     if (mode === 'task' && today) {
-      await today.addTask({ title: t, dueDate: localDay(new Date()) });
-      toast({ title: 'Added to Today', body: t, tone: 'success' });
+      // the same understanding as Today's quick add: "call mom in 10 min", "pay rent every 1st"
+      const fields = taskFields(
+        smartParse(t, { timeZone: today.settings?.timeZone, projects: today.projects, literal: [] }),
+        localDay(new Date()),
+      );
+      await today.addTask({ ...fields, title: fields.title || t });
+      toast({ title: 'Added to Today', body: fields.title || t, tone: 'success' });
     } else if (mode === 'expense' && money && spend) {
       const { occurredAtFor } = await import('@orvyn/money');
       await money.addTransaction({

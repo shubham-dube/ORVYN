@@ -15,9 +15,9 @@ test('Drop: text, a receipt photo and the command bar become suggestions; confir
   await expect(page.getByRole('heading', { name: 'Drop', level: 1 })).toBeVisible();
 
   // an expense, said in passing
-  await page.getByLabel('Drop something').fill('spent 240 on lunch at swiggy');
+  await page.getByLabel('Drop something').fill('spent 240 on lunch at zomato');
   await page.keyboard.press('Enter');
-  const lunch = page.getByLabel('Dropped: spent 240 on lunch at swiggy');
+  const lunch = page.getByLabel('Dropped: spent 240 on lunch at zomato');
   await expect(lunch.getByRole('radio', { name: 'Expense' })).toBeChecked({ timeout: 15_000 });
   await expect(lunch.getByLabel('Amount (₹)')).toHaveValue('240');
   await expect(lunch.getByText(/^Why: /)).toBeVisible();
@@ -49,7 +49,7 @@ test('Drop: text, a receipt photo and the command bar become suggestions; confir
 
   // where they landed
   await page.goto('/money');
-  await expect(page.getByRole('list', { name: 'Transactions this month' }).getByText('Swiggy')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Transactions this month' }).getByText('Zomato')).toBeVisible();
   await page.goto('/today');
   await expect(page.getByText('Call HDFC about the card')).toBeVisible();
 });

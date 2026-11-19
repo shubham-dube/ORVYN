@@ -9,11 +9,11 @@ test('Dashboard: the day at a glance, quick add for a task and an expense, and l
   await page.waitForLoadState('networkidle');
 
   // a task straight from the dashboard shows up in "what's next" and the day's line
-  await page.getByLabel('Quick add text').fill('Dashboard check task');
+  await page.getByLabel('Quick add text').fill('Dashboard check in 2 min'); // due soon, so it heads what's next even after other tests' tasks
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await expect(page.getByText('Added to Today')).toBeVisible();
   const next = page.getByRole('list', { name: "What's next" });
-  await expect(next.getByText('Dashboard check task')).toBeVisible();
+  await expect(next.getByText('Dashboard check', { exact: true })).toBeVisible();
   await expect(page.getByTestId('dash-line')).toContainText('to do');
   await expect(page.getByRole('img', { name: /percent done/ })).toBeVisible();
 
@@ -31,10 +31,10 @@ test('Dashboard: the day at a glance, quick add for a task and an expense, and l
   await expect(page.getByRole('region', { name: 'Drop' }).or(page.getByLabel('Drop').first())).toBeVisible();
   await page.getByRole('link', { name: /^Today Tasks and calendar/ }).click();
   await expect(page).toHaveURL(/\/today$/);
-  await page.getByRole('checkbox', { name: 'Complete Dashboard check task' }).click();
+  await page.getByRole('checkbox', { name: 'Complete Dashboard check' }).click();
   await page.goBack();
   await expect(page.getByRole('heading', { level: 1, name: /Good/ })).toBeVisible();
-  await expect(next.getByText('Dashboard check task')).toHaveCount(0);
+  await expect(next.getByText('Dashboard check', { exact: true })).toHaveCount(0);
 });
 
 test('Settings: what AI has used, today against the limit, and (owner) by person', async ({ page }) => {

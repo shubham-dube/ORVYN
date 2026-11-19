@@ -256,3 +256,32 @@ select:disabled {
     color: var(--orv-muted);
   }
 }
+
+/* ---------------------------------------------------------------- the public site's text pages */
+.site-prose {
+  font-size: 16px;
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--orv-text) 88%, transparent);
+}
+.site-prose h2 {
+  margin: 2.2em 0 0.6em;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--orv-text);
+}
+.site-prose p,
+.site-prose ul {
+  margin: 0 0 1em;
+}
+.site-prose ul {
+  padding-left: 1.2em;
+  list-style: disc;
+}
+.site-prose li {
+  margin: 0.3em 0;
+}
+.site-prose a {
+  color: var(--orv-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

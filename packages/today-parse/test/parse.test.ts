@@ -103,3 +103,16 @@ describe('when to ask the AI', () => {
     ).toBe(false);
   });
 });
+
+describe('"in 10 min" is when; "10 min" or "for 10 min" is how long', () => {
+  it.each([
+    ['call mom in 10 min', '2026-11-16T04:10:00.000Z', null],
+    ['call mom in 10 mins', '2026-11-16T04:10:00.000Z', null],
+    ['gym 45 min', null, 45],
+    ['call mom in 10 min for 15 min', '2026-11-16T04:10:00.000Z', 15],
+  ])('%s', (text, dueAt, durationMin) => {
+    const p = parseTask(text, IST);
+    expect(p.dueAt).toBe(dueAt);
+    expect(p.durationMin).toBe(durationMin);
+  });
+});

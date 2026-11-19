@@ -307,8 +307,9 @@ export function parseTask(input: string, opt: ParseOptions): Parsed {
   });
 
   // ------------------------------------------------------------------ 2. duration, priority, tags, project
+  // ("in 10 min" is when, not how long: the bare form never follows "in")
   take(
-    /(^|\s)(?:for\s+(?:about\s+)?(\d+(?:\.\d+)?)\s*(m|mins?|minutes?|h|hrs?|hours?)|(\d+)h(?:(\d+)m)?|(\d+)\s*(?:m|min|mins)(?![a-z]))(?=$|\s|[,.;!?)])/i,
+    /(^|\s)(?:for\s+(?:about\s+)?(\d+(?:\.\d+)?)\s*(m|mins?|minutes?|h|hrs?|hours?)|(\d+)h(?:(\d+)m)?|(?<!\bin\s)(\d+)\s*(?:m|min|mins)(?![a-z]))(?=$|\s|[,.;!?)])/i,
     'duration',
     (m) => {
       if (m[2]) {
