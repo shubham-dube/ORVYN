@@ -2,6 +2,14 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-19 (round 0008 and the next modules)
+
+| #        | Topic        | Decision                                                                                                                                                                                                                                      |
+| -------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0008-1 | Chat crypto  | **Sealed boxes with libsodium** (already audited and used for the Vault): each message encrypted for each recipient device. No forward secrecy for now; a stolen device key could read what that device kept. Move to MLS later. Resolves O8. |
+| D-0008-2 | Next modules | **Brief, then Chat, then the IPO desk**; Jobs after.                                                                                                                                                                                          |
+| D-0008-3 | Mail         | Zoho and other mailboxes join through **IMAP with an app-specific password** (works for any provider, no OAuth app to register); Gmail keeps its Google sign-in.                                                                              |
+
 ## Decided — 2026-11-18 (spec 0007, after the first deploy)
 
 From your request ("use AI smartly so the bill is as low as possible"), recorded so you can change any of it:
