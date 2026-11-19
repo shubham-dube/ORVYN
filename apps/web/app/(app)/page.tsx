@@ -88,7 +88,7 @@ const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon
   },
 };
 /** Modules that are built; the rest show as "soon". */
-const BUILT = new Set(['today', 'drop', 'money', 'library', 'vault']);
+const BUILT = new Set(['today', 'drop', 'money', 'library', 'vault', 'assistant']);
 
 export default function Home() {
   const { me } = useSession();

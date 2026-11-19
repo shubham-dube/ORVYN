@@ -10,6 +10,7 @@ import {
   Settings,
   Shield,
   Wallet,
+  Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -130,6 +131,9 @@ function Shell({ children }: { children: ReactNode }) {
 
   const nav = [
     { href: '/', label: 'Home', icon: Home },
+    ...(me?.role === 'owner' || me?.entitlements.includes('assistant')
+      ? [{ href: '/assistant', label: 'Assistant', icon: Sparkles }]
+      : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('today')
       ? [{ href: '/today', label: 'Today', icon: CheckCircle2 }]
       : []),

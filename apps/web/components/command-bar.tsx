@@ -154,7 +154,23 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
           },
         ]
       : [];
-  const filtered: Command[] =
+  // the Assistant takes anything typed as a question; a question is offered first
+  const canAsk = me?.role === 'owner' || !!me?.entitlements.includes('assistant');
+  const question =
+    /\?\s*$|^(what|how|when|where|who|which|why|do|did|does|is|are|can|should|show|find|tell)\b/i.test(typed);
+  const askCmd: Command[] =
+    canAsk && typed.length > 1
+      ? [
+          {
+            id: 'ask',
+            label: `Ask ORVYN “${typed.length > 60 ? `${typed.slice(0, 60)}…` : typed}”`,
+            hint: 'Assistant',
+            icon: <Sparkles size={16} />,
+            run: () => router.push(`/assistant?q=${encodeURIComponent(typed)}`),
+          },
+        ]
+      : [];
+  const base: Command[] =
     today && parsed
       ? [
           ...matches,
@@ -177,6 +193,7 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
           ...dropCmd,
         ]
       : [...matches, ...dropCmd];
+  const filtered: Command[] = question ? [...askCmd, ...base] : [...base, ...askCmd];
 
   useEffect(() => {
     if (open) {
