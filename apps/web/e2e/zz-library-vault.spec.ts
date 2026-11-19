@@ -22,7 +22,7 @@ test('Library: add a document, it is read and filed, found in plain words, and i
   await expect(docs.getByText('Insurance', { exact: false }).first()).toBeVisible();
 
   // a note, and plain-words search finds each
-  await page.getByRole('button', { name: 'Note' }).click();
+  await page.getByRole('button', { name: 'Note', exact: true }).click();
   await page.getByLabel('Title (optional)').fill('Passport renewal');
   await page.getByLabel('Note', { exact: true }).fill('Carry the old passport and a PAN card copy');
   await page.getByRole('button', { name: 'Save note' }).click();
