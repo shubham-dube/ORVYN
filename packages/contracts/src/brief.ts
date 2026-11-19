@@ -12,11 +12,17 @@ const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const BriefSettings = z.object({
   enabled: z.boolean().default(false),
   at: hhmm.default('07:30'),
-  sections: z.array(z.enum(BRIEF_SECTIONS)).max(BRIEF_SECTIONS.length).default([...BRIEF_SECTIONS]),
+  sections: z
+    .array(z.enum(BRIEF_SECTIONS))
+    .max(BRIEF_SECTIONS.length)
+    .default([...BRIEF_SECTIONS]),
   nudges: z
     .object({
       enabled: z.boolean().default(true),
-      kinds: z.array(z.enum(NUDGE_KINDS)).max(NUDGE_KINDS.length).default([...NUDGE_KINDS]),
+      kinds: z
+        .array(z.enum(NUDGE_KINDS))
+        .max(NUDGE_KINDS.length)
+        .default([...NUDGE_KINDS]),
       max: z.number().int().min(0).max(5).default(2),
     })
     .default({}),
@@ -25,7 +31,13 @@ export type BriefSettings = z.infer<typeof BriefSettings>;
 
 export interface BriefAgenda {
   kind: 'agenda';
-  events: { title: string; at: string | null; until: string | null; allDay: boolean; location: string | null }[];
+  events: {
+    title: string;
+    at: string | null;
+    until: string | null;
+    allDay: boolean;
+    location: string | null;
+  }[];
   dueToday: number;
   overdue: number;
   /** the most important open tasks for today, highest priority first */
