@@ -41,7 +41,8 @@ test, monitoring.
 - ~~O5 design direction~~ — decided: Aurora Glass (DECISIONS.md).
 - O9 Android passkeys and Google sign-in need the release signing key (Digital Asset Links) and an OAuth
   client; until then the Android app signs in with the email code. Web has all three.
-- O10 FCM is moving from registration tokens to installation-ID direct send (`getToken` is deprecated in
+- ~~O10~~ — done in spec 0008 A: the app registers a Firebase Installation ID and the API sends to `message.fid`
+  (older phones keep their token until they update). Was: FCM is moving from registration tokens to installation-ID direct send (`getToken` is deprecated in
   firebase_messaging 17). The API sends with HTTP v1 `message.token`; migrate both together before the old path
   is removed.
 - O11 Notification action buttons on Android open the app and mark the notification read; running an action in

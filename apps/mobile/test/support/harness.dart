@@ -79,9 +79,11 @@ class RecordingPusher implements Pusher {
   @override
   Future<void> init() async {}
   @override
-  Future<String?> token() async => null;
+  Future<PushAddress?> address() async => null;
   @override
-  Stream<String> get tokenRefresh => const Stream.empty();
+  Stream<PushAddress> get addressChanges => const Stream.empty();
+  @override
+  Future<void> unregister() async {}
   @override
   Future<void> clear(String id) async => cleared.add(id);
 }

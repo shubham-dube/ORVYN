@@ -112,9 +112,25 @@ abstract interface class Pusher {
   /// Taps on this phone's notifications while the app runs: {id, url, action}
   Stream<Map<String, dynamic>> get taps;
   Future<void> init();
-  Future<String?> token();
-  Stream<String> get tokenRefresh;
+
+  /// Where push reaches this phone: its Firebase Installation ID (Firebase's current method), or — on a phone
+  /// where registration isn't available — a registration token. Null when push can't work (no permission…).
+  Future<PushAddress?> address();
+
+  /// A new address for this phone (Firebase re-registered it).
+  Stream<PushAddress> get addressChanges;
+
+  /// Stop push to this phone (sign-out).
+  Future<void> unregister();
   Future<void> clear(String id);
+}
+
+/// `fid`: a Firebase Installation ID; `token`: a registration token (older method, deprecated by Firebase).
+class PushAddress {
+  const PushAddress(this.kind, this.value);
+  final String kind;
+  final String value;
+  Map<String, dynamic> toJson() => {'channel': 'fcm', kind: value};
 }
 
 class NoPush implements Pusher {
@@ -126,9 +142,11 @@ class NoPush implements Pusher {
   @override
   Future<void> init() async {}
   @override
-  Future<String?> token() async => null;
+  Future<PushAddress?> address() async => null;
   @override
-  Stream<String> get tokenRefresh => const Stream.empty();
+  Stream<PushAddress> get addressChanges => const Stream.empty();
+  @override
+  Future<void> unregister() async {}
   @override
   Future<void> clear(String id) async {}
 }

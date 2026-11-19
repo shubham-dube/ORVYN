@@ -64,6 +64,10 @@ export const pushTargets = pgTable(
       .notNull()
       .references(() => devices.id, { onDelete: 'cascade' }),
     channel: text('channel', { enum: ['webpush', 'fcm'] }).notNull(),
+    /** for fcm: an installation id (current) or a registration token (older app versions) */
+    format: text('format', { enum: ['fid', 'token'] })
+      .notNull()
+      .default('token'),
     /** FCM token or Web Push endpoint */
     address: text('address').notNull(),
     keys: jsonb('keys').$type<{ p256dh: string; auth: string } | null>(),

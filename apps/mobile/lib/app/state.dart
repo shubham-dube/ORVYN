@@ -61,7 +61,7 @@ final sessionProvider = NotifierProvider<SessionController, SessionState>(Sessio
 class SessionController extends Notifier<SessionState> {
   StreamSubscription<Map<String, dynamic>>? _msgs;
   StreamSubscription<SessionResponse?>? _sessions;
-  StreamSubscription<String>? _tokens;
+  StreamSubscription<PushAddress>? _tokens;
   String? _pushTargetId;
   bool _ending = false;
 
@@ -143,15 +143,15 @@ class SessionController extends Notifier<SessionState> {
   Future<void> _registerPush() async {
     final pusher = ref.read(pusherProvider);
     if (!pusher.ready) return;
-    Future<void> register(String token) async {
-      final r = await _api.post<Map<String, dynamic>>('/notifications/targets', {'channel': 'fcm', 'token': token});
+    Future<void> register(PushAddress a) async {
+      final r = await _api.post<Map<String, dynamic>>('/notifications/targets', a.toJson());
       _pushTargetId = r['id'] as String?;
     }
 
-    final token = await pusher.token();
-    if (token != null) await register(token).catchError((_) {});
+    final address = await pusher.address();
+    if (address != null) await register(address).catchError((_) {});
     await _tokens?.cancel();
-    _tokens = pusher.tokenRefresh.listen((t) => register(t).catchError((_) {}));
+    _tokens = pusher.addressChanges.listen((a) => register(a).catchError((_) {}));
   }
 
   Future<void> refreshMe() async {
@@ -184,6 +184,7 @@ class SessionController extends Notifier<SessionState> {
     ref.read(realtimeProvider).stop();
     await _msgs?.cancel();
     await _tokens?.cancel();
+    unawaited(ref.read(pusherProvider).unregister());
     final store = ref.read(storeProvider);
     await store.write('orvyn.me', null);
     await store.write('orvyn.device', null);

@@ -22,6 +22,8 @@ export const outcomeOf = (r: SendResult) => (typeof r === 'string' ? { outcome: 
 
 export interface PushTargetRef {
   channel: 'webpush' | 'fcm';
+  /** fcm: send to message.fid (current) or message.token (older phones, deprecated by Firebase) */
+  format?: 'fid' | 'token';
   address: string;
   keys: { p256dh: string; auth: string } | null;
 }
@@ -109,7 +111,13 @@ export class LivePushSender implements PushSender {
     const res = await fetch(`https://fcm.googleapis.com/v1/projects/${this.fcm.project}/messages:send`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ message: { token: t.address, data, android: { priority: 'high' } } }),
+      body: JSON.stringify({
+        message: {
+          ...(t.format === 'fid' ? { fid: t.address } : { token: t.address }),
+          data,
+          android: { priority: 'high' },
+        },
+      }),
     });
     if (res.ok) return 'sent';
     const text = await res.text().catch(() => '');

@@ -257,21 +257,39 @@ class PushService implements Pusher {
     }
   }
 
-  /// Asks permission (Android 13+) and returns the FCM token to register, or null.
+  /// Asks permission (Android 13+), registers this app instance with FCM and returns its Firebase Installation ID
+  /// (spec 0008 A). Falls back to the older registration token only when registration isn't available here.
   @override
-  Future<String?> token() async {
+  Future<PushAddress?> address() async {
     if (!_ready) return null;
-    final s = await FirebaseMessaging.instance.requestPermission();
+    final m = FirebaseMessaging.instance;
+    final s = await m.requestPermission();
     if (s.authorizationStatus == AuthorizationStatus.denied) return null;
-    // The API sends with FCM HTTP v1 `message.token`; moving to installation-ID direct send needs an API
-    // change first (docs/specs/0001-foundation/spec.md, open questions).
-    // ignore: deprecated_member_use
-    return FirebaseMessaging.instance.getToken();
+    try {
+      final fid = m.onRegistered.first.timeout(const Duration(seconds: 20));
+      await m.register();
+      return PushAddress('fid', await fid);
+    } catch (e) {
+      debugPrint('FCM register failed ($e); using a registration token');
+      // ignore: deprecated_member_use
+      final t = await m.getToken();
+      return t == null ? null : PushAddress('token', t);
+    }
   }
 
   @override
-  // ignore: deprecated_member_use
-  Stream<String> get tokenRefresh => _ready ? FirebaseMessaging.instance.onTokenRefresh : const Stream.empty();
+  Stream<PushAddress> get addressChanges =>
+      _ready ? FirebaseMessaging.instance.onRegistered.map((fid) => PushAddress('fid', fid)) : const Stream.empty();
+
+  @override
+  Future<void> unregister() async {
+    if (!_ready) return;
+    try {
+      await FirebaseMessaging.instance.unregister();
+    } catch (_) {
+      // offline: the server forgets this phone anyway at sign-out
+    }
+  }
 
   /// Foreground: the in-app list already shows it, but the shade copy must go when it's dismissed elsewhere.
   @override

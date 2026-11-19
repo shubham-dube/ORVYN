@@ -227,7 +227,10 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       let r: { outcome: string; detail: string };
       try {
         r = outcomeOf(
-          await this.sender.send({ channel: t.channel, address: t.address, keys: t.keys }, payload),
+          await this.sender.send(
+            { channel: t.channel, format: t.format, address: t.address, keys: t.keys },
+            payload,
+          ),
         );
       } catch (e) {
         r = { outcome: 'failed', detail: (e as Error).message.slice(0, 200) };
@@ -494,14 +497,15 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
   }
 
   async registerTarget(ownerId: string, deviceId: string, req: RegisterPushRequest): Promise<{ id: string }> {
-    const address = req.channel === 'fcm' ? req.token : req.subscription.endpoint;
+    const address = req.channel === 'fcm' ? (req.fid ?? req.token!) : req.subscription.endpoint;
     const keys = req.channel === 'webpush' ? req.subscription.keys : null;
+    const format = req.channel === 'fcm' && req.fid ? ('fid' as const) : ('token' as const);
     const [row] = await this.db
       .insert(pushTargets)
-      .values({ id: newId(), ownerId, deviceId, channel: req.channel, address, keys })
+      .values({ id: newId(), ownerId, deviceId, channel: req.channel, format, address, keys })
       .onConflictDoUpdate({
         target: pushTargets.address,
-        set: { ownerId, deviceId, channel: req.channel, keys, failures: 0, disabledAt: null },
+        set: { ownerId, deviceId, channel: req.channel, format, keys, failures: 0, disabledAt: null },
       })
       .returning({ id: pushTargets.id });
     // one active target per device and channel

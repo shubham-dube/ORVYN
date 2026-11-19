@@ -58,9 +58,19 @@ export const WebPushSubscription = z.object({
   endpoint: z.string().url().max(1000),
   keys: z.object({ p256dh: z.string().max(200), auth: z.string().max(100) }),
 });
-export const RegisterPushRequest = z.discriminatedUnion('channel', [
+export const RegisterPushRequest = z.union([
   z.object({ channel: z.literal('webpush'), subscription: WebPushSubscription }),
-  z.object({ channel: z.literal('fcm'), token: z.string().min(20).max(4096) }),
+  /**
+   * An Android phone: its Firebase Installation ID (`fid`, Firebase's current method) or, from older app versions, a
+   * registration token (`token`, deprecated by Firebase). Exactly one of them.
+   */
+  z
+    .object({
+      channel: z.literal('fcm'),
+      fid: z.string().min(10).max(512).optional(),
+      token: z.string().min(20).max(4096).optional(),
+    })
+    .refine((v) => !!v.fid !== !!v.token, { message: 'send either fid or token' }),
 ]);
 export type RegisterPushRequest = z.infer<typeof RegisterPushRequest>;
 

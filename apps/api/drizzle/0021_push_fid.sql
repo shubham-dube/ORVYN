@@ -1,0 +1,1 @@
+ALTER TABLE "push_targets" ADD COLUMN "format" text DEFAULT 'token' NOT NULL;

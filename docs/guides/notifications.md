@@ -22,7 +22,8 @@ happened ("FCM_SERVICE_ACCOUNT_B64 is not set", "this browser's subscription exp
 4. Firebase console → ⚙ **Project settings → Service accounts → Generate new private key**. Then on your machine:
    `base64 -w0 service-account.json` and put the output in the server's env as `FCM_SERVICE_ACCOUNT_B64=…`.
    Restart the API (`docker compose --env-file .env.prod up -d api`).
-5. Install the new APK, sign in, allow notifications. Settings → Notifications → Your devices → **Test** on the phone.
+5. Install the new APK, sign in, allow notifications. The phone registers with its **Firebase Installation ID**
+   (Firebase's current method; the older registration token is only a fallback). Settings → Notifications → Your devices → **Test** on the phone.
 
 ## 2. Browser push (Web Push) — 2 minutes
 
