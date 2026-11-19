@@ -62,6 +62,8 @@ export const EnvSchema = z.object({
   GOOGLE_GMAIL_API: z.string().url().default('https://gmail.googleapis.com/gmail/v1'),
   /** ClickUp (personal API tokens: spec 0007 C2) */
   CLICKUP_API: z.string().url().default('https://api.clickup.com/api/v2'),
+  /** GitHub (personal tokens: spec 0008 B) */
+  GITHUB_API: z.string().url().default('https://api.github.com'),
   /**
    * AI (ADR-0010, D13, D19): OpenRouter with ORVYN's own key, routes per task, one daily cap in USD.
    * AI_PROVIDER "fake" answers deterministically (tests, e2e, offline development); "off" refuses.

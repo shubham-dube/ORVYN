@@ -3,11 +3,20 @@ import { CalendarModule } from '../calendar/calendar.module';
 import { ClickUpClient } from './clickup.client';
 import { ConnectionsController } from './connections.controller';
 import { ConnectionsService } from './connections.service';
+import { ConnectionsWatcher } from './connections.watcher';
+import { GitHubClient } from './github.client';
+import { ImapMailbox, Mailbox } from './mailbox';
 
 /** Connected accounts beyond Google's (spec 0007 C2). Owns the connections table. */
 @Module({
   imports: [CalendarModule],
-  providers: [ConnectionsService, ClickUpClient],
+  providers: [
+    ConnectionsService,
+    ConnectionsWatcher,
+    ClickUpClient,
+    GitHubClient,
+    { provide: Mailbox, useClass: ImapMailbox },
+  ],
   controllers: [ConnectionsController],
 })
 export class ConnectionsModule {}

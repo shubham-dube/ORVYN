@@ -30,7 +30,9 @@ export class FakeModel implements Model {
           ? assistant(text)
           : o.task === 'library.read'
             ? libraryRead(text, o.parts)
-            : { ok: true };
+            : o.task === 'mail.task'
+              ? { title: (/^Subject: (.*)$/m.exec(text)?.[1] ?? 'Mail').slice(0, 80), dueDate: null }
+              : { ok: true };
     return {
       text: typeof answer === 'string' ? answer : JSON.stringify(answer),
       inputTokens: Math.ceil(text.length / 4),

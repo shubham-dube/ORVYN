@@ -71,4 +71,52 @@ export class ClickUpClient {
       status: closed?.status ?? 'complete',
     });
   }
+
+  /** Every list in a workspace (folderless lists and those in folders), for "add a task to…". */
+  async lists(token: string, teamId: string): Promise<{ id: string; name: string; space: string }[]> {
+    const spaces = await this.call<{ spaces: { id: string; name: string }[] }>(
+      token,
+      'GET',
+      `/team/${teamId}/space?archived=false`,
+    );
+    const out: { id: string; name: string; space: string }[] = [];
+    for (const sp of spaces.spaces.slice(0, 20)) {
+      const [loose, folders] = await Promise.all([
+        this.call<{ lists: { id: string; name: string }[] }>(
+          token,
+          'GET',
+          `/space/${sp.id}/list?archived=false`,
+        ),
+        this.call<{ folders: { name: string; lists: { id: string; name: string }[] }[] }>(
+          token,
+          'GET',
+          `/space/${sp.id}/folder?archived=false`,
+        ),
+      ]);
+      for (const l of loose.lists) out.push({ id: l.id, name: l.name, space: sp.name });
+      for (const f of folders.folders)
+        for (const l of f.lists) out.push({ id: l.id, name: `${f.name} / ${l.name}`, space: sp.name });
+    }
+    return out;
+  }
+
+  /** A new task in a list, assigned to me. Due is milliseconds since epoch (ClickUp's form). */
+  createTask(
+    token: string,
+    listId: string,
+    t: { name: string; due: number | null; dueTime: boolean; assignee: number },
+  ) {
+    return this.call<ClickUpTask>(token, 'POST', `/list/${encodeURIComponent(listId)}/task`, {
+      name: t.name,
+      assignees: [t.assignee],
+      ...(t.due ? { due_date: t.due, due_date_time: t.dueTime } : {}),
+    });
+  }
+
+  async setDue(token: string, taskId: string, due: number | null, dueTime: boolean): Promise<void> {
+    await this.call(token, 'PUT', `/task/${encodeURIComponent(taskId)}`, {
+      due_date: due,
+      due_date_time: dueTime,
+    });
+  }
 }
