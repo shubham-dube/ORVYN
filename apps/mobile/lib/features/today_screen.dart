@@ -17,6 +17,7 @@ import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
+import 'connections.dart';
 import 'repeat_editor.dart';
 import 'sheets.dart';
 import 'task_tools.dart';
@@ -59,6 +60,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(child: PageTitle('Today', overline: loc.formatFullDate(now))),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 18, right: 6),
+                      child: IconButton(
+                        tooltip: 'Schedule a meeting',
+                        icon: Icon(LucideIcons.video, color: l.c.muted),
+                        onPressed: () => openMeetingSheet(context),
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.only(bottom: 18),
                       child: _ViewSwitch(value: _view, onChanged: (v) => setState(() => _view = v)),
@@ -149,6 +158,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             onOpen: open,
             filtering: !_query.isEmpty,
           ),
+          const ClickUpSection(),
         ],
       ],
     );

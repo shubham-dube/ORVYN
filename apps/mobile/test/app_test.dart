@@ -145,6 +145,9 @@ void main() {
     expect(find.text('this phone'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.bySemanticsLabel('Night'), -300, scrollable: find.byType(Scrollable).first);
+    // bring it to the middle, clear of the bell and avatar at the top
+    await Scrollable.ensureVisible(find.bySemanticsLabel('Night').evaluate().first, alignment: 0.5);
+    await settle(tester);
     await tester.tap(find.bySemanticsLabel('Night'));
     await settle(tester);
     expect(h.store.values['orvyn.theme'], 'night');

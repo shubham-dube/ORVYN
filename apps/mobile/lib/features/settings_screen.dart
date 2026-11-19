@@ -17,6 +17,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
+import 'connections.dart';
 import 'delivery_panel.dart';
 
 final devicesProvider = FutureProvider.autoDispose<List<DeviceView>>((ref) async {
@@ -43,6 +44,8 @@ class SettingsScreen extends ConsumerWidget {
         _Notifications(),
         SizedBox(height: 14),
         _TodayEntry(),
+        _Connections(),
+        SizedBox(height: 14),
         _Calendars(),
         SizedBox(height: 14),
         _AiUsage(),
@@ -482,6 +485,21 @@ class _Security extends ConsumerWidget {
 }
 
 /// Settings → Today (only for people who have Today).
+/// Settings → Connections (spec 0007 C2).
+class _Connections extends ConsumerWidget {
+  const _Connections();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(sessionProvider);
+    if (s is! SignedIn || !s.me.can('today')) return const SizedBox.shrink();
+    return const _Section(
+      title: 'Connections',
+      line: 'Several Google accounts (Calendar, Meet, Gmail) and ClickUp — keys stay sealed on the server.',
+      children: [ConnectionsPanel()],
+    );
+  }
+}
+
 class _TodayEntry extends ConsumerWidget {
   const _TodayEntry();
   @override
