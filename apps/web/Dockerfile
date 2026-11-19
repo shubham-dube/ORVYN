@@ -13,6 +13,8 @@ COPY packages/today-parse/package.json packages/today-parse/
 COPY packages/today-plan/package.json packages/today-plan/
 COPY packages/money/package.json packages/money/
 COPY packages/sync-client/package.json packages/sync-client/
+COPY packages/library/package.json packages/library/
+COPY packages/vault-crypto/package.json packages/vault-crypto/
 COPY apps/web/package.json apps/web/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile --filter @orvyn/web...
 COPY tsconfig.base.json ./

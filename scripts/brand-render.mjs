@@ -22,7 +22,11 @@ async function png(file, source, size, { pad = 0, background = 'transparent' } =
   );
   const out = join(root, file);
   mkdirSync(dirname(out), { recursive: true });
-  await page.screenshot({ path: out, omitBackground: background === 'transparent', clip: { x: 0, y: 0, width: size, height: size } });
+  await page.screenshot({
+    path: out,
+    omitBackground: background === 'transparent',
+    clip: { x: 0, y: 0, width: size, height: size },
+  });
 }
 
 const mark = svg('mark.svg');
