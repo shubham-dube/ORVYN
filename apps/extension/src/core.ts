@@ -181,7 +181,53 @@ export type Request =
   | { type: 'act'; id: string; action: string }
   | { type: 'test' }
   | { type: 'quickAdd'; text: string }
-  | { type: 'drop'; text: string };
+  | { type: 'drop'; text: string }
+  | { type: 'expense'; text: string }
+  | { type: 'complete'; id: string };
+
+/** Asks that answer with data rather than the status (spec 0007 C4). */
+export type DataRequest = { type: 'glance' } | { type: 'search'; q: string };
+
+export interface TodayGlance {
+  today: string;
+  tasks: {
+    id: string;
+    title: string;
+    dueDate: string | null;
+    dueAt: string | null;
+    priority: number;
+    overdue: boolean;
+  }[];
+  events: { id: string; title: string; start: string | null; end: string | null; location: string }[];
+}
+export interface MoneyGlance {
+  month: string;
+  spentMinor: number;
+  earnedMinor: number;
+  toReview: number;
+  categories: { id: string; name: string; slug: string | null }[];
+  recent: {
+    id: string;
+    amountMinor: number;
+    currency: string;
+    direction: 'debit' | 'credit';
+    merchant: string;
+    occurredAt: string;
+    reviewed: boolean;
+    category: string | null;
+  }[];
+}
+export interface Glance {
+  today: TodayGlance | null;
+  money: MoneyGlance | null;
+}
+export interface FoundDoc {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  expiresOn: string | null;
+}
 
 export interface Status {
   connected: boolean;

@@ -15,6 +15,7 @@
   "dependencies": {
     "@orvyn/contracts": "workspace:*",
     "@orvyn/design-tokens": "workspace:*",
+    "@orvyn/money": "workspace:*",
     "lucide-react": "^0.460.0",
     "motion": "^12.43.0",
     "react": "^19.3.1",

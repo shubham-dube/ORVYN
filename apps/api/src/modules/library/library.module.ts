@@ -7,6 +7,7 @@ import { SyncModule } from '../sync/sync.module';
 import { serverOrigin } from '../sync/sync.service';
 import { tableEntity } from '../sync/table-entity';
 import { libraryDocs } from './library.schema';
+import { LibraryController } from './library.controller';
 import { LibraryService } from './library.service';
 
 /** What a device sets for the reading state: it asks for a read ('new'); the in-between states are the server's. */
@@ -41,5 +42,10 @@ class LibraryEntities implements OnModuleInit {
   }
 }
 
-@Module({ imports: [SyncModule], providers: [LibraryEntities, LibraryService], exports: [LibraryService] })
+@Module({
+  imports: [SyncModule],
+  providers: [LibraryEntities, LibraryService],
+  controllers: [LibraryController],
+  exports: [LibraryService],
+})
 export class LibraryModule {}

@@ -1,5 +1,6 @@
 /// <reference types="chrome" />
 import { Hlc, type NotificationView, type ServerMessage } from '@orvyn/contracts';
+import { occurredAtFor, parseSpend } from '@orvyn/money';
 import { API_URL, VERSION, WEB_URL } from './config';
 import {
   badgeText,
@@ -9,7 +10,12 @@ import {
   connectUrl,
   notificationButtons,
   pkce,
+  type DataRequest,
+  type FoundDoc,
+  type Glance,
+  type MoneyGlance,
   type Request,
+  type TodayGlance,
   type Status,
   type Store,
   unreadCount,
@@ -187,9 +193,84 @@ async function capture(target: 'today' | 'drop', text: string): Promise<string> 
     : 'Dropped — a suggestion is on its way';
 }
 
+/** A typed expense ("spent 240 on lunch"), read by the same rules as everywhere; filed under its category. */
+async function expense(text: string): Promise<string> {
+  const now = new Date();
+  const s = parseSpend(text, { now });
+  if (!s) throw new Error('Type an amount, like “spent 240 on lunch”');
+  const g = await client.call<MoneyGlance>('GET', '/money/glance');
+  const cat = g.categories.find((c) => c.slug && c.slug === s.category);
+  const r = await client.call<{ rejected: { reason: string }[] }>('POST', '/sync/push', {
+    mutations: [
+      {
+        mutationId: crypto.randomUUID(),
+        entity: 'money.transaction',
+        entityId: crypto.randomUUID(),
+        op: 'upsert',
+        fields: {
+          amountMinor: s.amountMinor,
+          direction: s.direction,
+          merchant: s.merchant,
+          note: s.note,
+          categoryId: cat?.id ?? null,
+          occurredAt: occurredAtFor(
+            { date: s.date, time: s.time },
+            now,
+            Intl.DateTimeFormat().resolvedOptions().timeZone,
+          ).toISOString(),
+          source: 'manual',
+        },
+        hlc: clock.tick(),
+      },
+    ],
+  });
+  if (r.rejected.length) throw new Error('not saved');
+  return `${s.direction === 'credit' ? 'Received' : 'Spent'} ₹${(s.amountMinor / 100).toLocaleString('en-IN')}${cat ? ` · ${cat.name}` : ''}`;
+}
+
+async function complete(id: string): Promise<void> {
+  await client.call('POST', '/sync/push', {
+    mutations: [
+      {
+        mutationId: crypto.randomUUID(),
+        entity: 'today.task',
+        entityId: id,
+        op: 'upsert',
+        fields: { completedAt: new Date().toISOString() },
+        hlc: clock.tick(),
+      },
+    ],
+  });
+}
+
+/** Each part answers for itself; a part the person doesn't have (403) is simply absent. */
+async function glance(): Promise<Glance> {
+  const get = <T>(path: string) => client.call<T>('GET', path).catch(() => null);
+  const [today, money] = await Promise.all([
+    get<TodayGlance>('/today/glance'),
+    get<MoneyGlance>('/money/glance'),
+  ]);
+  return { today, money };
+}
+
 // ------------------------------------------------------------------ wiring
 
-chrome.runtime.onMessage.addListener((req: Request, _sender, reply) => {
+chrome.runtime.onMessage.addListener((req: DataRequest | Request, _sender, reply) => {
+  if (req.type === 'glance') {
+    void glance().then(reply);
+    return true;
+  }
+  if (req.type === 'search') {
+    void client
+      .call<FoundDoc[]>('GET', `/library/search?q=${encodeURIComponent(req.q)}`)
+      .catch(() => [])
+      .then(reply);
+    return true;
+  }
+  return onRequest(req, reply);
+});
+
+function onRequest(req: Request, reply: (s: Status) => void): boolean {
   const run = async (): Promise<Status> => {
     try {
       if (req.type === 'connect') await connect();
@@ -200,6 +281,8 @@ chrome.runtime.onMessage.addListener((req: Request, _sender, reply) => {
       if (req.type === 'status' && !ws) await startLive();
       if (req.type === 'quickAdd') return await status(undefined, await capture('today', req.text));
       if (req.type === 'drop') return await status(undefined, await capture('drop', req.text));
+      if (req.type === 'expense') return await status(undefined, await expense(req.text));
+      if (req.type === 'complete') await complete(req.id);
       return await status();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'failed';
@@ -208,7 +291,7 @@ chrome.runtime.onMessage.addListener((req: Request, _sender, reply) => {
   };
   void run().then(reply);
   return true; // async reply
-});
+}
 
 chrome.notifications.onButtonClicked.addListener(
   (id, button) => void (button === 0 ? open(id) : dismiss(id)),

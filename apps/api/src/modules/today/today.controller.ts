@@ -1,10 +1,10 @@
-import { Body, Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 import { type CalEvent, ParseRequest, PlanRequest, type TodaySettingsFields } from '@orvyn/contracts';
 import { type Plan, planFromRecords } from '@orvyn/today-plan';
-import { instantAt, looksUnread, type Parsed, parseTask } from '@orvyn/today-parse';
+import { instantAt, looksUnread, type Parsed, parseTask, wallIn } from '@orvyn/today-parse';
 import { z } from 'zod';
 import { AiService } from '../ai/ai.service';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gte, isNull, lt, lte, or } from 'drizzle-orm';
 import { type PgColumn } from 'drizzle-orm/pg-core';
 import { AppError } from '../../common/errors';
 import { ZodPipe } from '../../common/zod.pipe';
@@ -19,6 +19,79 @@ export class TodayController {
     @Inject(DB) private readonly db: Db,
     private readonly ai: AiService,
   ) {}
+
+  /**
+   * The day at a glance, for small clients (the Chrome extension): open tasks due today or overdue, and today's
+   * one-off events, in the person's zone (spec 0007 C4).
+   */
+  @Get('glance')
+  async glance(@Auth() a: AuthContext) {
+    const [settings] = await this.db
+      .select({ timeZone: todaySettings.timeZone })
+      .from(todaySettings)
+      .where(eq(todaySettings.ownerId, a.userId));
+    const tz = settings?.timeZone ?? 'Asia/Kolkata';
+    const w = wallIn(new Date(), tz);
+    const today = `${w.y}-${String(w.m).padStart(2, '0')}-${String(w.d).padStart(2, '0')}`;
+    const dayStart = instantAt(w.y, w.m, w.d, 0, 0, tz);
+    const dayEnd = instantAt(w.y, w.m, w.d + 1, 0, 0, tz);
+    const tasks = await this.db
+      .select({
+        id: todayTasks.id,
+        title: todayTasks.title,
+        dueDate: todayTasks.dueDate,
+        dueAt: todayTasks.dueAt,
+        priority: todayTasks.priority,
+      })
+      .from(todayTasks)
+      .where(
+        and(
+          eq(todayTasks.ownerId, a.userId),
+          isNull(todayTasks.deletedAt),
+          isNull(todayTasks.completedAt),
+          or(lte(todayTasks.dueDate, today), lt(todayTasks.dueAt, dayEnd)),
+        ),
+      )
+      .limit(100);
+    const events = await this.db
+      .select({
+        id: todayEvents.id,
+        title: todayEvents.title,
+        start: todayEvents.start,
+        end: todayEvents.end,
+        location: todayEvents.location,
+      })
+      .from(todayEvents)
+      .where(
+        and(
+          eq(todayEvents.ownerId, a.userId),
+          isNull(todayEvents.deletedAt),
+          isNull(todayEvents.rrule),
+          gte(todayEvents.start, dayStart),
+          lt(todayEvents.start, dayEnd),
+        ),
+      )
+      .limit(20);
+    const at = (t: (typeof tasks)[number]) => t.dueAt?.getTime() ?? Date.parse(`${t.dueDate}T23:59:00Z`);
+    return {
+      today,
+      tasks: tasks
+        .map((t) => ({
+          ...t,
+          dueAt: t.dueAt?.toISOString() ?? null,
+          overdue: t.dueAt ? t.dueAt < dayStart : (t.dueDate ?? today) < today,
+        }))
+        .sort(
+          (x, y) =>
+            Number(y.overdue) - Number(x.overdue) ||
+            y.priority - x.priority ||
+            at(x as never) - at(y as never),
+        ),
+      events: events
+        .sort((x, y) => (x.start?.getTime() ?? 0) - (y.start?.getTime() ?? 0))
+        .map((e) => ({ ...e, start: e.start?.toISOString() ?? null, end: e.end?.toISOString() ?? null })),
+    };
+  }
 
   /** For clients without the parser package (Android): same rules, the person's zone and projects. */
   @Post('parse')

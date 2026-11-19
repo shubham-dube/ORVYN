@@ -62,6 +62,19 @@ test('the Chrome extension connects through the web app and shows live notificat
     await expect(web.getByLabel('Dropped: https://example.test/long-read')).toBeVisible({ timeout: 15_000 });
     await web.close();
 
+    // Today in the toolbar: the captured task is there and is ticked off right here
+    await popup.getByRole('tab', { name: 'Today' }).click();
+    await popup.getByRole('button', { name: 'Complete Renew driving licence' }).click();
+    await expect(popup.getByText('Renew driving licence')).toHaveCount(0);
+
+    // money in words gets its own button; the Money tab shows the month
+    await popup.getByLabel('Add or drop').fill('spent 340 on dinner');
+    await popup.getByRole('button', { name: /Add ₹340/ }).click();
+    await expect(popup.getByRole('status')).toHaveText(/^Spent ₹340/);
+    await popup.getByRole('tab', { name: 'Money' }).click();
+    await expect(popup.getByLabel('Money').getByText('Spent this month')).toBeVisible();
+    await expect(popup.getByLabel('Money').getByText('₹340').first()).toBeVisible();
+
     await popup.getByRole('button', { name: 'Disconnect' }).click();
     await expect(popup.getByRole('button', { name: 'Connect to ORVYN' })).toBeVisible();
     expect(crashes).toEqual([]);

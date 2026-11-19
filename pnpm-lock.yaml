@@ -180,6 +180,9 @@ importers:
       '@orvyn/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@orvyn/money':
+        specifier: workspace:*
+        version: link:../../packages/money
       lucide-react:
         specifier: ^0.460.0
         version: 0.460.0(react@19.3.1)
