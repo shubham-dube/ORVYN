@@ -59,4 +59,5 @@ const out = {
   file: { plain: 'a photo, pretend', key: file.key, nonce: file.nonce, bytes: b64(file.bytes) },
 };
 writeFileSync(new URL('../fixtures/chat-vectors.json', import.meta.url), `${JSON.stringify(out, null, 2)}\n`);
+// eslint-disable-next-line no-console
 console.log('wrote fixtures/chat-vectors.json');
