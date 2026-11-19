@@ -1,6 +1,6 @@
 # Spec 0010: IPO desk and IPO Pool
 
-Status: In progress 2026-11-19 · Roadmap step 7 (features.md #8; D-0008-2; D-0010-*) · Module: `ipo`
+Status: Delivered 2026-11-19 (API, web, Android; guide in docs/guides/ipo.md) · Roadmap step 7 (features.md #8; D-0008-2; D-0010-*) · Module: `ipo`
 
 ## Problem
 
@@ -124,14 +124,14 @@ settings sheet. Android: the same, and the partner page is a web page that works
 
 ## Acceptance criteria
 
-- [ ] AC1 Calendar, GMP (with history) and subscription from the feed, or typed by hand when there is none.
-- [ ] AC2 Odds and expected profit follow the model above (unit tests with worked examples).
-- [ ] AC3 Notifications follow the filters and events in settings; each fires once.
-- [ ] AC4 The Pool plan uses each partner's float and the cheapest source; card fees are recorded as costs.
-- [ ] AC5 Balances (float per partner, owed per source, profit per round) always equal the ledger.
-- [ ] AC6 A partner link shows only that partner's items, updates the round, expires and can be revoked.
-- [ ] AC7 Owner-only; nobody else reaches any of it (two-person test).
-- [ ] AC8 Web and Android screens with tests.
+- [x] AC1 Calendar, GMP (with history) and subscription from the feed, or typed by hand when there is none.
+- [x] AC2 Odds and expected profit follow the model above (unit tests with worked examples).
+- [x] AC3 Notifications follow the filters and events in settings; each fires once.
+- [x] AC4 The Pool plan uses each partner's float and the cheapest source; card fees are recorded as costs.
+- [x] AC5 Balances (float per partner, owed per source, profit per round) always equal the ledger.
+- [x] AC6 A partner link shows only that partner's items, updates the round, expires and can be revoked.
+- [x] AC7 Owner-only; nobody else reaches any of it (two-person test).
+- [x] AC8 Web and Android screens with tests.
 
 ## Open questions
 

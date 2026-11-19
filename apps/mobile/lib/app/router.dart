@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../design/orb.dart';
+import '../features/ipo_screen.dart';
 import '../features/brief_screen.dart';
 import '../features/mail_screen.dart';
 import '../features/people_screen.dart';
@@ -63,6 +64,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/people', builder: (_, _) => const PeopleScreen()),
       GoRoute(path: '/mail', builder: (_, _) => const MailScreen()),
+      GoRoute(
+        path: '/ipo/pool/rounds/:id',
+        builder: (_, s) => RoundScreen(id: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/ipo/:id',
+        builder: (_, s) => IpoDetailScreen(id: s.pathParameters['id']!),
+      ),
       GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
       ShellRoute(
         builder: (context, state, child) => Shell(location: state.matchedLocation, child: child),
@@ -94,6 +103,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             pageBuilder: (_, _) => const NoTransitionPage(child: SettingsScreen()),
+          ),
+          GoRoute(
+            path: '/ipo',
+            pageBuilder: (_, s) => NoTransitionPage(child: IpoScreen(pool: s.uri.queryParameters['tab'] == 'pool')),
           ),
           GoRoute(
             path: '/brief',

@@ -12,6 +12,7 @@ import {
   Wallet,
   Sparkles,
   Sunrise,
+  TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -149,6 +150,9 @@ function Shell({ children }: { children: ReactNode }) {
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('library')
       ? [{ href: '/library', label: 'Library', icon: BookOpen }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('ipo')
+      ? [{ href: '/ipo', label: 'IPO desk', icon: TrendingUp }]
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('vault')
       ? [{ href: '/vault', label: 'Vault', icon: KeyRound }]
