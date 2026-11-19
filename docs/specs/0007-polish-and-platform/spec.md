@@ -77,3 +77,21 @@ web on Vercel, files on Cloudflare R2) · Modules: all
 ## Out of scope for this round
 
 The Assistant (spec 0005) resumes after this round. iOS stays the PWA.
+
+## Delivered (2026-11-19)
+
+| Step | What shipped                                                                                                                                                                                                                           |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1   | Any common file type up to 25 MB; `GET /files/health` storage check (Settings); viewer for images, PDF, audio, video, text, CSV on web and Android.                                                                                    |
+| A2   | One voice hook on web (no repeated words); keep the recording as a voice note.                                                                                                                                                         |
+| A3   | Per-device delivery status and test; FCM / VAPID / Windows guide (`docs/guides/notifications.md`); Android alarm checklist.                                                                                                            |
+| B    | Brand (mark, icons, splash, OG); themed dropdowns, skeletons, sticky sheet actions, new People page (web); module launcher, calm Today and Money, sticky forms (Android).                                                              |
+| C1   | Captured payments ask "what was it?" with buttons and a reply box; rules read replies; learned merchant rules (Manage → Learned).                                                                                                      |
+| C2   | Connections hub: several Google accounts (Calendar, Meet, optional Gmail), ClickUp by token; schedule meetings with Meet links and invitations; ClickUp in Today; Mail card. Guide: `docs/guides/connections.md`.                      |
+| C3   | Rules before AI in Drop, cheap model first with escalation, per-person answer cache, photos shrunk before sending (decisions D-0007-1…4).                                                                                              |
+| C4   | Public site (home, features, security, download, FAQ, privacy, terms) at `/` for new visitors; release workflow publishing APK, extension and Windows installer; extension popup with Today, Money, Inbox, Find and expenses in words. |
+
+**Needs the founder:** Firebase project + `google-services.json` (as the `GOOGLE_SERVICES_JSON_B64` secret) and
+`FCM_SERVICE_ACCOUNT_B64` on the server for Android push; VAPID keys for browser push; Google OAuth client (+ Gmail API)
+for connections; repository variables `ORVYN_API_URL` / `ORVYN_WEB_URL` and a `v*` tag to publish downloads;
+optionally an Android signing key; `NEXT_PUBLIC_CONTACT_EMAIL` for the site.
