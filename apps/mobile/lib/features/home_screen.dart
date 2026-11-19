@@ -12,6 +12,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
 import 'dashboard_widgets.dart';
+import 'tools.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -63,6 +64,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           PageTitle(first.isEmpty ? greetingAt(now) : '${greetingAt(now)}, $first', overline: loc.formatFullDate(now)),
           if (modesFor.isNotEmpty) QuickAddCard(key: ValueKey(modesFor.join()), modes: modesFor),
           if (me?.can('today') ?? false) const TodayCard(),
+          if (me?.can('today') ?? false) const MailSection(),
           Glass(
             level: GlassLevel.float,
             padding: const EdgeInsets.all(20),

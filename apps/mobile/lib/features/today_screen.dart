@@ -21,6 +21,7 @@ import 'connections.dart';
 import 'repeat_editor.dart';
 import 'sheets.dart';
 import 'task_tools.dart';
+import 'tools.dart';
 import 'ways_editor.dart';
 import 'today_calendar.dart';
 
@@ -158,7 +159,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             onOpen: open,
             filtering: !_query.isEmpty,
           ),
-          const ClickUpSection(),
+          const FromYourToolsSection(),
         ],
       ],
     );

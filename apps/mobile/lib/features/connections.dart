@@ -11,6 +11,7 @@ import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
 import 'sheets.dart';
+import 'tools.dart';
 
 /// One connected account (spec 0007 C2): Google (calendar, meet, gmail) or ClickUp (tasks), several of each.
 class Connection {
@@ -37,7 +38,15 @@ final clickupTasksProvider = FutureProvider.autoDispose<List<Map<String, dynamic
 
 Future<void> openMeetingSheet(BuildContext context) => showGlassSheet<void>(context, (_) => const MeetingSheet());
 
-const _capName = {'calendar': 'Calendar', 'meet': 'Meet', 'gmail': 'Gmail', 'tasks': 'Tasks'};
+const _capName = {
+  'calendar': 'Calendar',
+  'meet': 'Meet',
+  'gmail': 'Gmail',
+  'tasks': 'Tasks',
+  'issues': 'Issues',
+  'reviews': 'Reviews',
+  'mail': 'Mail',
+};
 
 /// Settings → Connections: every account, Gmail per Google account, ClickUp by token.
 class ConnectionsPanel extends ConsumerWidget {
@@ -73,7 +82,7 @@ class ConnectionsPanel extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      _Mark(provider: c.provider),
+                      ProviderMark(provider: c.provider),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -125,50 +134,77 @@ class ConnectionsPanel extends ConsumerWidget {
               label: 'ClickUp',
               icon: LucideIcons.plus,
               small: true,
-              onPressed: () => showGlassSheet<void>(context, (_) => const _ClickUpTokenSheet()),
+              onPressed: () => showGlassSheet<void>(context, (_) => const _TokenSheet(provider: 'clickup')),
+            ),
+            OrvButton(
+              label: 'GitHub',
+              icon: LucideIcons.plus,
+              small: true,
+              onPressed: () => showGlassSheet<void>(context, (_) => const _TokenSheet(provider: 'github')),
+            ),
+            OrvButton(
+              label: 'Mailbox (Zoho…)',
+              icon: LucideIcons.plus,
+              small: true,
+              onPressed: () => showGlassSheet<void>(context, (_) => const MailboxSheet()),
             ),
           ],
         ),
         const SizedBox(height: 6),
-        Text('Coming: Outlook, Notion, GitHub, Slack.', style: OrvText.muted(l).copyWith(fontSize: 12)),
+        Text('Coming: Outlook calendar, Notion, Slack.', style: OrvText.muted(l).copyWith(fontSize: 12)),
       ],
     );
   }
 }
 
-class _Mark extends StatelessWidget {
-  const _Mark({required this.provider});
+class ProviderMark extends StatelessWidget {
+  const ProviderMark({super.key, required this.provider, this.size = 34});
+  final double size;
   final String provider;
   @override
   Widget build(BuildContext context) {
     final colors = switch (provider) {
       'google' => const [Color(0xFF4285F4), Color(0xFF34A853)],
       'clickup' => const [Color(0xFF7B68EE), Color(0xFFFD71AF)],
+      'github' => const [Color(0xFF24292F), Color(0xFF57606A)],
+      'mail' => const [Color(0xFFE42527), Color(0xFFF7A21B)],
       _ => const [Color(0xFF64748B), Color(0xFF334155)],
     };
     return Container(
-      width: 34,
-      height: 34,
+      width: size,
+      height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(size * 0.3),
         gradient: LinearGradient(colors: colors),
       ),
       child: Text(
-        provider.isEmpty ? '?' : provider[0].toUpperCase(),
-        style: const TextStyle(fontFamily: fontFamily, color: Colors.white, fontWeight: FontWeight.w700),
+        provider == 'mail' ? '@' : (provider.isEmpty ? '?' : provider[0].toUpperCase()),
+        style: TextStyle(
+          fontFamily: fontFamily,
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: size * 0.42,
+        ),
       ),
     );
   }
 }
 
-class _ClickUpTokenSheet extends ConsumerStatefulWidget {
-  const _ClickUpTokenSheet();
+const _tokenHelp = {
+  'clickup': 'ClickUp → avatar → Settings → Apps → API Token (starts with pk_). Sealed on the server.',
+  'github': 'github.com → Settings → Developer settings → Personal access tokens → Fine-grained. Permissions: Issues read & write, Pull requests read. Sealed on the server.',
+};
+
+class _TokenSheet extends ConsumerStatefulWidget {
+  const _TokenSheet({required this.provider});
+  final String provider;
   @override
-  ConsumerState<_ClickUpTokenSheet> createState() => _ClickUpTokenSheetState();
+  ConsumerState<_TokenSheet> createState() => _TokenSheetState();
 }
 
-class _ClickUpTokenSheetState extends ConsumerState<_ClickUpTokenSheet> {
+class _TokenSheetState extends ConsumerState<_TokenSheet> {
+  String get _name => widget.provider == 'github' ? 'GitHub' : 'ClickUp';
   final _c = TextEditingController();
   bool _busy = false;
   String? _problem;
@@ -192,14 +228,14 @@ class _ClickUpTokenSheetState extends ConsumerState<_ClickUpTokenSheet> {
     });
     final toaster = Toaster.of(context);
     try {
-      final r = await ref.read(apiProvider).post<Map<String, dynamic>>('/connections/clickup', {
+      final r = await ref.read(apiProvider).post<Map<String, dynamic>>('/connections/${widget.provider}', {
         'token': _c.text.trim(),
       });
       ref.invalidate(connectionsProvider);
       if (mounted) Navigator.of(context).pop();
-      toaster.show('ClickUp connected', body: r['account'] as String?, tone: ToastTone.success);
+      toaster.show('$_name connected', body: r['account'] as String?, tone: ToastTone.success);
     } catch (e) {
-      setState(() => _problem = 'ClickUp didn’t accept that token. Copy it again from ClickUp.');
+      setState(() => _problem = '$_name didn’t accept that token. Copy it again from $_name.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -209,7 +245,7 @@ class _ClickUpTokenSheetState extends ConsumerState<_ClickUpTokenSheet> {
   Widget build(BuildContext context) {
     final l = context.orv;
     return StickySheet(
-      title: 'Connect ClickUp',
+      title: 'Connect $_name',
       footer: Align(
         alignment: Alignment.centerRight,
         child: OrvButton(
@@ -223,7 +259,7 @@ class _ClickUpTokenSheetState extends ConsumerState<_ClickUpTokenSheet> {
         OrvField(label: 'Personal API token', controller: _c, autofocus: true),
         const SizedBox(height: 6),
         Text(
-          _problem ?? 'ClickUp → avatar → Settings → Apps → API Token (starts with pk_). Sealed on the server.',
+          _problem ?? _tokenHelp[widget.provider]!,
           style: OrvText.muted(l).copyWith(fontSize: 12, color: _problem == null ? null : l.c.danger),
         ),
       ],
@@ -487,63 +523,6 @@ class _MeetingSheetState extends ConsumerState<MeetingSheet> {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// Today: open ClickUp tasks assigned to the person; tick closes them in ClickUp.
-class ClickUpSection extends ConsumerWidget {
-  const ClickUpSection({super.key});
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l = context.orv;
-    final tasks = ref.watch(clickupTasksProvider).value;
-    if (tasks == null || tasks.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Glass(
-        padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('FROM CLICKUP  ${tasks.length}', style: OrvText.label(l)),
-            for (final t in tasks.take(10))
-              Row(
-                children: [
-                  IconButton(
-                    tooltip: 'Done: ${t['name']}',
-                    icon: Icon(LucideIcons.circle, color: l.c.muted),
-                    onPressed: () async {
-                      final toaster = Toaster.of(context);
-                      try {
-                        await ref.read(apiProvider).post<dynamic>(
-                          '/connections/clickup/tasks/${Uri.encodeComponent(t['id'] as String)}/complete',
-                          {'connectionId': t['connectionId']},
-                        );
-                        ref.invalidate(clickupTasksProvider);
-                        toaster.show('Closed in ClickUp', body: t['name'] as String, tone: ToastTone.success);
-                      } catch (_) {
-                        toaster.show('ClickUp didn’t take it', tone: ToastTone.danger);
-                      }
-                    },
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => ref.read(urlOpenerProvider)(Uri.parse(t['url'] as String)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(t['name'] as String, style: OrvText.body(l)),
-                          Text('${t['list']} · ${t['status']}', style: OrvText.muted(l).copyWith(fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
