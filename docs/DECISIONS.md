@@ -2,6 +2,14 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-19 (spec 0011, Chat and Split — defaults chosen for you; change any)
+
+| #        | Topic       | Decision                                                                                                                                                                          |
+| -------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0011-1 | Chat crypto | Sealed per device as D-0008-1, built from primitives both libsodium (web) and Dart `cryptography` (Android) provide, cross-tested (ADR-0014). New devices don't see old messages. |
+| D-0011-2 | Split       | A shared group record the server can read (balances, plans, reminders), not end-to-end encrypted; guests (not on ORVYN) by a private read-only link (ADR-0015).                   |
+| D-0011-3 | Settling up | The fewest transfers that clear everyone; a payment you record moves the balances. ORVYN never moves money.                                                                       |
+
 ## Decided — 2026-11-19 (spec 0010, IPO desk and Pool — defaults chosen for you; change any)
 
 | #        | Topic         | Decision                                                                                                                                                                                                    |

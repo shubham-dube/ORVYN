@@ -22,7 +22,10 @@
 
 ## Vault — zero-knowledge (ADR-0004)
 
-- Library: **libsodium** (via `libsodium-wrappers-sumo` on web/extension/desktop, `sodium_libs` in Flutter).
+- Library: **libsodium** (via `libsodium-wrappers-sumo` on web/extension/desktop); in Flutter the pure-Dart
+  `cryptography` package with the same algorithms, checked against shared test vectors (D24, ADR-0014).
+- Chat: per-message XChaCha20-Poly1305 keys sealed to every device with X25519 + BLAKE2b and signed with Ed25519
+  (ADR-0014).
   No custom primitives.
 - **Vault passphrase** (separate from the account login) → **Argon2id** (moderate profile, tuned per device)
   → key-encryption key (KEK). A random 256-bit **vault key** encrypts items with **XChaCha20-Poly1305**; the

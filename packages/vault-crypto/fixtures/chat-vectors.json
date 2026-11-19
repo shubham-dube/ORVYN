@@ -1,0 +1,73 @@
+{
+  "$comment": "Shared by TypeScript (test/chat.test.ts) and Dart (apps/mobile/test/chat_crypto_test.dart).",
+  "devices": {
+    "alice": {
+      "boxPublic": "yP7Kgb4ZbN8sreq_E8SQPXYy3OSVWqaLbl2a3vVOJhY",
+      "boxSecret": "AQgPFh0kKzI5QEdOVVxjanF4f4aNlJuiqbC3vsXM09o",
+      "signPublic": "7WMTD-6oR0H6iFG5Pq3_lets0R24GfhlDBJZtBGKMPQ",
+      "signSecret": "AgkQFx4lLDM6QUhPVl1ka3J5gIeOlZyjqrG4v8bN1Ns"
+    },
+    "bobPhone": {
+      "boxPublic": "u1D_noKldM-_gg6X9g-5wUPsdBXPUU-M_Zjv9Z4FlhQ",
+      "boxSecret": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+      "signPublic": "_BoaWiGjTFi0RttfapDqSNXYzcwlBgEvSlE6bGf_XY8",
+      "signSecret": "BAsSGSAnLjU8Q0pRWF9mbXR7gomQl56lrLO6wcjP1t0"
+    },
+    "bobLaptop": {
+      "boxPublic": "D_gSWgXKc1fGjgs_fubTMK5XqfOYw1mvnEx0qlQYS3c",
+      "boxSecret": "BQwTGiEoLzY9REtSWWBnbnV8g4qRmJ-mrbS7wsnQ194",
+      "signPublic": "7YwCyJzWk2yyJPaHn9f9VRWi9hz9FhIW5qUDoUgBnjU",
+      "signSecret": "Bg0UGyIpMDc-RUxTWmFob3Z9hIuSmaCnrrW8w8rR2N8"
+    }
+  },
+  "fingerprints": {
+    "alice": "202a 2a47 193b 8638 aebb"
+  },
+  "conversationId": "0193f000-0000-7000-8000-00000000c0c0",
+  "messageId": "0193f000-0000-7000-8000-0000000000a1",
+  "senderDeviceId": "alice-phone",
+  "payload": {
+    "t": "text",
+    "text": "Dinner at 8? 🍕 ünïcode",
+    "replyTo": null
+  },
+  "fixed": {
+    "key": "MjlAR05VXGNqcXh_ho2Um6KpsLe-xczT2uHo7_b9BAs",
+    "nonce": "PENKUVhfZm10e4KJkJeepayzusHIz9bd",
+    "seals": [
+      {
+        "ephemeral": "Rk1UW2JpcHd-hYyTmqGor7a9xMvS2eDn7vX8AwoRGB8",
+        "nonce": "UFdeZWxzeoGIj5adpKuyucDHztXc4-rx"
+      },
+      {
+        "ephemeral": "WmFob3Z9hIuSmaCnrrW8w8rR2N_m7fT7AgkQFx4lLDM",
+        "nonce": "ZGtyeYCHjpWco6qxuL_GzdTb4unw9_4F"
+      }
+    ]
+  },
+  "sealed": {
+    "ciphertext": "o-Cg4LbuLByPAmJnL_u59FWX1POq1o-okpkgI0c0xjPn4YKGvAWoueqWesC9tEk3NI55CZN22Z_0q5WAuqUoUXZz3Lx5r-KqG62BS3aMkYo",
+    "nonce": "PENKUVhfZm10e4KJkJeepayzusHIz9bd",
+    "signature": "pO8tEMl6cOmlFRFdZmudLkNrKAyjFB8NPDQas99XzuDUX2Lr1Ro7LoD0ZGv1hqVdvgzs5Ci8ajEFPvW0H1zsBQ",
+    "keys": [
+      {
+        "deviceId": "bob-phone",
+        "sealed": "fyGCZx6bqjD_j3iDACfSXtJTi8GSuzE1lmqGeGKip3JQV15lbHN6gYiPlp2kq7K5wMfO1dzj6vHnoNfahpyDdGWIVksvv2h4PBt2hVK1anaqc0P4Giy_GUh7ktRrXt2clHz8hLjGqso"
+      },
+      {
+        "deviceId": "bob-laptop",
+        "sealed": "twkAHKzukP6toa49f0kdtuBtwPAsN892MZpt_c-mvA9ka3J5gIeOlZyjqrG4v8bN1Nvi6fD3_gX6Ctprk4MxIBnPnqJuTZavei3j3G5NSDkm2hQzrAjrdhPw3Re2BOgVEcPvZcGXGWI"
+      }
+    ]
+  },
+  "sealOnly": {
+    "key": "gomQl56lrLO6wcjP1t3k6_L5AAcOFRwjKjE4P0ZNVFs",
+    "sealed": "j-vdpsBttBmMvmH_kfk3wVF2FMIjYQhsSFrqi0BagR2WnaSrsrnAx87V3OPq8fj_Bg0UGyIpMDcvvq_uYYDBbz-LYYI2X0xVfdVs8B07FAq87iPKaAdlJhlHlzVGvRID5JG55fwfdoI"
+  },
+  "file": {
+    "plain": "a photo, pretend",
+    "key": "bnV8g4qRmJ-mrbS7wsnQ197l7PP6AQgPFh0kKzI5QEc",
+    "nonce": "eH-GjZSboqmwt77FzNPa4ejv9v0ECxIZ",
+    "bytes": "b2JvkZj-HF4EiOmP2YvUU_UDs1AdoPlR6Z4qSjjg2WE"
+  }
+}
