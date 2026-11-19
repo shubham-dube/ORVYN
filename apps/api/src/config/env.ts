@@ -64,6 +64,17 @@ export const EnvSchema = z.object({
   CLICKUP_API: z.string().url().default('https://api.clickup.com/api/v2'),
   /** GitHub (personal tokens: spec 0008 B) */
   GITHUB_API: z.string().url().default('https://api.github.com'),
+  /** IPO market data (spec 0010, ADR-0013): 'ipoguru' with a key, or 'none' (figures typed in by hand) */
+  IPO_FEED: z.enum(['ipoguru', 'none']).default('none'),
+  IPO_FEED_URL: z.string().url().default('https://www.ipoguru.in/api/v2'),
+  IPO_FEED_KEY: z.string().optional(),
+  /** calls a day the plan allows (free: 10) */
+  IPO_FEED_DAILY_CALLS: z.coerce.number().int().min(1).max(100_000).default(10),
+  /** the plan includes live subscription (IPO Guru Standard and up) */
+  IPO_FEED_SUBSCRIPTION: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /**
    * AI (ADR-0010, D13, D19): OpenRouter with ORVYN's own key, routes per task, one daily cap in USD.
    * AI_PROVIDER "fake" answers deterministically (tests, e2e, offline development); "off" refuses.

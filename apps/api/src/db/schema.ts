@@ -15,3 +15,4 @@ export * from '../modules/drop/drop.schema';
 export * from '../modules/library/library.schema';
 export * from '../modules/vault/vault.schema';
 export * from '../modules/brief/brief.schema';
+export * from '../modules/ipo/ipo.schema';

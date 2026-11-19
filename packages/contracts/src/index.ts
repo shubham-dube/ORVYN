@@ -11,3 +11,4 @@ export * from './library';
 export * from './vault';
 export * from './assistant';
 export * from './brief';
+export * from './ipo';

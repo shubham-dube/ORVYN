@@ -2,6 +2,14 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-19 (spec 0010, IPO desk and Pool — defaults chosen for you; change any)
+
+| #        | Topic         | Decision                                                                                                                                                                                                    |
+| -------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0010-1 | IPO data      | **IPO Guru API** first (free plan: calendar, details, GMP; live subscription needs its ₹299/month plan). Until a key is set, figures can be typed in. GMP is always marked unofficial.                      |
+| D-0010-2 | IPO Pool      | Balances come only from the ledger (never typed). Money left with a partner after a refund stays as **float** for the next IPO. Card cash costs are recorded at the time of transfer as a cost of that IPO. |
+| D-0010-3 | Partner links | Each partner can get a private, revocable link (90 days) to confirm applied / allotted / sold; sent from your own WhatsApp in one tap.                                                                      |
+
 ## Decided — 2026-11-19 (spec 0009, Brief — defaults chosen for you; change any)
 
 | #        | Topic         | Decision                                                                                                                                                                                   |

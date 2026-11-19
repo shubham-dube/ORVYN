@@ -9,6 +9,7 @@ import { logSerializers } from './common/log-serializers';
 import { TodayModule } from './modules/today/today.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { BriefModule } from './modules/brief/brief.module';
+import { IpoModule } from './modules/ipo/ipo.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AiModule } from './modules/ai/ai.module';
@@ -61,6 +62,7 @@ export class AppModule {
         CalendarModule,
         AssistantModule,
         BriefModule,
+        IpoModule,
         ConnectionsModule,
         MoneyModule,
         DropModule,
