@@ -49,7 +49,7 @@ export const PROVIDERS = [
     gives: ['Unread mail next to Gmail', 'Turn a mail into a task'],
     how: 'mail',
   },
-  { id: 'outlook', name: 'Microsoft 365 calendar', gives: ['Calendar', 'Teams links'], how: 'soon' },
+  { id: 'outlook', name: 'Microsoft 365 / Outlook', gives: ['Calendar', 'Teams links'], how: 'soon' },
   { id: 'notion', name: 'Notion', gives: ['Pages into Library', 'Tasks'], how: 'soon' },
   { id: 'slack', name: 'Slack', gives: ['Saved messages into Drop'], how: 'soon' },
 ] as const;

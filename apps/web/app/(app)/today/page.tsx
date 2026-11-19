@@ -5,7 +5,8 @@ import { CalendarDays, Check, CheckCheck, Inbox, Plus, Repeat, Sun, Trash2, Vide
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Glass, Label, Segmented, Sheet, SkeletonRows } from '@/components/ui/bits';
-import { ClickUpTasks, openMeeting } from '@/components/connections';
+import { openMeeting } from '@/components/connections';
+import { FromYourTools } from '@/components/tools';
 import { CalendarViews } from '@/components/today-calendar';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
@@ -243,7 +244,7 @@ function TodayView() {
         />
       ) : null}
 
-      {ready && mode === 'list' ? <ClickUpTasks /> : null}
+      {ready && mode === 'list' ? <FromYourTools /> : null}
 
       <TaskSheet task={editing} onClose={() => setEditing(null)} />
     </div>

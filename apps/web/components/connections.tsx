@@ -5,6 +5,7 @@ import {
   Check,
   CheckSquare,
   Copy,
+  GitPullRequest,
   ExternalLink,
   KeyRound,
   Mail,
@@ -20,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { MailSheet, type MailPreset } from './tools';
 
 // ------------------------------------------------------------------ data
 
@@ -28,7 +30,7 @@ export interface Connection {
   provider: 'google' | 'clickup' | string;
   account: string;
   status: string;
-  capabilities: ('calendar' | 'meet' | 'gmail' | 'tasks')[];
+  capabilities: ('calendar' | 'meet' | 'gmail' | 'tasks' | 'issues' | 'reviews' | 'mail')[];
   lastSyncedAt: string | null;
   problem?: string | null;
 }
@@ -36,9 +38,10 @@ interface Provider {
   id: string;
   name: string;
   gives: string[];
-  how: 'oauth' | 'token' | 'soon';
+  how: 'oauth' | 'token' | 'mail' | 'soon';
   available: boolean;
   tokenHelp?: string;
+  mailProviders?: MailPreset[];
 }
 export interface ClickUpTask {
   id: string;
@@ -72,9 +75,12 @@ const CAP: Record<string, { label: string; icon: ReactNode }> = {
   meet: { label: 'Meet', icon: <Video size={12} aria-hidden /> },
   gmail: { label: 'Gmail', icon: <Mail size={12} aria-hidden /> },
   tasks: { label: 'Tasks', icon: <CheckSquare size={12} aria-hidden /> },
+  issues: { label: 'Issues', icon: <CheckSquare size={12} aria-hidden /> },
+  reviews: { label: 'Reviews', icon: <GitPullRequest size={12} aria-hidden /> },
+  mail: { label: 'Mail', icon: <Mail size={12} aria-hidden /> },
 };
 
-function ProviderMark({ id, size = 36 }: { id: string; size?: number }) {
+export function ProviderMark({ id, size = 36 }: { id: string; size?: number }) {
   const look: Record<string, { bg: string; ch: string }> = {
     google: { bg: 'linear-gradient(135deg,#4285F4,#34A853 55%,#FBBC05 80%,#EA4335)', ch: 'G' },
     clickup: { bg: 'linear-gradient(135deg,#7B68EE,#FD71AF 60%,#49CCF9)', ch: 'C' },
@@ -82,6 +88,8 @@ function ProviderMark({ id, size = 36 }: { id: string; size?: number }) {
     notion: { bg: 'linear-gradient(135deg,#111,#555)', ch: 'N' },
     github: { bg: 'linear-gradient(135deg,#24292f,#57606a)', ch: 'GH' },
     slack: { bg: 'linear-gradient(135deg,#4A154B,#E01E5A)', ch: 'S' },
+    mail: { bg: 'linear-gradient(135deg,#E42527,#F7A21B)', ch: '@' },
+    zoho: { bg: 'linear-gradient(135deg,#E42527,#F7A21B)', ch: 'Z' },
   };
   const l = look[id] ?? { bg: 'var(--orv-accent-grad)', ch: id[0]?.toUpperCase() ?? '?' };
   return (
@@ -152,7 +160,7 @@ export function ConnectionsSection() {
         <ul className="flex flex-col gap-2" aria-label="Connected accounts">
           {list.map((c) => (
             <li key={c.id} className="glass-pane flex flex-wrap items-center gap-3 p-3">
-              <ProviderMark id={c.provider} />
+              <ProviderMark id={c.provider === 'mail' && /zoho/i.test(c.account) ? 'zoho' : c.provider} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-semibold">{c.account}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
@@ -241,8 +249,18 @@ export function ConnectionsSection() {
         </div>
       </div>
 
+      <MailSheet
+        open={adding?.how === 'mail'}
+        presets={adding?.mailProviders ?? []}
+        onClose={() => setAdding(null)}
+        onDone={async (account) => {
+          setAdding(null);
+          toast({ title: 'Mailbox connected', body: account, tone: 'success' });
+          await reload();
+        }}
+      />
       <TokenSheet
-        provider={adding}
+        provider={adding?.how === 'token' ? adding : null}
         onClose={() => setAdding(null)}
         onDone={async (account) => {
           setAdding(null);
@@ -321,14 +339,14 @@ function TokenSheet({
               autoComplete="off"
               spellCheck={false}
               onChange={(e) => setToken(e.target.value)}
-              placeholder="pk_…"
+              placeholder={provider?.id === 'github' ? 'github_pat_…' : 'pk_…'}
               className="font-mono"
             />
           )}
         </Field>
         <p className="text-[12px] text-orv-faint">
-          Sealed on the server and used only to read your tasks and tick them done. Add another account the
-          same way; remove it any time.
+          Sealed on the server and used only for what this connection lists. Add another account the same way;
+          remove it any time.
         </p>
       </form>
     </Sheet>
@@ -628,147 +646,6 @@ export function MeetingSheet({ open, onClose }: { open: boolean; onClose(): void
         </form>
       )}
     </Sheet>
-  );
-}
-
-// ------------------------------------------------------------------ ClickUp in Today
-
-/** "From ClickUp": open tasks assigned to you across connected ClickUp accounts; tick to close them there. */
-export function ClickUpTasks() {
-  const toast = useToast();
-  const [tasks, setTasks] = useState<ClickUpTask[] | null>(null);
-  const [has, setHas] = useState(false);
-  useEffect(() => {
-    api<Connection[]>('/connections')
-      .then((l) => {
-        const yes = l.some((c) => c.provider === 'clickup');
-        setHas(yes);
-        if (yes)
-          api<ClickUpTask[]>('/connections/clickup/tasks')
-            .then(setTasks)
-            .catch(() => setTasks([]));
-      })
-      .catch(() => undefined);
-  }, []);
-  if (!has) return null;
-  return (
-    <Glass level="pane" as="section" className="flex flex-col gap-2 p-4" aria-label="From ClickUp">
-      <div className="flex items-center gap-2">
-        <ProviderMark id="clickup" size={22} />
-        <h2 className="flex-1 text-[14px] font-semibold">From ClickUp</h2>
-        {tasks ? <span className="text-[12px] text-orv-muted">{tasks.length} open</span> : null}
-      </div>
-      {tasks === null ? (
-        <SkeletonRows rows={2} icon={false} label="Loading ClickUp tasks" />
-      ) : !tasks.length ? (
-        <p className="text-small text-orv-muted">Nothing assigned to you. 🎉</p>
-      ) : (
-        <ul className="flex flex-col">
-          {tasks.slice(0, 12).map((t) => (
-            <li key={t.id} className="flex items-center gap-3 rounded-orv-md px-1 py-1.5 hover:bg-orv-track">
-              <button
-                type="button"
-                aria-label={`Done: ${t.name}`}
-                className="grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 border-orv-edge hover:border-orv-accent"
-                onClick={async () => {
-                  setTasks((xs) => xs?.filter((x) => x.id !== t.id) ?? null);
-                  try {
-                    await api(`/connections/clickup/tasks/${encodeURIComponent(t.id)}/complete`, {
-                      method: 'POST',
-                      body: { connectionId: t.connectionId },
-                    });
-                    toast({ title: 'Closed in ClickUp', body: t.name, tone: 'success' });
-                  } catch {
-                    setTasks((xs) => (xs ? [t, ...xs] : xs));
-                    toast({ title: 'ClickUp didn’t take it', tone: 'danger' });
-                  }
-                }}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px]">{t.name}</p>
-                <p className="truncate text-[12px] text-orv-muted">
-                  {t.list} · {t.status}
-                  {t.due
-                    ? ` · due ${new Date(t.due).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
-                    : ''}
-                </p>
-              </div>
-              <a
-                href={t.url}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={`Open ${t.name} in ClickUp`}
-                className="text-orv-muted hover:text-orv-accent"
-              >
-                <ExternalLink size={14} />
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Glass>
-  );
-}
-
-// ------------------------------------------------------------------ mail on the dashboard
-
-/** Unread mail across Google accounts with Gmail added; nothing shows when none has it. */
-export function MailCard() {
-  const [mail, setMail] = useState<
-    | {
-        account: string;
-        unread: number;
-        items: { id: string; from: string; subject: string; url: string }[];
-      }[]
-    | null
-  >(null);
-  useEffect(() => {
-    api<Connection[]>('/connections')
-      .then(async (l) => {
-        const g = l.filter((c) => c.capabilities.includes('gmail'));
-        const boxes = await Promise.all(
-          g.map((c) =>
-            api<{ unread: number; items: { id: string; from: string; subject: string; url: string }[] }>(
-              `/calendar/accounts/${c.id}/inbox`,
-            )
-              .then((r) => ({ account: c.account, ...r }))
-              .catch(() => null),
-          ),
-        );
-        setMail(boxes.filter((b): b is NonNullable<typeof b> => !!b));
-      })
-      .catch(() => setMail([]));
-  }, []);
-  if (!mail?.length) return null;
-  const total = mail.reduce((a, b) => a + b.unread, 0);
-  return (
-    <Glass level="pane" as="section" className="flex flex-col gap-2 p-5" aria-label="Mail">
-      <div className="flex items-center gap-2">
-        <Mail size={15} className="text-orv-accent" aria-hidden />
-        <h2 className="flex-1 text-[14px] font-semibold">Mail</h2>
-        <span className="text-[12px] text-orv-muted">{total} unread</span>
-      </div>
-      <ul className="flex flex-col">
-        {mail
-          .flatMap((b) => b.items.map((i) => ({ ...i, account: b.account })))
-          .slice(0, 5)
-          .map((m) => (
-            <li key={m.id}>
-              <a
-                href={m.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block rounded-orv-md px-1 py-1.5 hover:bg-orv-track"
-              >
-                <p className="truncate text-[14px] font-medium">{m.subject}</p>
-                <p className="truncate text-[12px] text-orv-muted">
-                  {m.from.replace(/<.*>/, '').trim() || m.from}
-                </p>
-              </a>
-            </li>
-          ))}
-      </ul>
-    </Glass>
   );
 }
 

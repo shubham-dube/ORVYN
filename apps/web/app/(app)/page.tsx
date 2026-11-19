@@ -1,6 +1,6 @@
 'use client';
 
-import { MailCard } from '@/components/connections';
+import { MailCard } from '@/components/tools';
 
 import { MODULE_KEYS } from '@orvyn/contracts';
 import { useTodayMaybe } from '@/lib/today';
