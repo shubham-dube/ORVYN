@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { CommandBar } from '@/components/command-bar';
+import { MeetingHost } from '@/components/connections';
 import { Wordmark } from '@/components/logo';
 import { NotificationCenter } from '@/components/notification-center';
 import { Avatar } from '@/components/ui/bits';
@@ -195,6 +196,7 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
         {children}
       </main>
+      <MeetingHost />
 
       {/* phone dock: one-hand reach, the Orb in the middle */}
       <nav

@@ -1,10 +1,11 @@
 'use client';
 
 import type { ReminderWay, Task } from '@orvyn/contracts';
-import { CalendarDays, Check, CheckCheck, Inbox, Plus, Repeat, Sun, Trash2 } from 'lucide-react';
+import { CalendarDays, Check, CheckCheck, Inbox, Plus, Repeat, Sun, Trash2, Video } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Glass, Label, Segmented, Sheet, SkeletonRows } from '@/components/ui/bits';
+import { ClickUpTasks, openMeeting } from '@/components/connections';
 import { CalendarViews } from '@/components/today-calendar';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
@@ -105,6 +106,9 @@ function TodayView() {
         </div>
         <div className="flex items-center gap-2">
           {pending ? <Badge>{pending} waiting to sync</Badge> : null}
+          <Button variant="secondary" size="sm" onClick={openMeeting} aria-label="Schedule a meeting">
+            <Video size={15} /> <span className="hidden sm:inline">Meeting</span>
+          </Button>
           <Segmented
             label="Today view"
             value={mode}
@@ -238,6 +242,8 @@ function TodayView() {
           }}
         />
       ) : null}
+
+      {ready && mode === 'list' ? <ClickUpTasks /> : null}
 
       <TaskSheet task={editing} onClose={() => setEditing(null)} />
     </div>

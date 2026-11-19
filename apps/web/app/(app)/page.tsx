@@ -1,5 +1,7 @@
 'use client';
 
+import { MailCard } from '@/components/connections';
+
 import { MODULE_KEYS } from '@orvyn/contracts';
 import { useTodayMaybe } from '@/lib/today';
 import {
@@ -134,6 +136,7 @@ export default function Home() {
         <WeekCard now={now} />
         <DropCard />
         <ExpiringCard now={now} />
+        <MailCard />
       </div>
 
       <section aria-label="Your ORVYN">

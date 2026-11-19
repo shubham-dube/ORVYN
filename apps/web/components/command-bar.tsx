@@ -16,6 +16,8 @@ import {
   Sunrise,
   Sunset,
   Wallet,
+  Plug,
+  Video,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
@@ -30,6 +32,7 @@ import { chipLabel, smartParse, taskFields } from '@/lib/smart-task';
 import { useDropMaybe } from '@/lib/drop';
 import { localDay, useTodayMaybe } from '@/lib/today';
 import { Logo } from '@/components/logo';
+import { openMeeting } from '@/components/connections';
 
 interface Command {
   id: string;
@@ -57,6 +60,22 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
     const list: Command[] = [
       { id: 'home', label: 'Go to Home', icon: <Home size={16} />, run: go('/') },
       { id: 'settings', label: 'Open Settings', icon: <Settings size={16} />, run: go('/settings') },
+      ...(me?.role === 'owner' || me?.entitlements.includes('today')
+        ? [
+            {
+              id: 'meeting',
+              label: 'Schedule a meeting (Google Meet)',
+              icon: <Video size={16} />,
+              run: openMeeting,
+            },
+            {
+              id: 'connections',
+              label: 'Connections: Google, ClickUp…',
+              icon: <Plug size={16} />,
+              run: go('/settings#connections'),
+            },
+          ]
+        : []),
       ...(me?.role === 'owner' || me?.entitlements.includes('drop')
         ? [{ id: 'go-drop', label: 'Open Drop', icon: <ArrowDownToLine size={16} />, run: go('/drop') }]
         : []),
