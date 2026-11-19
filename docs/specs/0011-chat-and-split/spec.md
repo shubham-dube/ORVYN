@@ -1,6 +1,6 @@
 # Spec 0011: Chat, and Split (shared expenses)
 
-Status: In progress 2026-11-19 · Roadmap (D-0008-1, D-0008-2) · Modules: `chat`, `split`
+Status: Delivered 2026-11-19 (API, web, Android; guide in docs/guides/chat-and-split.md) · Roadmap (D-0008-1, D-0008-2) · Modules: `chat`, `split`
 
 ## Problem
 
@@ -66,15 +66,15 @@ Split: `/split/groups` (+ members, guests, links), `/split/groups/:id/expenses`,
 
 ## Acceptance criteria
 
-- [ ] AC1 Messages are encrypted on the device; the server stores only ciphertext and per-device sealed keys
+- [x] AC1 Messages are encrypted on the device; the server stores only ciphertext and per-device sealed keys
       (test: the stored rows contain no plaintext; a non-member's device gets nothing).
-- [ ] AC2 Web and Android encrypt and decrypt each other's messages (shared test vectors).
-- [ ] AC3 Replies, reactions, edits, deletes, files, shares, receipts, typing, mute work on web and Android.
-- [ ] AC4 Split math: contributions, equal/exact/percent/shares splits with exact paise, balances, and the fewest
+- [x] AC2 Web and Android encrypt and decrypt each other's messages (shared test vectors).
+- [x] AC3 Replies, reactions, edits, deletes, files, shares, receipts, typing, mute work on web and Android.
+- [x] AC4 Split math: contributions, equal/exact/percent/shares splits with exact paise, balances, and the fewest
       transfers (unit tests with worked examples).
-- [ ] AC5 Members see only groups they belong to; guests see only their group through a link that can be revoked.
-- [ ] AC6 Notifications: new expense with your share, settlement recorded, reminders; chat pushes carry no content.
-- [ ] AC7 Web and Android screens for both, with tests.
+- [x] AC5 Members see only groups they belong to; guests see only their group through a link that can be revoked.
+- [x] AC6 Notifications: new expense with your share, settlement recorded, reminders; chat pushes carry no content.
+- [x] AC7 Web and Android screens for both, with tests.
 
 ## Open questions
 

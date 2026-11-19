@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../chat/chat_client.dart';
 import '../core/api.dart';
 import '../core/config.dart';
 import '../core/models.dart';
@@ -32,6 +33,7 @@ final deviceInfoProvider = Provider<DeviceInfo>(
   (_) => const DeviceInfo(name: 'Android phone', platform: 'android', appVersion: Config.appVersion),
 );
 final clockProvider = Provider<DateTime Function()>((_) => DateTime.now);
+final chatClientProvider = Provider<ChatClient>((ref) => ChatClient(ref.watch(apiProvider), ref.watch(storeProvider)));
 
 // ------------------------------------------------------------------ session
 
@@ -123,6 +125,8 @@ class SessionController extends Notifier<SessionState> {
     rt.start();
     unawaited(_registerPush());
     unawaited(ref.read(syncProvider).sync().catchError((_) {}));
+    // a phone that can chat gets its keys at once, so messages sent before Chat is opened reach it (ADR-0014)
+    if (s.user.can('chat')) unawaited(ref.read(chatClientProvider).keys(s.deviceId).then((_) {}, onError: (_) {}));
   }
 
   void _onMessage(Map<String, dynamic> m) {

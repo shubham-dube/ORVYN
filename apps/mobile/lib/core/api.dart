@@ -160,9 +160,12 @@ class Api {
   }
 
   /// A stored file's bytes (decrypted by the server for its owner).
-  Future<Uint8List> download(String id) async {
+  Future<Uint8List> download(String id) => downloadPath('/files/$id');
+
+  /// Raw bytes from any path (e.g. an encrypted chat attachment).
+  Future<Uint8List> downloadPath(String path) async {
     Future<Response<List<int>>> send() => dio.get<List<int>>(
-      '/files/$id',
+      path,
       options: Options(
         responseType: ResponseType.bytes,
         headers: {if (_access != null) 'authorization': 'Bearer $_access'},

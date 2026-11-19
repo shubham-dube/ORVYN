@@ -44,7 +44,8 @@ class FakeServer implements HttpClientAdapter {
       });
     }
     await Future<void>.delayed(Duration.zero);
-    final out = h(req);
+    var out = h(req);
+    if (out is Future) out = await out;
     if (out is Reply) return _json(out.status, out.body);
     return _json(200, out);
   }

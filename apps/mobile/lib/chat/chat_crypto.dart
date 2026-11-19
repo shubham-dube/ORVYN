@@ -24,6 +24,9 @@ class BadChatData implements Exception {
 String b64(List<int> b) => base64Url.encode(b).replaceAll('=', '');
 Uint8List unb64(String s) => base64Url.decode(s.padRight((s.length + 3) ~/ 4 * 4, '='));
 Uint8List _cat(List<List<int>> xs) => Uint8List.fromList([for (final x in xs) ...x]);
+
+/// Random bytes for ids and keys.
+Uint8List newDeviceRandom(int n) => _random(n);
 Uint8List _random(int n) => Uint8List.fromList(List.generate(n, (_) => _rand.nextInt(256)));
 
 Future<Uint8List> _blake(List<int> data, int len) async =>

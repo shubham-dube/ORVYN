@@ -32,6 +32,8 @@ const launcherModules = <LauncherModule>[
   LauncherModule('drop', 'Drop', LucideIcons.inbox, '/drop', entitlement: 'drop'),
   LauncherModule('library', 'Library', LucideIcons.bookOpen, '/library', entitlement: 'library'),
   LauncherModule('vault', 'Vault', LucideIcons.lockKeyhole, '/vault', entitlement: 'vault'),
+  LauncherModule('chat', 'Chat', LucideIcons.messageCircle, '/chat', entitlement: 'chat'),
+  LauncherModule('split', 'Split', LucideIcons.receipt, '/split', entitlement: 'split'),
   LauncherModule('ipo', 'IPO', LucideIcons.trendingUp, '/ipo', entitlement: 'ipo'),
   LauncherModule('mail', 'Mail', LucideIcons.mail, '/mail', entitlement: 'today'),
   LauncherModule('people', 'People', LucideIcons.users, '/people', entitlement: 'owner'),
@@ -39,7 +41,7 @@ const launcherModules = <LauncherModule>[
 ];
 
 /// Routes that live behind "More" in the dock (so More lights up while you are in one of them).
-const moreRoutes = ['/ipo', '/brief', '/assistant', '/drop', '/library', '/vault', '/settings'];
+const moreRoutes = ['/chat', '/split', '/ipo', '/brief', '/assistant', '/drop', '/library', '/vault', '/settings'];
 
 /// Every module one tap away (spec 0007 B): a grid of tiles, each with a live line — what waits in Drop,
 /// how many documents, whether the Vault is open — so the launcher is also a glance at your life.
@@ -96,6 +98,10 @@ class ModuleLauncher extends ConsumerWidget {
           return 'Your morning';
         case 'ipo':
           return 'GMP, odds, Pool';
+        case 'chat':
+          return 'Private, encrypted';
+        case 'split':
+          return 'Who owes whom';
       }
       return null;
     }

@@ -31,6 +31,19 @@ Future<void> openStoredFile(
     return;
   }
   if (!context.mounted) return;
+  await openBytes(context, ref, bytes: bytes, name: name, mime: type);
+}
+
+/// Shows bytes already on the phone (e.g. a decrypted chat attachment): in ORVYN, or in the phone's own app.
+Future<void> openBytes(
+  BuildContext context,
+  WidgetRef ref, {
+  required Uint8List bytes,
+  required String name,
+  required String mime,
+}) async {
+  final type = mime.isEmpty || mime == 'application/octet-stream' ? mimeFromName(name) : mime;
+  final toaster = Toaster.of(context);
   switch (viewKind(type)) {
     case ViewKind.image:
     case ViewKind.text:

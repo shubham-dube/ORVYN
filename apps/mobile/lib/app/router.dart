@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../design/orb.dart';
+import '../features/chat_screen.dart';
+import '../features/split_screen.dart';
 import '../features/ipo_screen.dart';
 import '../features/brief_screen.dart';
 import '../features/mail_screen.dart';
@@ -65,6 +67,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/people', builder: (_, _) => const PeopleScreen()),
       GoRoute(path: '/mail', builder: (_, _) => const MailScreen()),
       GoRoute(
+        path: '/chat/:id',
+        builder: (_, s) => ChatThreadScreen(id: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/split/:id',
+        builder: (_, s) => SplitGroupScreen(id: s.pathParameters['id']!),
+      ),
+      GoRoute(
         path: '/ipo/pool/rounds/:id',
         builder: (_, s) => RoundScreen(id: s.pathParameters['id']!),
       ),
@@ -103,6 +113,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             pageBuilder: (_, _) => const NoTransitionPage(child: SettingsScreen()),
+          ),
+          GoRoute(
+            path: '/chat',
+            pageBuilder: (_, _) => const NoTransitionPage(child: ChatListScreen()),
+          ),
+          GoRoute(
+            path: '/split',
+            pageBuilder: (_, _) => const NoTransitionPage(child: SplitListScreen()),
           ),
           GoRoute(
             path: '/ipo',
