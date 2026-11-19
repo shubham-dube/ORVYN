@@ -141,6 +141,13 @@
       "when": 1795046081452,
       "tag": "0019_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1795050001488,
+      "tag": "0020_assistant",
+      "breakpoints": true
     }
   ]
 }

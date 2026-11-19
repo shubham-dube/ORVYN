@@ -9,3 +9,4 @@ export * from './money';
 export * from './drop';
 export * from './library';
 export * from './vault';
+export * from './assistant';

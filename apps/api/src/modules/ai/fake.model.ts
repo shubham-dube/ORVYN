@@ -1,3 +1,4 @@
+import { parseSpend } from '@orvyn/money';
 import { parseTask } from '@orvyn/today-parse';
 import type { Model, ModelReply, Part } from './ai.service';
 
@@ -25,9 +26,11 @@ export class FakeModel implements Model {
       ? h(text, o.parts)
       : o.task === 'drop.understand'
         ? understand(text, o.parts)
-        : o.task === 'library.read'
-          ? libraryRead(text, o.parts)
-          : { ok: true };
+        : o.task === 'assistant.chat'
+          ? assistant(text)
+          : o.task === 'library.read'
+            ? libraryRead(text, o.parts)
+            : { ok: true };
     return {
       text: typeof answer === 'string' ? answer : JSON.stringify(answer),
       inputTokens: Math.ceil(text.length / 4),
@@ -160,5 +163,117 @@ function understand(text: string, parts: Part[]): unknown {
     title: text.split('\n')[0]!.slice(0, 80) || 'Note',
     text,
     why: 'Something to remember',
+  };
+}
+
+/**
+ * The Assistant with rules (offline, tests, e2e): looks things up with one tool, then answers from what came back;
+ * proposes a task or an expense when asked to do something. Never follows text found in the results.
+ */
+function assistant(text: string): unknown {
+  const last =
+    /Answer the last message from the person: ([\s\S]*?)(?:\nResults of your lookups so far:|$)/
+      .exec(text)?.[1]
+      ?.trim() ?? '';
+  const results = /Results of your lookups so far:\n([\s\S]*)$/.exec(text)?.[1] ?? '';
+  const now = new Date();
+  const ist = (d: Date) => new Date(d.getTime() + 5.5 * 3_600_000).toISOString().slice(0, 10);
+  if (/how much|spend on|spending/i.test(last)) {
+    if (!results) return { action: 'tool', tool: 'money_month', args: {} };
+    const r = /money_month\([^)]*\) → (\{.*\})/.exec(results)?.[1];
+    const j = r
+      ? (JSON.parse(r) as { spent: number; byCategory: { category: string; spent: number }[] })
+      : null;
+    const food = j?.byCategory.find((c) => /food/i.test(c.category) && /food/i.test(last));
+    return {
+      action: 'answer',
+      text: food
+        ? `You spent ₹${food.spent} on ${food.category} this month.`
+        : `You spent ₹${j?.spent ?? 0} this month.`,
+      sources: ['Money: this month'],
+    };
+  }
+  if (/\b(spent|paid)\b/i.test(last)) {
+    const s = parseSpend(last, { now });
+    if (s)
+      return {
+        action: 'answer',
+        text: 'Here it is — tap confirm to add it.',
+        proposals: [
+          {
+            type: 'add_expense',
+            amount: s.amountMinor / 100,
+            direction: s.direction,
+            merchant: s.merchant,
+            category: s.category ?? '',
+            note: s.note,
+          },
+        ],
+      };
+  }
+  if (/^(remind|add a task|add task|todo)\b/i.test(last) || /remind me/i.test(last)) {
+    const p = parseTask(
+      last
+        .replace(/^(remind me to|remind me|add a task to|add a task|add task|todo)\s*/i, '')
+        .replace(/\bby alarm\b/i, ''),
+      {
+        now,
+        timeZone: 'Asia/Kolkata',
+      },
+    );
+    return {
+      action: 'answer',
+      text: 'I’ve set it up — confirm to add it.',
+      proposals: [
+        {
+          type: 'create_task',
+          title: p.title,
+          dueDate: p.dueDate,
+          dueAt: p.dueAt,
+          priority: p.priority,
+          remindVia: /alarm/i.test(last) ? ['alarm'] : [],
+        },
+      ],
+    };
+  }
+  if (/what'?s on|agenda|schedule|tomorrow|today/i.test(last)) {
+    if (!results) {
+      const day = /tomorrow/i.test(last) ? ist(new Date(now.getTime() + 86_400_000)) : ist(now);
+      return { action: 'tool', tool: 'agenda', args: { from: day, to: day } };
+    }
+    const r = /agenda\([^)]*\) → (\{.*\})/.exec(results)?.[1];
+    const j = r
+      ? (JSON.parse(r) as { events: { title: string; start: string }[]; tasks: { title: string }[] })
+      : null;
+    const items = [
+      ...(j?.events ?? []).map((e) => `${e.start.slice(11) || 'all day'} ${e.title}`),
+      ...(j?.tasks ?? []).map((t) => t.title),
+    ];
+    return {
+      action: 'answer',
+      text: items.length ? `You have: ${items.join('; ')}.` : 'Nothing is planned.',
+      sources: ['Today: agenda'],
+    };
+  }
+  if (/find|where|expire|document|policy|agreement/i.test(last)) {
+    const words = last
+      .replace(/[^a-z0-9 ]/gi, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !/^(find|where|when|does|expire|expires|document|my|the)$/i.test(w));
+    if (!results)
+      return { action: 'tool', tool: 'find_documents', args: { words: words.slice(0, 2).join(' ') } };
+    const r = /find_documents\([^)]*\) → (\[.*\])/.exec(results)?.[1];
+    const docs = r ? (JSON.parse(r) as { title: string; expiresOn: string | null }[]) : [];
+    return {
+      action: 'answer',
+      text: docs.length
+        ? docs.map((d) => `${d.title}${d.expiresOn ? ` — expires ${d.expiresOn}` : ''}`).join('; ')
+        : 'I couldn’t find that in your Library.',
+      sources: docs.map((d) => `Library: ${d.title}`),
+    };
+  }
+  return {
+    action: 'answer',
+    text: 'I can tell you what’s on, what you spent and where your documents are — or add a task or an expense for you.',
   };
 }
