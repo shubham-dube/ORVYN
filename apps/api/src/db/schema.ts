@@ -14,3 +14,4 @@ export * from '../modules/money/money.schema';
 export * from '../modules/drop/drop.schema';
 export * from '../modules/library/library.schema';
 export * from '../modules/vault/vault.schema';
+export * from '../modules/brief/brief.schema';

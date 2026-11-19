@@ -1,5 +1,6 @@
 'use client';
 
+import { BriefCard } from '@/components/brief';
 import { MailCard } from '@/components/tools';
 
 import { MODULE_KEYS } from '@orvyn/contracts';
@@ -14,6 +15,7 @@ import {
   ListTodo,
   type LucideIcon,
   MessagesSquare,
+  Sunrise,
   TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -68,6 +70,7 @@ const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon
     icon: Bot,
     href: '/assistant',
   },
+  brief: { name: 'Brief', line: 'Your morning in one look, and quiet nudges', icon: Sunrise, href: '/brief' },
   chat: {
     name: 'Chat',
     line: 'End-to-end encrypted conversations with friends',
@@ -88,7 +91,7 @@ const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon
   },
 };
 /** Modules that are built; the rest show as "soon". */
-const BUILT = new Set(['today', 'drop', 'money', 'library', 'vault', 'assistant']);
+const BUILT = new Set(['today', 'drop', 'money', 'library', 'vault', 'assistant', 'brief']);
 
 export default function Home() {
   const { me } = useSession();
@@ -130,6 +133,7 @@ export default function Home() {
       <QuickAddCard />
 
       <div className="grid gap-4 md:grid-cols-3">
+        {me?.role === 'owner' || me?.entitlements.includes('brief') ? <BriefCard /> : null}
         {hasToday ? <TodayCard now={now} /> : null}
         <NeedsYouCard />
         <MoneyCard now={now} />

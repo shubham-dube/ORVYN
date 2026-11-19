@@ -71,6 +71,7 @@ abstract final class OrvTokens {
     'chat': OrvAccent(light: Color(0xFFBE123C), dark: Color(0xFFFDA4AF), from: Color(0xFFF43F5E), to: Color(0xFFFB923C)),
     'ipo': OrvAccent(light: Color(0xFF854D0E), dark: Color(0xFFFDE047), from: Color(0xFFEAB308), to: Color(0xFFF59E0B)),
     'jobs': OrvAccent(light: Color(0xFF0B6278), dark: Color(0xFF67E8F9), from: Color(0xFF06B6D4), to: Color(0xFF3B82F6)),
+    'brief': OrvAccent(light: Color(0xFF9A3412), dark: Color(0xFFFDBA74), from: Color(0xFFFB923C), to: Color(0xFFF472B6)),
   };
   /// Colours people pick for projects and calendars (readable as text on glass in both modes).
   static const Map<String, OrvLabel> labels = {

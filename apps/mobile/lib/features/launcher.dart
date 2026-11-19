@@ -25,6 +25,7 @@ class LauncherModule {
 }
 
 const launcherModules = <LauncherModule>[
+  LauncherModule('brief', 'Brief', LucideIcons.sunrise, '/brief', entitlement: 'brief'),
   LauncherModule('assistant', 'Assistant', LucideIcons.sparkles, '/assistant', entitlement: 'assistant'),
   LauncherModule('today', 'Today', LucideIcons.circleCheck, '/today', entitlement: 'today'),
   LauncherModule('money', 'Money', LucideIcons.wallet, '/money', entitlement: 'money'),
@@ -37,7 +38,7 @@ const launcherModules = <LauncherModule>[
 ];
 
 /// Routes that live behind "More" in the dock (so More lights up while you are in one of them).
-const moreRoutes = ['/assistant', '/drop', '/library', '/vault', '/settings'];
+const moreRoutes = ['/brief', '/assistant', '/drop', '/library', '/vault', '/settings'];
 
 /// Every module one tap away (spec 0007 B): a grid of tiles, each with a live line — what waits in Drop,
 /// how many documents, whether the Vault is open — so the launcher is also a glance at your life.
@@ -90,6 +91,8 @@ class ModuleLauncher extends ConsumerWidget {
           return n == 0 ? 'All read' : '$n unread';
         case 'people':
           return 'Invites, access';
+        case 'brief':
+          return 'Your morning';
       }
       return null;
     }

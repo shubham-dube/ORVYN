@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import {
   type ReminderDefaults,
   type ReminderWay,
@@ -67,6 +67,7 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
     private readonly notify: NotifyService,
     private readonly sync: SyncService,
     private readonly access: AccessService,
+    private readonly events: EventEmitter2,
   ) {}
 
   onModuleInit(): void {
@@ -397,6 +398,9 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
         });
       return;
     }
+    // the Brief, when it is on, already carries this (spec 0009 AC3)
+    const replaced = (await this.events.emitAsync('today.digest.replaced', { ownerId })) as unknown[];
+    if (replaced.some(Boolean)) return;
     const late = due.filter((t) => t.dueDate! < today).length;
     const names = due.sort((a, b) => b.priority - a.priority).map((t) => t.title);
     await this.notify.send({

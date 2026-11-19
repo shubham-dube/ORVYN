@@ -20,6 +20,7 @@ const peopleModules = <(String, String, IconData)>[
   ('library', 'Library', LucideIcons.bookOpen),
   ('vault', 'Vault', LucideIcons.lockKeyhole),
   ('assistant', 'Assistant', LucideIcons.sparkles),
+  ('brief', 'Brief', LucideIcons.sunrise),
   ('chat', 'Chat', LucideIcons.messageCircle),
   ('ipo', 'IPO', LucideIcons.trendingUp),
 ];

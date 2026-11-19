@@ -8,6 +8,7 @@ import { AccessModule } from './modules/access/access.module';
 import { logSerializers } from './common/log-serializers';
 import { TodayModule } from './modules/today/today.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
+import { BriefModule } from './modules/brief/brief.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AiModule } from './modules/ai/ai.module';
@@ -59,6 +60,7 @@ export class AppModule {
         TodayModule,
         CalendarModule,
         AssistantModule,
+        BriefModule,
         ConnectionsModule,
         MoneyModule,
         DropModule,

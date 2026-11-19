@@ -6,6 +6,7 @@ export const MODULE_KEYS = [
   'library',
   'vault',
   'assistant',
+  'brief',
   'chat',
   'ipo',
   'jobs',

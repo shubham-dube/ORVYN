@@ -480,6 +480,30 @@
   --orv-accent-to: #3b82f6;
   --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
 }
+[data-phase='dawn'] [data-module='brief'], [data-phase='dawn'][data-module='brief'] {
+  --orv-accent: #9a3412;
+  --orv-accent-from: #fb923c;
+  --orv-accent-to: #f472b6;
+  --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
+}
+[data-phase='day'] [data-module='brief'], [data-phase='day'][data-module='brief'] {
+  --orv-accent: #9a3412;
+  --orv-accent-from: #fb923c;
+  --orv-accent-to: #f472b6;
+  --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
+}
+[data-phase='dusk'] [data-module='brief'], [data-phase='dusk'][data-module='brief'] {
+  --orv-accent: #fdba74;
+  --orv-accent-from: #fb923c;
+  --orv-accent-to: #f472b6;
+  --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
+}
+[data-phase='night'] [data-module='brief'], [data-phase='night'][data-module='brief'] {
+  --orv-accent: #fdba74;
+  --orv-accent-from: #fb923c;
+  --orv-accent-to: #f472b6;
+  --orv-accent-grad: linear-gradient(135deg, var(--orv-accent-from), var(--orv-accent-to));
+}
 @media (prefers-reduced-motion: reduce) {
   :root { --orv-duration-theme: 0ms; }
 }

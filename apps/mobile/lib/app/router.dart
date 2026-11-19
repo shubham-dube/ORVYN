@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../design/orb.dart';
+import '../features/brief_screen.dart';
 import '../features/mail_screen.dart';
 import '../features/people_screen.dart';
 import '../features/assistant_screen.dart';
@@ -93,6 +94,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             pageBuilder: (_, _) => const NoTransitionPage(child: SettingsScreen()),
+          ),
+          GoRoute(
+            path: '/brief',
+            pageBuilder: (_, _) => const NoTransitionPage(child: BriefScreen()),
           ),
           GoRoute(
             path: '/assistant',

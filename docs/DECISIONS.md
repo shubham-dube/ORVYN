@@ -2,6 +2,14 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-19 (spec 0009, Brief — defaults chosen for you; change any)
+
+| #        | Topic         | Decision                                                                                                                                                                                   |
+| -------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D-0009-1 | Brief timing  | **Off until you turn it on**; default 07:30 in your zone, any time can be chosen. One normal notification; quiet hours apply. When on, it replaces Today's morning task summary.           |
+| D-0009-2 | Brief writing | **Rules, not AI**: facts already in ORVYN, counted and ordered, with a headline built from them. Free, instant, nothing leaves the server.                                                 |
+| D-0009-3 | Nudges        | Four kinds (slipped tasks, budget drift, payments waiting, Drop piling up), **at most 2 a day**, only between your Brief time and 20:00, each switchable, never twice for the same reason. |
+
 ## Decided — 2026-11-19 (round 0008 and the next modules)
 
 | #        | Topic        | Decision                                                                                                                                                                                                                                      |

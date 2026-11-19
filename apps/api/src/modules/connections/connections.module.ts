@@ -18,5 +18,6 @@ import { ImapMailbox, Mailbox } from './mailbox';
     { provide: Mailbox, useClass: ImapMailbox },
   ],
   controllers: [ConnectionsController],
+  exports: [ConnectionsService],
 })
 export class ConnectionsModule {}
