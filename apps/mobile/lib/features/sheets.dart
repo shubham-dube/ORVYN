@@ -243,6 +243,20 @@ class _CommandSheetState extends ConsumerState<CommandSheet> {
     // anything typed can become a task (natural-language dates arrive with the parser, spec 0002 M2)
     final session = ref.read(sessionProvider);
     final typed = _q.text.trim();
+    if (typed.length > 1 && session is SignedIn && session.me.can('assistant')) {
+      final ask = _Command('Ask ORVYN “$typed”', LucideIcons.sparkles, () async {
+        router.go('/assistant?q=${Uri.encodeComponent(typed)}');
+      }, hint: 'Assistant');
+      // a question goes first
+      if (RegExp(
+        r'\?\s*$|^(what|how|when|where|who|which|why|do|did|does|is|are|can|show|find)\b',
+        caseSensitive: false,
+      ).hasMatch(typed)) {
+        shown.insert(0, ask);
+      } else {
+        shown.add(ask);
+      }
+    }
     if (typed.length > 1 && session is SignedIn && session.me.can('drop')) {
       shown.add(
         _Command('Drop “$typed”', LucideIcons.arrowDownToLine, () async {

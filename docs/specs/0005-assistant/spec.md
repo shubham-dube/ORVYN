@@ -1,6 +1,6 @@
 # Spec 0005: Assistant (and the finished `ai` module)
 
-Status: Approved scope (roadmap step 5; D13, D19, D25) · Phase 5 · Module: `assistant` (teal)
+Status: Delivered 2026-11-19 (API, web, Android, command bar) · was: Approved scope (roadmap step 5; D13, D19, D25) · Phase 5 · Module: `assistant` (teal)
 
 ## Problem
 
@@ -26,10 +26,21 @@ Settings.
 
 ## Acceptance criteria
 
-- [ ] AC1 Questions about agenda, tasks, spending and documents are answered from the person's data only (tests with
+- [x] AC1 Questions about agenda, tasks, spending and documents are answered from the person's data only (tests with
       two people).
-- [ ] AC2 Every change is a proposal; nothing is created until confirmed; confirming applies exactly what was shown;
+- [x] AC2 Every change is a proposal; nothing is created until confirmed; confirming applies exactly what was shown;
       stale proposals (task gone) fail safely.
-- [ ] AC3 No tool reads the Vault; text in documents/messages can't trigger actions (injection test).
-- [ ] AC4 The $1/day cap is respected; paused state is shown in the chat.
-- [ ] AC5 Usage by day/task/person is visible to the person (their own) and the owner (everyone's).
+- [x] AC3 No tool reads the Vault; text in documents/messages can't trigger actions (injection test).
+- [x] AC4 The $1/day cap is respected; paused state is shown in the chat.
+- [x] AC5 Usage by day/task/person is visible to the person (their own) and the owner (everyone's).
+
+## How it is built
+
+- `apps/api/src/modules/assistant`: threads/messages (owner-scoped), read-only tools in `tools.ts` (agenda with repeats,
+  find_tasks, money_month, find_payments, find_documents — summaries only — and drop_inbox; no Vault tool), proposals
+  checked against `AssistantProposal` (contracts) and worded by the server; confirm applies through sync.
+- Model: `assistant.chat` on the cheap route by default (D-0007-3 keeps Fable for escalation only); the $1/day cap and
+  per-person half apply (paused message in the chat).
+- Web `/assistant` (+ sidebar, Home, command bar "Ask ORVYN …"); Android Assistant screen (launcher, Orb "Ask").
+- Tests: `apps/api/test/assistant.test.ts` (AC1–AC4), `apps/web/e2e/zz-assistant.spec.ts`,
+  `apps/mobile/test/assistant_test.dart`.
