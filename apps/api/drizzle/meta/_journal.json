@@ -169,6 +169,13 @@
       "when": 1795088766609,
       "tag": "0023_ipo",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1795091738538,
+      "tag": "0024_chat_split",
+      "breakpoints": true
     }
   ]
 }

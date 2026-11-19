@@ -216,8 +216,9 @@ export class FilesService {
   ): Promise<FileView> {
     if (!o.bytes.length) throw badRequest('empty_file', 'The file is empty.');
     if (o.bytes.length > MAX_FILE_BYTES) throw badRequest('file_too_big', 'Files can be up to 25 MB.');
-    o = { ...o, mime: normaliseMime(o.mime, o.name) };
-    if (!ALLOWED_MIME.test(o.mime))
+    // chat attachments arrive already encrypted on the device (ADR-0014): opaque bytes, never shown inline
+    o = { ...o, mime: o.purpose === 'chat' ? 'application/octet-stream' : normaliseMime(o.mime, o.name) };
+    if (o.purpose !== 'chat' && !ALLOWED_MIME.test(o.mime))
       throw badRequest(
         'file_type',
         'That kind of file can’t be kept. Photos, PDFs, documents, spreadsheets, audio, video and ZIP files can.',

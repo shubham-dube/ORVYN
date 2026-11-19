@@ -12,3 +12,5 @@ export * from './vault';
 export * from './assistant';
 export * from './brief';
 export * from './ipo';
+export * from './chat';
+export * from './split';

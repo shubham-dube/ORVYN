@@ -8,6 +8,7 @@ export const MODULE_KEYS = [
   'assistant',
   'brief',
   'chat',
+  'split',
   'ipo',
   'jobs',
 ] as const;

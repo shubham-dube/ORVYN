@@ -83,5 +83,10 @@ export const ServerMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('notify.dismissed'), id: z.string() }),
   z.object({ type: z.literal('session.revoked') }),
   z.object({ type: z.literal('entitlements.changed'), entitlements: z.array(z.string()) }),
+  z.object({ type: z.literal('chat.message'), conversationId: z.string(), messageId: z.string() }),
+  z.object({ type: z.literal('chat.changed'), conversationId: z.string() }),
+  z.object({ type: z.literal('chat.typing'), conversationId: z.string(), userId: z.string() }),
+  z.object({ type: z.literal('chat.read'), conversationId: z.string(), userId: z.string(), at: z.string() }),
+  z.object({ type: z.literal('split.changed'), groupId: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;

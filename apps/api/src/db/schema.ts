@@ -16,3 +16,5 @@ export * from '../modules/library/library.schema';
 export * from '../modules/vault/vault.schema';
 export * from '../modules/brief/brief.schema';
 export * from '../modules/ipo/ipo.schema';
+export * from '../modules/chat/chat.schema';
+export * from '../modules/split/split.schema';

@@ -14,7 +14,7 @@ test('the owner signs in with an email code and the session survives a reload', 
   await page.reload();
   await expect(page.getByRole('heading', { level: 1, name: /Good/ })).toBeVisible();
   // the owner sees every module and the People area
-  await expect(page.getByText('IPO desk')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'IPO desk' }).first()).toBeVisible();
   await expect(page.getByRole('link', { name: 'People' })).toBeVisible();
 });
 

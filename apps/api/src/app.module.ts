@@ -10,6 +10,8 @@ import { TodayModule } from './modules/today/today.module';
 import { AssistantModule } from './modules/assistant/assistant.module';
 import { BriefModule } from './modules/brief/brief.module';
 import { IpoModule } from './modules/ipo/ipo.module';
+import { ChatModule } from './modules/chat/chat.module';
+import { SplitModule } from './modules/split/split.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AiModule } from './modules/ai/ai.module';
@@ -63,6 +65,8 @@ export class AppModule {
         AssistantModule,
         BriefModule,
         IpoModule,
+        ChatModule,
+        SplitModule,
         ConnectionsModule,
         MoneyModule,
         DropModule,
