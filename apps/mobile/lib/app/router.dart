@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../design/orb.dart';
+import '../features/mail_screen.dart';
+import '../features/people_screen.dart';
 import '../features/assistant_screen.dart';
 import '../features/drop_screen.dart';
 import '../features/library_screen.dart';
@@ -54,6 +56,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) => JoinScreen(token: s.pathParameters['token']!),
       ),
       GoRoute(path: '/settings/today', builder: (_, _) => const TodaySettingsScreen()),
+      GoRoute(
+        path: '/settings/:section',
+        builder: (_, s) => SettingsSectionScreen(section: s.pathParameters['section']!),
+      ),
+      GoRoute(path: '/people', builder: (_, _) => const PeopleScreen()),
+      GoRoute(path: '/mail', builder: (_, _) => const MailScreen()),
       GoRoute(path: '/gallery', builder: (_, _) => const GalleryScreen()),
       ShellRoute(
         builder: (context, state, child) => Shell(location: state.matchedLocation, child: child),

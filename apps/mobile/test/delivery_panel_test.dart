@@ -49,6 +49,8 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.tap(find.bySemanticsLabel('Settings'));
     await settle(tester, 20);
+    await tester.tap(find.bySemanticsLabel('Notification settings'));
+    await settle(tester, 20);
     expect(find.text('Notifications allowed'), findsOneWidget);
     expect(find.text('Needs “Alarms & reminders” for ORVYN.'), findsOneWidget);
     expect(find.text('Android push isn’t set up on the server yet (FCM).'), findsOneWidget);

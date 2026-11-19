@@ -80,54 +80,48 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
             children: [
-              PageTitle(
-                'Library',
-                overline: docs.isEmpty ? 'Documents that organise themselves' : '${docs.length} kept',
-              ),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  OrvButton(
-                    key: const Key('lib-photo'),
-                    label: 'Photo',
-                    small: true,
-                    variant: ButtonVariant.primary,
-                    icon: LucideIcons.camera,
-                    loading: _busy,
-                    onPressed: () => _addPhoto(true),
+                  Expanded(
+                    child: PageTitle(
+                      'Library',
+                      overline: docs.isEmpty ? 'Documents that organise themselves' : '${docs.length} kept',
+                    ),
                   ),
-                  OrvButton(
-                    key: const Key('lib-gallery'),
-                    label: 'From gallery',
-                    small: true,
-                    icon: LucideIcons.image,
-                    onPressed: _busy ? null : () => _addPhoto(false),
-                  ),
-                  OrvButton(
-                    key: const Key('lib-file'),
-                    label: 'File',
-                    small: true,
-                    icon: LucideIcons.paperclip,
-                    onPressed: _busy ? null : () => _add(ref.read(anyFilePickerProvider)),
-                  ),
-                  OrvButton(
-                    key: const Key('lib-voice'),
-                    label: 'Voice note',
-                    small: true,
-                    icon: LucideIcons.mic,
-                    onPressed: _busy ? null : () => _add(() => recordVoiceNote(context), done: 'Voice note kept'),
-                  ),
-                  OrvButton(
-                    key: const Key('lib-note'),
-                    label: 'Note',
-                    small: true,
-                    icon: LucideIcons.notebookPen,
-                    onPressed: () => showGlassSheet<void>(context, (_) => const _NoteSheet()),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: OrvButton(
+                      key: const Key('lib-add'),
+                      label: 'Add',
+                      small: true,
+                      variant: ButtonVariant.primary,
+                      icon: LucideIcons.plus,
+                      loading: _busy,
+                      onPressed: () => showGlassSheet<void>(
+                        context,
+                        (sheet) => _AddSheet(
+                          onPick: (what) {
+                            Navigator.of(sheet).pop();
+                            switch (what) {
+                              case 'photo':
+                                _addPhoto(true);
+                              case 'gallery':
+                                _addPhoto(false);
+                              case 'file':
+                                _add(ref.read(anyFilePickerProvider));
+                              case 'voice':
+                                _add(() => recordVoiceNote(context), done: 'Voice note kept');
+                              case 'note':
+                                showGlassSheet<void>(context, (_) => const _NoteSheet());
+                            }
+                          },
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
               TextField(
                 key: const Key('lib-search'),
                 controller: _search,
@@ -135,7 +129,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 style: OrvText.body(l),
                 decoration: InputDecoration(
                   isDense: true,
+                  filled: true,
+                  fillColor: l.c.field,
                   prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Clear search',
+                          icon: Icon(LucideIcons.x, size: 16, color: l.c.muted),
+                          onPressed: () => setState(_search.clear),
+                        ),
                   hintText: 'Search in plain words — “pan card”, “rent”',
                   hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
                   border: OutlineInputBorder(
@@ -149,20 +152,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               ),
               if (used.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Wrap(
-                    spacing: 6,
+                SizedBox(
+                  height: 44,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(top: 8),
                     children: [
                       for (final c in ['', ...used])
-                        ChoiceChip(
-                          label: Text(c.isEmpty ? 'All' : c),
-                          selected: _category == c,
-                          showCheckmark: false,
-                          onSelected: (_) => setState(() => _category = c),
-                          selectedColor: l.accent.withValues(alpha: 0.16),
-                          side: BorderSide(color: _category == c ? l.accent : l.c.edge),
-                          backgroundColor: Colors.transparent,
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text(c.isEmpty ? 'All' : c),
+                            selected: _category == c,
+                            showCheckmark: false,
+                            visualDensity: VisualDensity.compact,
+                            onSelected: (_) => setState(() => _category = c),
+                            selectedColor: l.accent.withValues(alpha: 0.16),
+                            side: BorderSide(color: _category == c ? l.accent : l.c.edge),
+                            backgroundColor: Colors.transparent,
+                          ),
                         ),
                     ],
                   ),
@@ -219,7 +227,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     style: OrvText.muted(l),
                   ),
                 ),
-              for (final d in shown) _DocCard(doc: d, today: today),
+              if (_search.text.isEmpty && _category.isEmpty && used.length > 1)
+                for (final c in used) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
+                    child: Text(
+                      '${c.toUpperCase()}  ${shown.where((d) => d.category == c).length}',
+                      style: OrvText.label(l),
+                    ),
+                  ),
+                  _DocGroup(docs: shown.where((d) => d.category == c).toList(), today: today),
+                  const SizedBox(height: 6),
+                ]
+              else if (shown.isNotEmpty)
+                _DocGroup(docs: shown, today: today),
             ],
           );
         },
@@ -228,67 +249,134 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 }
 
-class _DocCard extends StatelessWidget {
-  const _DocCard({required this.doc, required this.today});
+/// Ways to add, one sheet: snap, pick, a file, your voice, or words.
+class _AddSheet extends StatelessWidget {
+  const _AddSheet({required this.onPick});
+  final void Function(String what) onPick;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    Widget tile(String key, IconData icon, String title, String sub) => ListTile(
+      key: Key('lib-$key'),
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(gradient: l.accentGradient, borderRadius: BorderRadius.circular(11)),
+        child: Icon(icon, size: 18, color: Colors.white),
+      ),
+      title: Text(title, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+      subtitle: Text(sub, style: OrvText.muted(l).copyWith(fontSize: 12)),
+      onTap: () => onPick(key),
+    );
+    return StickySheet(
+      title: 'Add to Library',
+      footer: Text(
+        'ORVYN reads it, titles and tags it, and reminds you before it runs out.',
+        style: OrvText.muted(l).copyWith(fontSize: 12),
+      ),
+      children: [
+        tile('photo', LucideIcons.camera, 'Photograph a document', 'A policy, a card, a bill'),
+        tile('gallery', LucideIcons.image, 'From the gallery', 'A photo you already have'),
+        tile('file', LucideIcons.paperclip, 'A file', 'PDF, Word, a spreadsheet…'),
+        tile('voice', LucideIcons.mic, 'A voice note', 'Say it; it’s kept to play back'),
+        tile('note', LucideIcons.notebookPen, 'A note', 'Write it down'),
+      ],
+    );
+  }
+}
+
+IconData _docIcon(DocItem d) {
+  if (d.kind == 'note') return LucideIcons.notebookPen;
+  final c = d.category.toLowerCase();
+  if (c.contains('identity')) return LucideIcons.idCard;
+  if (c.contains('insurance')) return LucideIcons.shieldCheck;
+  if (c.contains('bill') || c.contains('finance') || c.contains('tax')) return LucideIcons.receipt;
+  if (c.contains('home') || c.contains('property')) return LucideIcons.house;
+  if (c.contains('health') || c.contains('medical')) return LucideIcons.heartPulse;
+  if (c.contains('vehicle')) return LucideIcons.car;
+  if (d.fileName.toLowerCase().endsWith('.m4a') || d.fileName.toLowerCase().endsWith('.webm')) return LucideIcons.mic;
+  return LucideIcons.fileText;
+}
+
+class _DocGroup extends StatelessWidget {
+  const _DocGroup({required this.docs, required this.today});
+  final List<DocItem> docs;
+  final String today;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Glass(
+      blur: false,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Column(
+        children: [
+          for (var i = 0; i < docs.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: l.c.edge),
+            _DocRow(doc: docs[i], today: today),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One document as a quiet row: what it is, one line about it, and only the badge that matters (running out).
+class _DocRow extends StatelessWidget {
+  const _DocRow({required this.doc, required this.today});
   final DocItem doc;
   final String today;
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
     final e = expiry(doc.expiresOn, today);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-        onTap: () => showGlassSheet<void>(context, (_) => _DocSheet(id: doc.id)),
-        child: Glass(
-          blur: false,
-          padding: const EdgeInsets.all(14),
-          child: SizedBox(
-            width: double.infinity,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        doc.title.isNotEmpty
-                            ? doc.title
-                            : (doc.working ? 'Reading…' : (doc.fileName.isEmpty ? 'Untitled' : doc.fileName)),
-                        style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (doc.working)
-                      const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                  ],
-                ),
-                Text(
-                  '${doc.category}${doc.size > 0 ? ' · ${formatBytes(doc.size)}' : ''}',
-                  style: OrvText.muted(l).copyWith(fontSize: 12),
-                ),
-                if (doc.summary.isNotEmpty)
-                  Text(doc.summary, maxLines: 2, overflow: TextOverflow.ellipsis, style: OrvText.muted(l)),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (doc.status == 'waiting') const OrvBadge('Waiting for tomorrow'),
-                    if (doc.status == 'failed') const OrvBadge('Fill in yourself'),
-                    if (e.urgency != Urgency.none)
-                      OrvBadge(
-                        expiryLabel(e.days),
-                        tone: e.urgency == Urgency.expired
-                            ? l.c.danger
-                            : (e.urgency == Urgency.soon ? l.c.warning : null),
-                      ),
-                    for (final t in doc.tags.take(4)) OrvBadge('#$t'),
-                  ],
-                ),
-              ],
+    final title = doc.title.isNotEmpty
+        ? doc.title
+        : (doc.working ? 'Reading…' : (doc.fileName.isEmpty ? 'Untitled' : doc.fileName));
+    final line = [
+      if (doc.status == 'waiting') 'Waiting for tomorrow',
+      if (doc.status == 'failed') 'Fill in yourself',
+      if (doc.summary.isNotEmpty) doc.summary else doc.category,
+    ].join(' · ');
+    return InkWell(
+      onTap: () => showGlassSheet<void>(context, (_) => _DocSheet(id: doc.id)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(color: l.c.field, borderRadius: BorderRadius.circular(10)),
+              child: Icon(_docIcon(doc), size: 17, color: l.c.muted),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    line,
+                    style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            if (doc.working)
+              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+            else if (e.urgency != Urgency.none)
+              OrvBadge(
+                expiryLabel(e.days),
+                tone: e.urgency == Urgency.expired ? l.c.danger : (e.urgency == Urgency.soon ? l.c.warning : null),
+              ),
+          ],
         ),
       ),
     );

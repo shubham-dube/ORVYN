@@ -109,7 +109,6 @@ void main() {
     await h.pump(tester);
     await tester.tap(find.bySemanticsLabel('Settings'));
     await settle(tester);
-    await tester.scrollUntilVisible(find.text('Not set up yet'), 300, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.bySemanticsLabel('Working hours and reminders'));
     await settle(tester);
     expect(find.textContaining('nothing is used until you save'), findsOneWidget);

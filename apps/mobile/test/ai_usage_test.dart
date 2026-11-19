@@ -25,10 +25,12 @@ void main() {
     await h.pump(tester);
     await tester.tap(find.bySemanticsLabel('Settings'));
     await settle(tester, 20);
+    await tester.tap(find.bySemanticsLabel('AI'));
+    await settle(tester, 20);
     await tester.scrollUntilVisible(
       find.textContaining('Today, everyone together'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: find.byType(Scrollable).last,
     );
     expect(find.textContaining(r'$0.030 of $1.00'), findsOneWidget);
     expect(find.text('Sorting what you drop'), findsOneWidget);

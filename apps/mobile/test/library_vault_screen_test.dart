@@ -80,6 +80,7 @@ void main() {
     await tapIt(tester, find.text('Save'));
 
     // a note is added for the server to read
+    await tapIt(tester, find.byKey(const Key('lib-add')));
     await tapIt(tester, find.byKey(const Key('lib-note')));
     await tester.enterText(find.byKey(const Key('note-title')), 'Renewal steps');
     await tester.enterText(find.byKey(const Key('note-text')), 'Carry the old passport');

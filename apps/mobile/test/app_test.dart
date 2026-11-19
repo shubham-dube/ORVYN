@@ -138,27 +138,23 @@ void main() {
   testWidgets('settings: devices, light picker and sign-out', (tester) async {
     final h = AppHarness()..signedInAs(userJson());
     await h.pump(tester);
+    tester.view.physicalSize = const Size(1170, 4000);
+    addTearDown(tester.view.reset);
     await tester.tap(find.bySemanticsLabel('Settings'));
     await settle(tester);
-    await tester.scrollUntilVisible(find.text('Pixel 8'), 300, scrollable: find.byType(Scrollable).first);
-    expect(find.text('Pixel 8'), findsOneWidget);
-    expect(find.text('this phone'), findsOneWidget);
-
-    await tester.scrollUntilVisible(find.bySemanticsLabel('Night'), -300, scrollable: find.byType(Scrollable).first);
-    // bring it to the middle, clear of the bell and avatar at the top
-    await Scrollable.ensureVisible(find.bySemanticsLabel('Night').evaluate().first, alignment: 0.5);
+    await tester.tap(find.bySemanticsLabel('Light'));
     await settle(tester);
     await tester.tap(find.bySemanticsLabel('Night'));
     await settle(tester);
     expect(h.store.values['orvyn.theme'], 'night');
-
-    await tester.scrollUntilVisible(
-      find.text('Sign out of this phone'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -300)); // clear of the dock
+    await tester.tap(find.byTooltip('Back'));
     await settle(tester);
+
+    await tester.tap(find.text('Security & devices'));
+    await settle(tester);
+    expect(find.text('Pixel 8'), findsOneWidget);
+    expect(find.text('this phone'), findsOneWidget);
+
     await tester.tap(find.text('Sign out of this phone'));
     await settle(tester);
     expect(find.text('Welcome back'), findsOneWidget);

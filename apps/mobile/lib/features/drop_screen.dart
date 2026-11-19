@@ -16,63 +16,440 @@ import '../design/toast.dart';
 import '../drop/drop.dart';
 import '../money/money.dart';
 import 'common.dart';
+import 'sheets.dart';
 
-/// Drop (spec 0003): type, speak, snap or share anything; the AI suggests what it is; one tap puts it in Today or
-/// Money. Nothing is created without that tap (AC3).
-class DropScreen extends ConsumerWidget {
+/// Drop (spec 0003, calm in 0008 C): one composer, then what waits for you as quiet rows — what ORVYN thinks each
+/// thing is and one tap to accept it, the full editor only when you ask. Nothing is created without that tap (AC3).
+class DropScreen extends ConsumerStatefulWidget {
   const DropScreen({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DropScreen> createState() => _DropScreenState();
+}
+
+class _DropScreenState extends ConsumerState<DropScreen> {
+  bool _showDone = false;
+
+  @override
+  Widget build(BuildContext context) {
     final items = ref.watch(dropItemsProvider).value ?? const <DropItemView>[];
-    final open = items.where((i) => i.open).toList();
-    final done = items.where((i) => i.status == 'done' || i.status == 'kept').take(8).toList();
+    final ready = items.where((i) => i.status == 'proposed' && i.proposal != null).toList();
+    final reading = items.where((i) => i.status == 'new' || i.status == 'thinking').toList();
+    final stuck = items.where((i) => i.open && !ready.contains(i) && !reading.contains(i)).toList();
+    final done = items.where((i) => i.status == 'done' || i.status == 'kept').take(12).toList();
+    final waiting = ready.length + stuck.length;
     return OrvModule(
       module: 'drop',
       child: Builder(
         builder: (context) {
           final l = context.orv;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
-            children: [
-              const PageTitle('Drop', overline: 'Text, voice, a photo or a link'),
-              const _Composer(),
-              const SizedBox(height: 12),
-              if (open.isEmpty)
-                Text('Nothing waiting. Whatever you drop shows up here with a suggestion.', style: OrvText.muted(l)),
-              for (final i in open)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _ItemCard(item: i),
-                ),
-              if (done.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text('Done', style: OrvText.label(l)),
-                for (final i in done)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(LucideIcons.circleCheck, size: 14, color: l.c.success),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(i.summary, style: OrvText.muted(l), overflow: TextOverflow.ellipsis),
-                        ),
-                        Text(
-                          i.status == 'kept'
-                              ? 'note'
-                              : (i.resultRef?.startsWith('money') ?? false)
-                              ? 'in Money'
-                              : 'in Today',
-                          style: OrvText.muted(l).copyWith(fontSize: 12),
-                        ),
-                      ],
+          return RefreshIndicator(
+            color: l.accent,
+            onRefresh: () => ref.read(syncProvider).sync().catchError((Object _) {}),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
+              children: [
+                PageTitle('Drop', overline: waiting == 0 ? 'Text, voice, a photo or a link' : '$waiting to decide'),
+                const _Composer(),
+                if (ready.isEmpty && reading.isEmpty && stuck.isEmpty)
+                  const _Empty()
+                else ...[
+                  if (ready.isNotEmpty) ...[
+                    _GroupHead('Ready for you', ready.length),
+                    _Group(children: [for (final i in ready) _ReadyRow(item: i)]),
+                  ],
+                  if (reading.isNotEmpty) ...[
+                    _GroupHead('Reading', reading.length),
+                    _Group(children: [for (final i in reading) _ReadingRow(item: i)]),
+                  ],
+                  if (stuck.isNotEmpty) ...[
+                    _GroupHead('Needs a hand', stuck.length),
+                    _Group(children: [for (final i in stuck) _StuckRow(item: i)]),
+                  ],
+                ],
+                if (done.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => setState(() => _showDone = !_showDone),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                      child: Row(
+                        children: [
+                          Text('Done · ${done.length}', style: OrvText.label(l)),
+                          const SizedBox(width: 4),
+                          Icon(_showDone ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 14, color: l.c.muted),
+                        ],
+                      ),
                     ),
                   ),
+                  if (_showDone)
+                    _Group(
+                      children: [
+                        for (final i in done)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.circleCheck, size: 15, color: l.c.success),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(i.summary, style: OrvText.muted(l), overflow: TextOverflow.ellipsis),
+                                ),
+                                Text(
+                                  i.status == 'kept'
+                                      ? 'note'
+                                      : (i.resultRef?.startsWith('money') ?? false)
+                                      ? 'in Money'
+                                      : 'in Today',
+                                  style: OrvText.muted(l).copyWith(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
               ],
-            ],
+            ),
           );
         },
       ),
+    );
+  }
+}
+
+class _Empty extends StatelessWidget {
+  const _Empty();
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 28, 8, 8),
+      child: Column(
+        children: [
+          Icon(LucideIcons.inbox, size: 30, color: l.c.faint),
+          const SizedBox(height: 10),
+          Text('Nothing waiting', style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(
+            'Drop a thought, a receipt or a link. ORVYN reads it and suggests where it goes; you decide.',
+            textAlign: TextAlign.center,
+            style: OrvText.muted(l),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupHead extends StatelessWidget {
+  const _GroupHead(this.text, this.count);
+  final String text;
+  final int count;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
+    child: Text('${text.toUpperCase()}  $count', style: OrvText.label(context.orv)),
+  );
+}
+
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Glass(
+      blur: false,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: l.c.edge), children[i]],
+        ],
+      ),
+    );
+  }
+}
+
+IconData _kindIcon(DropItemView i) => switch (i.kind) {
+  'photo' => LucideIcons.image,
+  'link' => LucideIcons.link,
+  'voice' => LucideIcons.mic,
+  'file' => LucideIcons.paperclip,
+  _ => LucideIcons.stickyNote,
+};
+
+/// What ORVYN thinks it is, in words: "Task · Tue 17 Nov, 5:00 pm", "Expense · ₹499 · Food & dining".
+String suggestionLine(Map<String, dynamic> p, MaterialLocalizations loc) {
+  String when(Object? at) {
+    final d = DateTime.tryParse('$at')?.toLocal();
+    if (d == null) return '';
+    final day = loc.formatMediumDate(d);
+    return '$at'.length > 10 ? '$day, ${loc.formatTimeOfDay(TimeOfDay.fromDateTime(d))}' : day;
+  }
+
+  return switch (p['kind']) {
+    'task' => ['Task', when(p['dueAt'] ?? p['dueDate'])].where((x) => x.isNotEmpty).join(' · '),
+    'event' => ['Event', when(p['start'])].where((x) => x.isNotEmpty).join(' · '),
+    'expense' => 'Expense · ${formatMoney(((p['amount'] as num? ?? 0) * 100).round())} · ${p['category'] ?? ''}',
+    _ => 'Note',
+  };
+}
+
+/// One thing ORVYN has read: the summary, its suggestion, and Add — Edit opens the full editor.
+class _ReadyRow extends ConsumerWidget {
+  const _ReadyRow({required this.item});
+  final DropItemView item;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final p = item.proposal!;
+    final kind = p['kind'] as String;
+    final title = (p['title'] ?? p['merchant'] ?? item.summary) as String;
+    void edit() => showGlassSheet<void>(context, (_) => _ProposalSheet(item: item));
+    return Semantics(
+      container: true,
+      label: 'Dropped: ${item.summary}',
+      child: InkWell(
+        onTap: edit,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Row(
+            children: [
+              _KindIcon(item: item),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: OrvText.body(l), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(
+                      suggestionLine(p, MaterialLocalizations.of(context)),
+                      style: OrvText.muted(l).copyWith(fontSize: 12.5, color: l.accent),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              if (item.fileId != null) _OpenFile(item: item),
+              IconButton(
+                tooltip: 'Edit: ${item.summary}',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(LucideIcons.pencil, size: 17, color: l.c.muted),
+                onPressed: edit,
+              ),
+              _AcceptButton(item: item, kind: kind),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KindIcon extends StatelessWidget {
+  const _KindIcon({required this.item});
+  final DropItemView item;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(color: l.c.field, borderRadius: BorderRadius.circular(10)),
+      child: Icon(_kindIcon(item), size: 16, color: l.c.muted),
+    );
+  }
+}
+
+class _OpenFile extends ConsumerWidget {
+  const _OpenFile({required this.item});
+  final DropItemView item;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => IconButton(
+    tooltip: item.kind == 'voice' ? 'Play' : 'Open',
+    visualDensity: VisualDensity.compact,
+    icon: Icon(item.kind == 'voice' ? LucideIcons.play : LucideIcons.paperclip, size: 17, color: context.orv.accent),
+    onPressed: () => openStoredFile(context, ref, id: item.fileId!, name: item.fileName ?? 'file'),
+  );
+}
+
+/// Accept the suggestion as it is: one tap.
+class _AcceptButton extends ConsumerWidget {
+  const _AcceptButton({required this.item, required this.kind});
+  final DropItemView item;
+  final String kind;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final label = kind == 'note' ? 'Keep' : 'Add';
+    return Semantics(
+      button: true,
+      label: '$label: ${item.summary}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: () async {
+          final toaster = Toaster.of(context);
+          unawaited(HapticFeedback.lightImpact());
+          final p = item.proposal!;
+          await ref.read(dropActionsProvider).confirm(item, p);
+          toaster.show(_doneText(p), tone: ToastTone.success);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(gradient: l.accentGradient, borderRadius: BorderRadius.circular(20)),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontFamily: fontFamily,
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _doneText(Map<String, dynamic> p) => switch (p['kind']) {
+  'note' => 'Kept as a note',
+  'expense' => 'Added to Money · ${formatMoney(((p['amount'] as num) * 100).round())}',
+  _ => 'Added to Today',
+};
+
+class _ReadingRow extends ConsumerWidget {
+  const _ReadingRow({required this.item});
+  final DropItemView item;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    return Semantics(
+      container: true,
+      label: 'Dropped: ${item.summary}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            _KindIcon(item: item),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.summary, style: OrvText.body(l), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  Text('Reading it…', style: OrvText.muted(l).copyWith(fontSize: 12.5)),
+                ],
+              ),
+            ),
+            if (item.fileId != null) _OpenFile(item: item),
+            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: l.accent)),
+            const SizedBox(width: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ORVYN couldn't read it (AI paused, failed): say why, and offer the plain ways out.
+class _StuckRow extends ConsumerWidget {
+  const _StuckRow({required this.item});
+  final DropItemView item;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final actions = ref.read(dropActionsProvider);
+    return Semantics(
+      container: true,
+      label: 'Dropped: ${item.summary}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                _KindIcon(item: item),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(item.summary, style: OrvText.body(l), maxLines: 2, overflow: TextOverflow.ellipsis),
+                ),
+                if (item.fileId != null) _OpenFile(item: item),
+                IconButton(
+                  tooltip: 'Dismiss',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(LucideIcons.x, size: 17, color: l.c.faint),
+                  onPressed: () => actions.dismiss(item),
+                ),
+              ],
+            ),
+            if ((item.problem ?? '').isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 42, top: 2),
+                child: Text(
+                  item.problem!,
+                  style: OrvText.muted(l)
+                      .copyWith(fontSize: 12.5, color: item.status == 'failed' ? l.c.danger : l.c.warning),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(left: 36),
+              child: Wrap(
+                spacing: 2,
+                children: [
+                  if (item.status == 'failed')
+                    TextButton(onPressed: () => actions.retry(item), child: const Text('Try again')),
+                  TextButton(
+                    onPressed: () => actions.confirm(item, {
+                      'kind': 'task',
+                      'title': item.summary,
+                      'dueDate': null,
+                      'dueAt': null,
+                      'durationMin': null,
+                      'priority': 0,
+                      'notes': '',
+                      'why': '',
+                    }),
+                    child: const Text('Make it a task'),
+                  ),
+                  TextButton(onPressed: () => actions.keep(item), child: const Text('Keep as a note')),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The full editor for one suggestion: change what it is, its words, amount or category, then add.
+class _ProposalSheet extends ConsumerWidget {
+  const _ProposalSheet({required this.item});
+  final DropItemView item;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    return StickySheet(
+      title: 'What is it?',
+      trailing: IconButton(
+        tooltip: 'Dismiss',
+        icon: Icon(LucideIcons.trash2, size: 18, color: l.c.muted),
+        onPressed: () async {
+          await ref.read(dropActionsProvider).dismiss(item);
+          if (context.mounted) Navigator.of(context).pop();
+        },
+      ),
+      footer: const SizedBox.shrink(),
+      children: [
+        Text(item.summary, style: OrvText.muted(l), maxLines: 3, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 10),
+        _Proposal(item: item, onDone: () => Navigator.of(context).pop()),
+      ],
     );
   }
 }
@@ -313,109 +690,10 @@ class _ComposerState extends ConsumerState<_Composer> {
   }
 }
 
-class _ItemCard extends ConsumerWidget {
-  const _ItemCard({required this.item});
-  final DropItemView item;
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l = context.orv;
-    final actions = ref.read(dropActionsProvider);
-    return Semantics(
-      container: true,
-      label: 'Dropped: ${item.summary}',
-      child: Glass(
-        blur: false,
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  item.kind == 'photo'
-                      ? LucideIcons.image
-                      : item.kind == 'link'
-                      ? LucideIcons.link
-                      : item.kind == 'voice'
-                      ? LucideIcons.mic
-                      : LucideIcons.stickyNote,
-                  size: 16,
-                  color: l.c.muted,
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: Text(item.summary, style: OrvText.body(l))),
-                if (item.fileId != null)
-                  IconButton(
-                    tooltip: item.kind == 'voice' ? 'Play' : 'Open',
-                    visualDensity: VisualDensity.compact,
-                    icon: Icon(
-                      item.kind == 'voice' ? LucideIcons.play : LucideIcons.paperclip,
-                      size: 18,
-                      color: l.accent,
-                    ),
-                    onPressed: () => openStoredFile(context, ref, id: item.fileId!, name: item.fileName ?? 'file'),
-                  ),
-                GestureDetector(
-                  onTap: () => actions.dismiss(item),
-                  child: Semantics(
-                    button: true,
-                    label: 'Dismiss',
-                    excludeSemantics: true,
-                    child: Icon(LucideIcons.x, size: 18, color: l.c.faint),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (item.status == 'new' || item.status == 'thinking')
-              Text('Reading it…', style: OrvText.muted(l))
-            else if (item.status == 'proposed' && item.proposal != null)
-              _Proposal(item: item)
-            else ...[
-              Text(
-                item.problem ?? '',
-                style: OrvText.muted(l).copyWith(color: item.status == 'failed' ? l.c.danger : l.c.warning),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: [
-                  if (item.status == 'failed')
-                    OrvButton(label: 'Try again', small: true, onPressed: () => actions.retry(item)),
-                  OrvButton(
-                    label: 'Make it a task',
-                    small: true,
-                    onPressed: () => actions.confirm(item, {
-                      'kind': 'task',
-                      'title': item.summary,
-                      'dueDate': null,
-                      'dueAt': null,
-                      'durationMin': null,
-                      'priority': 0,
-                      'notes': '',
-                      'why': '',
-                    }),
-                  ),
-                  OrvButton(
-                    label: 'Keep as a note',
-                    small: true,
-                    variant: ButtonVariant.ghost,
-                    onPressed: () => actions.keep(item),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _Proposal extends ConsumerStatefulWidget {
-  const _Proposal({required this.item});
+  const _Proposal({required this.item, this.onDone});
   final DropItemView item;
+  final VoidCallback? onDone;
   @override
   ConsumerState<_Proposal> createState() => _ProposalState();
 }
@@ -580,14 +858,8 @@ class _ProposalState extends ConsumerState<_Proposal> {
               setState(() => _busy = true);
               final p = _final();
               await ref.read(dropActionsProvider).confirm(widget.item, p);
-              toaster.show(
-                kind == 'note'
-                    ? 'Kept as a note'
-                    : kind == 'expense'
-                    ? 'Added to Money · ${formatMoney(((p['amount'] as num) * 100).round())}'
-                    : 'Added to Today',
-                tone: ToastTone.success,
-              );
+              toaster.show(_doneText(p), tone: ToastTone.success);
+              widget.onDone?.call();
             },
           ),
         ),

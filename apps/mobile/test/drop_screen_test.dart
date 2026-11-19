@@ -75,6 +75,9 @@ void main() {
         'why': 'Something to do by a time',
       });
       await nudge(tester, h);
+      expect(find.text('READY FOR YOU  1'), findsOneWidget);
+      expect(find.textContaining('Task · '), findsOneWidget);
+      await tapIt(tester, find.byTooltip('Edit: call the bank tomorrow 5pm'));
       expect(find.text('Why: Something to do by a time'), findsOneWidget);
       expect(b.rows.keys.where((k) => k.startsWith('today.task/')), isEmpty, reason: 'nothing before the tap');
       await tester.enterText(find.widgetWithText(TextField, 'Call the bank'), 'Call HDFC about the card');
@@ -113,7 +116,7 @@ void main() {
       'why': 'A receipt',
     });
     await nudge(tester, h);
-    await tapIt(tester, find.text('Add to Money'));
+    await tapIt(tester, find.text('Add'));
     final tx = b.rows.entries.firstWhere((e) => e.key.startsWith('money.transaction/')).value;
     expect(tx, containsPair('amountMinor', 49900));
     expect(tx, containsPair('source', 'receipt'));

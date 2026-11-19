@@ -10,6 +10,7 @@ import '../design/theme.dart';
 import '../drop/drop.dart';
 import '../library/library.dart';
 import '../vault/vault.dart';
+import 'tools.dart' show mailProvider;
 
 /// One module as the launcher shows it.
 class LauncherModule {
@@ -30,6 +31,8 @@ const launcherModules = <LauncherModule>[
   LauncherModule('drop', 'Drop', LucideIcons.inbox, '/drop', entitlement: 'drop'),
   LauncherModule('library', 'Library', LucideIcons.bookOpen, '/library', entitlement: 'library'),
   LauncherModule('vault', 'Vault', LucideIcons.lockKeyhole, '/vault', entitlement: 'vault'),
+  LauncherModule('mail', 'Mail', LucideIcons.mail, '/mail', entitlement: 'today'),
+  LauncherModule('people', 'People', LucideIcons.users, '/people', entitlement: 'owner'),
   LauncherModule('settings', 'Settings', LucideIcons.settings, '/settings'),
 ];
 
@@ -47,7 +50,13 @@ class ModuleLauncher extends ConsumerWidget {
     final l = context.orv;
     final session = ref.watch(sessionProvider);
     final me = session is SignedIn ? session.me : null;
-    final shown = launcherModules.where((m) => m.entitlement == null || (me?.can(m.entitlement!) ?? false)).toList();
+    final shown = launcherModules
+        .where(
+          (m) =>
+              m.entitlement == null ||
+              (m.entitlement == 'owner' ? (me?.isOwner ?? false) : (me?.can(m.entitlement!) ?? false)),
+        )
+        .toList();
 
     String? line(String key) {
       switch (key) {
@@ -73,6 +82,14 @@ class ModuleLauncher extends ConsumerWidget {
           return 'Devices, alerts';
         case 'assistant':
           return 'Ask anything';
+        case 'mail':
+          final n = (ref.watch(mailProvider).value ?? const []).fold<int>(
+            0,
+            (a, b) => a + ((b['unread'] as num?)?.toInt() ?? 0),
+          );
+          return n == 0 ? 'All read' : '$n unread';
+        case 'people':
+          return 'Invites, access';
       }
       return null;
     }
@@ -109,7 +126,7 @@ class ModuleLauncher extends ConsumerWidget {
                   onTap: () {
                     HapticFeedback.selectionClick();
                     Navigator.of(context).pop();
-                    context.go(m.route);
+                    m.key == 'mail' || m.key == 'people' ? context.push(m.route) : context.go(m.route);
                   },
                 ),
             ],

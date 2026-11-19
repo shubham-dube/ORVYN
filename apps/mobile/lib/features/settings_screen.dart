@@ -29,31 +29,257 @@ final notifySettingsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
   (ref) => ref.read(apiProvider).get<Map<String, dynamic>>('/notifications/settings'),
 );
 
+/// Settings (calm in spec 0008 C): who you are on top, then one quiet row per area, each opening its own page —
+/// instead of one long scroll of everything.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final s = ref.watch(sessionProvider);
+    final me = s is SignedIn ? s.me : null;
+    final pref = ref.watch(themePreferenceProvider);
+    final todayOn = me?.can('today') ?? false;
+    final todayConfigured = todayOn && ref.watch(todaySettingsProvider).value != null;
+    final conns = todayOn ? (ref.watch(connectionsProvider).value?.length ?? 0) : 0;
+    void open(String section) => context.push('/settings/$section');
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
-      children: const [
-        PageTitle('Settings'),
-        _Profile(),
-        SizedBox(height: 14),
-        _Light(),
-        SizedBox(height: 14),
-        _Notifications(),
-        SizedBox(height: 14),
-        _TodayEntry(),
-        _Connections(),
-        SizedBox(height: 14),
-        _Calendars(),
-        SizedBox(height: 14),
-        _AiUsage(),
-        SizedBox(height: 14),
-        _Security(),
+      children: [
+        const PageTitle('Settings'),
+        if (me != null)
+          Semantics(
+            button: true,
+            label: 'You: ${me.name.isEmpty ? me.email : me.name}',
+            excludeSemantics: true,
+            child: GestureDetector(
+              onTap: () => open('you'),
+              child: Glass(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    OrvAvatar(name: me.name.isEmpty ? me.email : me.name, size: 48),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            me.name.isEmpty ? 'Add your name' : me.name,
+                            style: OrvText.heading(l).copyWith(fontSize: 17),
+                          ),
+                          Text(me.email, style: OrvText.muted(l), overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                    if (me.isOwner) const OrvBadge('owner'),
+                    const SizedBox(width: 6),
+                    Icon(LucideIcons.chevronRight, size: 18, color: l.c.faint),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const _GroupLabel('Everyday'),
+        _Rows(
+          rows: [
+            _Row(LucideIcons.sunMoon, 'Light', switch (pref) {
+              ThemePreference.auto => 'Follows the day',
+              _ => '${pref.name[0].toUpperCase()}${pref.name.substring(1)}',
+            }, () => open('light')),
+            _Row(
+              LucideIcons.bell,
+              'Notifications',
+              'Where alerts reach you, quiet hours',
+              () => open('notifications'),
+              semantics: 'Notification settings',
+            ),
+            if (todayOn)
+              _Row(
+                LucideIcons.calendarClock,
+                'Working hours & reminders',
+                todayConfigured ? 'Yours — change them any time' : 'Not set up yet',
+                () => context.push('/settings/today'),
+                semantics: 'Working hours and reminders',
+              ),
+          ],
+        ),
+        if (todayOn) ...[
+          const _GroupLabel('Accounts'),
+          _Rows(
+            rows: [
+              _Row(
+                LucideIcons.plug,
+                'Connections',
+                conns == 0 ? 'Google, ClickUp, GitHub, your mail' : '$conns connected',
+                () => open('connections'),
+              ),
+              _Row(LucideIcons.calendarDays, 'Calendars', 'Which calendars show', () => open('calendars')),
+              _Row(LucideIcons.mail, 'Mail', 'Unread mail, and mail into tasks', () => context.push('/mail')),
+            ],
+          ),
+        ],
+        const _GroupLabel('Privacy & control'),
+        _Rows(
+          rows: [
+            _Row(LucideIcons.sparkles, 'AI', 'What it costs, by day and by job', () => open('ai')),
+            _Row(
+              LucideIcons.shieldCheck,
+              'Security & devices',
+              'Lock, passkeys, signed-in devices',
+              () => open('security'),
+            ),
+            if (me?.isOwner ?? false)
+              _Row(LucideIcons.users, 'People', 'Who uses ORVYN and what they can open', () => context.push('/people')),
+          ],
+        ),
       ],
     );
   }
+}
+
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.text);
+  final String text;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(6, 20, 6, 8),
+    child: Text(text.toUpperCase(), style: OrvText.label(context.orv)),
+  );
+}
+
+class _Row {
+  const _Row(this.icon, this.title, this.line, this.onTap, {this.semantics});
+  final IconData icon;
+  final String title;
+  final String line;
+  final VoidCallback onTap;
+  final String? semantics;
+}
+
+class _Rows extends StatelessWidget {
+  const _Rows({required this.rows});
+  final List<_Row> rows;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Glass(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 54),
+                child: Divider(height: 1, color: l.c.edge),
+              ),
+            Semantics(
+              button: true,
+              label: rows[i].semantics ?? rows[i].title,
+              excludeSemantics: true,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                onTap: rows[i].onTap,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: l.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(rows[i].icon, size: 17, color: l.accent),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(rows[i].title, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+                            Text(
+                              rows[i].line,
+                              style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(LucideIcons.chevronRight, size: 17, color: l.c.faint),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One area of Settings on its own page (`/settings/:section`).
+class SettingsSectionScreen extends StatelessWidget {
+  const SettingsSectionScreen({super.key, required this.section});
+  final String section;
+
+  static const titles = {
+    'you': 'You',
+    'light': 'Light',
+    'notifications': 'Notifications',
+    'connections': 'Connections',
+    'calendars': 'Calendars',
+    'ai': 'AI',
+    'security': 'Security & devices',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final body = switch (section) {
+      'you' => const _Profile(),
+      'light' => const _Light(),
+      'notifications' => const _Notifications(),
+      'connections' => const _Connections(),
+      'calendars' => const _Calendars(),
+      'ai' => const _AiUsage(),
+      'security' => const _Security(),
+      _ => Text('Nothing here.', style: OrvText.muted(l)),
+    };
+    return Scaffold(
+      body: SafeArea(
+        child: _Bare(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: () => context.canPop() ? context.pop() : context.go('/settings'),
+                    icon: Icon(LucideIcons.arrowLeft, color: l.c.text),
+                    tooltip: 'Back',
+                  ),
+                  Expanded(child: PageTitle(titles[section] ?? 'Settings')),
+                ],
+              ),
+              body,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Inside a section page the page already carries the title: sections drop their own heading.
+class _Bare extends InheritedWidget {
+  const _Bare({required super.child});
+  static bool of(BuildContext c) => c.dependOnInheritedWidgetOfExactType<_Bare>() != null;
+  @override
+  bool updateShouldNotify(_Bare oldWidget) => false;
 }
 
 final _aiUsageProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
@@ -171,7 +397,7 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Semantics(header: true, child: Text(title, style: OrvText.heading(l))),
+          if (!_Bare.of(context)) Semantics(header: true, child: Text(title, style: OrvText.heading(l))),
           if (line != null) Text(line!, style: OrvText.muted(l)),
           const SizedBox(height: 14),
           ...children,
@@ -496,57 +722,6 @@ class _Connections extends ConsumerWidget {
       title: 'Connections',
       line: 'Several Google accounts (Calendar, Meet, Gmail) and ClickUp — keys stay sealed on the server.',
       children: [ConnectionsPanel()],
-    );
-  }
-}
-
-class _TodayEntry extends ConsumerWidget {
-  const _TodayEntry();
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(sessionProvider);
-    if (s is! SignedIn || !s.me.can('today')) return const SizedBox.shrink();
-    final l = context.orv;
-    final configured = ref.watch(todaySettingsProvider).value != null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: OrvModule(
-        module: 'today',
-        child: Builder(
-          builder: (context) {
-            return Semantics(
-              button: true,
-              label: 'Working hours and reminders',
-              excludeSemantics: true,
-              child: GestureDetector(
-                onTap: () => context.push('/settings/today'),
-                child: Glass(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    children: [
-                      Icon(LucideIcons.calendarClock, color: context.orv.accent),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Working hours & reminders', style: OrvText.heading(l)),
-                            Text(
-                              configured ? 'Yours — change them any time' : 'Not set up yet',
-                              style: OrvText.muted(l),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(LucideIcons.chevronRight, color: l.c.muted),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
     );
   }
 }

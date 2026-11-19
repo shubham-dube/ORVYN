@@ -171,7 +171,9 @@ void main() {
     await h.pump(tester);
     await tester.tap(find.bySemanticsLabel('Settings'));
     await settle(tester);
-    await tester.scrollUntilVisible(find.text('asha@gmail.test'), 300, scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.bySemanticsLabel('Calendars'));
+    await settle(tester);
+    await tester.scrollUntilVisible(find.text('asha@gmail.test'), 300, scrollable: find.byType(Scrollable).last);
     expect(find.text('Holidays in India'), findsOneWidget);
     expect(find.text('View only'), findsOneWidget);
     expect(find.text('Google stopped accepting this connection.'), findsOneWidget);

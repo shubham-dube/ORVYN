@@ -37,17 +37,38 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
             children: [
-              PageTitle('Vault', overline: 'Only your devices can open it'),
-              if (v.status == VaultStatus.unlocked && _recovery == null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OrvButton(
-                    label: 'Lock now',
-                    small: true,
-                    icon: LucideIcons.lock,
-                    onPressed: () => ref.read(vaultProvider.notifier).lock(),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: PageTitle(
+                      'Vault',
+                      overline: v.status == VaultStatus.unlocked
+                          ? '${v.items.length} ${v.items.length == 1 ? 'item' : 'items'} · open on this phone'
+                          : 'Only your devices can open it',
+                    ),
                   ),
-                ),
+                  if (v.status == VaultStatus.unlocked && _recovery == null) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: IconButton(
+                        tooltip: 'Vault settings',
+                        icon: Icon(LucideIcons.settings2, size: 19, color: context.orv.c.muted),
+                        onPressed: () => showGlassSheet<void>(context, (_) => const _VaultSettings()),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: OrvButton(
+                        label: 'Lock now',
+                        small: true,
+                        icon: LucideIcons.lock,
+                        onPressed: () => ref.read(vaultProvider.notifier).lock(),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
               if (v.status == VaultStatus.loading) const SizedBox(height: 120),
               if (v.status == VaultStatus.none || _recovery != null)
                 _Setup(recovery: _recovery, onRecovery: (k) => setState(() => _recovery = k)),
@@ -379,65 +400,94 @@ class _OpenState extends ConsumerState<_Open> {
             (q.isEmpty || '${i.title} ${i.subtitle} ${i.fields['url'] ?? ''}'.toLowerCase().contains(q)))
           i,
     ];
+    final kinds = _kind.isEmpty && q.isEmpty
+        ? [
+            for (final k in vaultKinds)
+              if (shown.any((i) => i.kind == k)) k,
+          ]
+        : <String>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 8),
-        TextField(
-          key: const Key('vault-search'),
-          controller: _search,
-          onChanged: (_) => setState(() {}),
-          style: OrvText.body(l),
-          decoration: InputDecoration(
-            isDense: true,
-            prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-            hintText: 'Search titles, usernames, websites',
-            hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: l.c.edge),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: l.c.edge),
-            ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            color: l.c.success.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.shieldCheck, size: 16, color: l.c.success),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Encrypted on your devices. The server only ever holds sealed boxes.',
+                  style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
           children: [
+            Expanded(
+              child: TextField(
+                key: const Key('vault-search'),
+                controller: _search,
+                onChanged: (_) => setState(() {}),
+                style: OrvText.body(l),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: l.c.field,
+                  prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                  hintText: 'Titles, usernames, websites',
+                  hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: l.c.edge),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: l.c.edge),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
             OrvButton(
               key: const Key('vault-new'),
-              label: 'New item',
+              label: 'New',
               small: true,
               variant: ButtonVariant.primary,
               icon: LucideIcons.plus,
               onPressed: () => showGlassSheet<void>(context, (_) => const _ItemSheet()),
             ),
-            const SizedBox(width: 8),
-            OrvButton(
-              label: 'Settings',
-              small: true,
-              variant: ButtonVariant.ghost,
-              onPressed: () => showGlassSheet<void>(context, (_) => const _VaultSettings()),
-            ),
           ],
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 6,
-          children: [
-            for (final k in ['', ...vaultKinds])
-              ChoiceChip(
-                label: Text(k.isEmpty ? 'All' : kindLabel[k]!),
-                selected: _kind == k,
-                showCheckmark: false,
-                onSelected: (_) => setState(() => _kind = k),
-                selectedColor: l.accent.withValues(alpha: 0.16),
-                side: BorderSide(color: _kind == k ? l.accent : l.c.edge),
-                backgroundColor: Colors.transparent,
-              ),
-          ],
+        SizedBox(
+          height: 44,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(top: 8),
+            children: [
+              for (final k in ['', ...vaultKinds])
+                Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: ChoiceChip(
+                    label: Text(k.isEmpty ? 'All' : kindLabel[k]!),
+                    selected: _kind == k,
+                    showCheckmark: false,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) => setState(() => _kind = k),
+                    selectedColor: l.accent.withValues(alpha: 0.16),
+                    side: BorderSide(color: _kind == k ? l.accent : l.c.edge),
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
+            ],
+          ),
         ),
         if (v.unreadable > 0)
           Padding(
@@ -447,7 +497,7 @@ class _OpenState extends ConsumerState<_Open> {
               style: OrvText.muted(l).copyWith(color: l.c.warning),
             ),
           ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
         if (shown.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 20),
@@ -457,36 +507,87 @@ class _OpenState extends ConsumerState<_Open> {
                   : 'Nothing matches. Try fewer words.',
               style: OrvText.muted(l),
             ),
-          ),
-        for (final i in shown)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-              onTap: () => showGlassSheet<void>(context, (_) => _ItemSheet(id: i.id)),
-              child: Glass(
-                blur: false,
-                padding: const EdgeInsets.all(12),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        i.title.isEmpty ? kindLabel[i.kind]! : i.title,
-                        style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
+          )
+        else if (kinds.length > 1)
+          for (final k in kinds) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 6),
+              child: Text(
+                '${kindLabel[k]!.toUpperCase()}  ${shown.where((i) => i.kind == k).length}',
+                style: OrvText.label(l),
+              ),
+            ),
+            _VaultGroup(items: shown.where((i) => i.kind == k).toList()),
+          ]
+        else
+          _VaultGroup(items: shown),
+      ],
+    );
+  }
+}
+
+const _kindIcon = {
+  'login': LucideIcons.keyRound,
+  'card': LucideIcons.creditCard,
+  'id': LucideIcons.idCard,
+  'apikey': LucideIcons.code,
+  'recovery': LucideIcons.lifeBuoy,
+  'note': LucideIcons.notebookPen,
+};
+
+class _VaultGroup extends StatelessWidget {
+  const _VaultGroup({required this.items});
+  final List<OpenItem> items;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Glass(
+      blur: false,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Column(
+        children: [
+          for (var n = 0; n < items.length; n++) ...[
+            if (n > 0) Divider(height: 1, color: l.c.edge),
+            InkWell(
+              onTap: () => showGlassSheet<void>(context, (_) => _ItemSheet(id: items[n].id)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(color: l.c.field, borderRadius: BorderRadius.circular(10)),
+                      child: Icon(_kindIcon[items[n].kind] ?? LucideIcons.lock, size: 17, color: l.c.muted),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            items[n].title.isEmpty ? kindLabel[items[n].kind]! : items[n].title,
+                            style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            items[n].subtitle.isEmpty ? kindLabel[items[n].kind]! : items[n].subtitle,
+                            style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        '${kindLabel[i.kind]}${i.subtitle.isEmpty ? '' : ' · ${i.subtitle}'}',
-                        style: OrvText.muted(l).copyWith(fontSize: 12),
-                      ),
-                    ],
-                  ),
+                    ),
+                    Icon(LucideIcons.chevronRight, size: 16, color: l.c.faint),
+                  ],
                 ),
               ),
             ),
-          ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 }
