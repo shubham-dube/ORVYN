@@ -15,6 +15,7 @@ import {
   ListTodo,
   type LucideIcon,
   MessagesSquare,
+  Receipt,
   Sunrise,
   TrendingUp,
 } from 'lucide-react';
@@ -70,6 +71,7 @@ const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon
     icon: Bot,
     href: '/assistant',
   },
+  split: { name: 'Split', line: 'Trips and parties: who paid, who owes', icon: Receipt, href: '/split' },
   brief: { name: 'Brief', line: 'Your morning in one look, and quiet nudges', icon: Sunrise, href: '/brief' },
   chat: {
     name: 'Chat',
@@ -91,7 +93,18 @@ const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon
   },
 };
 /** Modules that are built; the rest show as "soon". */
-const BUILT = new Set(['today', 'drop', 'money', 'library', 'vault', 'assistant', 'brief', 'ipo']);
+const BUILT = new Set([
+  'today',
+  'drop',
+  'money',
+  'library',
+  'vault',
+  'assistant',
+  'brief',
+  'ipo',
+  'chat',
+  'split',
+]);
 
 export default function Home() {
   const { me } = useSession();

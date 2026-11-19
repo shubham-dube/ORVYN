@@ -11,6 +11,8 @@ import {
   Shield,
   Wallet,
   Sparkles,
+  MessagesSquare,
+  Receipt,
   Sunrise,
   TrendingUp,
 } from 'lucide-react';
@@ -32,6 +34,7 @@ import { VaultProvider } from '@/lib/vault';
 import { MoneyProvider } from '@/lib/money';
 import { SyncProvider } from '@/lib/sync';
 import { TodayProvider } from '@/lib/today';
+import { deviceKeys } from '@/lib/chat';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { status } = useSession();
@@ -114,6 +117,12 @@ function Splash() {
 }
 
 function Shell({ children }: { children: ReactNode }) {
+  const { me: who, deviceId } = useSession();
+  // a device that can chat gets its keys at once, so messages sent before Chat is first opened reach it (ADR-0014)
+  useEffect(() => {
+    if (deviceId && (who?.role === 'owner' || who?.entitlements.includes('chat')))
+      void deviceKeys(deviceId).catch(() => undefined);
+  }, [deviceId, who]);
   const { me } = useSession();
   const pathname = usePathname();
   const n = useNotifications();
@@ -151,6 +160,12 @@ function Shell({ children }: { children: ReactNode }) {
     ...(me?.role === 'owner' || me?.entitlements.includes('library')
       ? [{ href: '/library', label: 'Library', icon: BookOpen }]
       : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('chat')
+      ? [{ href: '/chat', label: 'Chat', icon: MessagesSquare }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('split')
+      ? [{ href: '/split', label: 'Split', icon: Receipt }]
+      : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('ipo')
       ? [{ href: '/ipo', label: 'IPO desk', icon: TrendingUp }]
       : []),
@@ -164,17 +179,18 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-[1440px] gap-4 p-3 pb-28 sm:p-5 lg:pb-5">
       <aside className="glass-pane sticky top-5 hidden h-[calc(100dvh-40px)] w-60 shrink-0 flex-col p-3 lg:flex">
-        <div className="mb-6 flex items-center gap-2.5 px-2 pt-2">
+        <div className="mb-4 flex shrink-0 items-center gap-2.5 px-2 pt-2">
           <Wordmark />
         </div>
-        <nav aria-label="Main" className="flex flex-col gap-1">
+        {/* the list scrolls on short screens; you and the bell stay pinned at the bottom */}
+        <nav aria-label="Main" className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1">
           {nav.map((i) => (
             <Link
               key={i.href}
               href={i.href}
               aria-current={pathname === i.href ? 'page' : undefined}
               className={cn(
-                'flex h-11 items-center gap-3 rounded-orv-md px-3 text-[14px] font-medium transition-colors',
+                'flex h-10 shrink-0 items-center gap-3 rounded-orv-md px-3 text-[14px] font-medium transition-colors',
                 pathname === i.href
                   ? 'bg-[color-mix(in_srgb,var(--orv-accent)_14%,transparent)] text-orv-text'
                   : 'text-orv-muted hover:bg-orv-track hover:text-orv-text',
@@ -187,12 +203,12 @@ function Shell({ children }: { children: ReactNode }) {
         </nav>
         <button
           onClick={() => setCommand(true)}
-          className="mt-4 flex h-10 items-center gap-2 rounded-orv-md border border-orv-edge px-3 text-[13px] text-orv-muted hover:text-orv-text"
+          className="mt-3 flex h-10 shrink-0 items-center gap-2 rounded-orv-md border border-orv-edge px-3 text-[13px] text-orv-muted hover:text-orv-text"
         >
           Ask or do anything
           <kbd className="ml-auto rounded border border-orv-edge px-1 font-mono text-[10px]">Ctrl K</kbd>
         </button>
-        <div className="mt-auto flex items-center gap-3 rounded-orv-md p-2">
+        <div className="mt-2 flex shrink-0 items-center gap-3 rounded-orv-md p-2">
           <Avatar name={me?.name || me?.email || '?'} src={me?.avatarUrl} size={34} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold">{me?.name || 'You'}</p>

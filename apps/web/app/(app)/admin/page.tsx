@@ -16,6 +16,7 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  Receipt,
   Sunrise,
   TrendingUp,
   UserPlus,
@@ -68,6 +69,7 @@ const MODULES: Record<string, { name: string; icon: LucideIcon; blurb: string }>
   assistant: { name: 'Assistant', icon: Sparkles, blurb: 'Ask ORVYN' },
   brief: { name: 'Brief', icon: Sunrise, blurb: 'Morning summary' },
   chat: { name: 'Chat', icon: MessageCircle, blurb: 'Private messages' },
+  split: { name: 'Split', icon: Receipt, blurb: 'Shared expenses' },
   ipo: { name: 'IPO', icon: TrendingUp, blurb: 'IPO desk' },
   jobs: { name: 'Jobs', icon: Briefcase, blurb: 'Job hunt' },
 };

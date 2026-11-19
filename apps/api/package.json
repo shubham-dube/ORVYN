@@ -27,7 +27,6 @@
     "@orvyn/money": "workspace:*",
     "@orvyn/today-parse": "workspace:*",
     "@orvyn/today-plan": "workspace:*",
-    "@orvyn/vault-crypto": "workspace:*",
     "@sentry/node": "^10.78.0",
     "@simplewebauthn/server": "^13.3.3",
     "bullmq": "^5.81.5",
@@ -52,6 +51,7 @@
   },
   "devDependencies": {
     "@nestjs/testing": "^11.2.10",
+    "@orvyn/vault-crypto": "workspace:*",
     "@swc/core": "^1.16.22",
     "@types/libsodium-wrappers": "0.7.14",
     "@types/web-push": "^3.6.4",

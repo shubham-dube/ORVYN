@@ -21,6 +21,11 @@ export class SplitController {
     return this.split.list(a.userId);
   }
 
+  @Get('people')
+  people(@Auth() a: AuthContext) {
+    return this.split.people(a.userId);
+  }
+
   @Post()
   create(@Auth() a: AuthContext, @Body(new ZodPipe(NewSplitGroup)) b: NewSplitGroup) {
     return this.split.create(a.userId, b);

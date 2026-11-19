@@ -114,7 +114,7 @@ export function thisDevice(): DeviceInfo {
 /** Upload a file's bytes (files module, ADR-0011); returns its id. Refreshes the session once on 401. */
 export async function uploadFile(
   file: Blob & { name?: string },
-  purpose: 'drop' | 'money' | 'library' | 'voice' = 'drop',
+  purpose: 'drop' | 'money' | 'library' | 'voice' | 'chat' | 'split' = 'drop',
 ): Promise<{ id: string; name: string }> {
   const send = () =>
     fetch(`${API_URL}/files`, {

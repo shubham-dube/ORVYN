@@ -9,7 +9,7 @@ import {
   encryptFile,
   encryptMessage,
   newDeviceKeys,
-} from '../../../packages/vault-crypto/src/chat';
+} from '@orvyn/vault-crypto';
 import { DB, type Db } from '../src/db/db.module';
 import { call, type Harness, OWNER, signIn, startApp } from './harness';
 

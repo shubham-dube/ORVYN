@@ -91,6 +91,18 @@ export class SplitService {
 
   // ------------------------------------------------------------------ groups
 
+  /** People you can add as members (everyone on ORVYN with Split); anyone else joins as a guest. */
+  async people(userId: string) {
+    const rows = await this.db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.disabled, false));
+    const out: typeof rows = [];
+    for (const r of rows)
+      if (r.id !== userId && (await this.access.principal(r.id))?.entitlements.has('split')) out.push(r);
+    return out;
+  }
+
   async create(userId: string, b: NewSplitGroup) {
     const others = [...new Set(b.memberIds)].filter((id) => id !== userId);
     for (const id of others) {
