@@ -135,7 +135,8 @@ export const moneyMerchantRules = pgTable(
     ownerId: uuid('owner_id').notNull(),
     merchantKey: text('merchant_key').notNull(),
     merchant: text('merchant').notNull(),
-    action: text('action', { enum: ['category', 'transfer', 'ignore'] }).notNull(),
+    /** 'ask': the person removed what was learned — ask again, and don't file it from history either */
+    action: text('action', { enum: ['category', 'transfer', 'ignore', 'ask'] }).notNull(),
     categoryId: uuid('category_id'),
     hits: integer('hits').notNull().default(1),
     always: boolean('always').notNull().default(false),

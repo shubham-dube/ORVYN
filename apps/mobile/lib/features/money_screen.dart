@@ -10,9 +10,11 @@ import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
+import '../money/brain.dart';
 import '../money/capture.dart';
 import '../money/money.dart';
 import '../money/spend_date.dart';
+import 'money_brain.dart';
 import 'money_manage.dart';
 import 'common.dart';
 import 'sheets.dart';
@@ -211,6 +213,13 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                     ),
                   ),
                 ],
+                InsightsStrip(
+                  month: _month,
+                  onOpenTx: (id) {
+                    final t = txs.where((t) => t.id == id).firstOrNull;
+                    if (t != null) showGlassSheet<void>(context, (_) => _TxSheet(tx: t));
+                  },
+                ),
                 const SizedBox(height: 12),
                 _Hero(spent: s.spent, earned: s.earned, days: days, byCategory: s.byCategory, cat: cat),
                 const SizedBox(height: 12),
@@ -263,27 +272,25 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                 if (_searchOpen)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: TextField(
-                      key: const Key('money-search'),
-                      controller: _search,
-                      autofocus: true,
-                      onChanged: (_) => setState(() {}),
-                      style: OrvText.body(l),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        filled: true,
-                        fillColor: l.c.field,
-                        prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-                        hintText: 'Merchant, note or amount',
-                        hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: l.c.edge),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: BorderSide(color: l.c.edge),
-                        ),
+                    child: FocusRing(
+                      radius: 14,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: TextField(
+                        key: const Key('money-search'),
+                        controller: _search,
+                        autofocus: true,
+                        onChanged: (_) => setState(() {}),
+                        style: OrvText.body(l),
+                        decoration:
+                            bareInput(
+                              l,
+                              hint: 'Merchant, note or amount',
+                              fontSize: 15,
+                              padding: const EdgeInsets.symmetric(vertical: 11),
+                            ).copyWith(
+                              prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 30),
+                            ),
                       ),
                     ),
                   ),
@@ -638,6 +645,17 @@ String? _dayLabel(String? date, DateTime now) {
   return '${d.day} ${m[d.month - 1]}';
 }
 
+/// Your own history first (how you filed this merchant before), then what the words say ("lunch" → food).
+CategoryItem? _categoryFor(
+  ({String merchant, String? category}) p,
+  List<CategoryItem> cats,
+  Map<String, MerchantProfile> profiles,
+) {
+  final known = profiles[merchantKey(p.merchant)]?.categoryId;
+  return cats.where((c) => c.id == known).firstOrNull ??
+      cats.where((c) => c.slug != null && c.slug == p.category).firstOrNull;
+}
+
 class _QuickEntry extends ConsumerStatefulWidget {
   const _QuickEntry();
   @override
@@ -658,7 +676,11 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
     final p = parseSpend(_c.text, now: now);
     if (p == null) return;
     final cats = ref.read(categoriesProvider).value ?? const <CategoryItem>[];
-    final category = cats.where((c) => c.slug != null && c.slug == p.category).firstOrNull;
+    final category = _categoryFor(
+      (merchant: p.merchant, category: p.category),
+      cats,
+      ref.read(merchantProfilesProvider),
+    );
     final toaster = Toaster.of(context);
     unawaited(HapticFeedback.lightImpact());
     await ref.read(moneyActionsProvider).add({
@@ -683,7 +705,9 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
     final now = ref.watch(clockProvider)();
     final p = _c.text.trim().isEmpty ? null : parseSpend(_c.text, now: now);
     final cats = ref.watch(categoriesProvider).value ?? const <CategoryItem>[];
-    final category = p == null ? null : cats.where((c) => c.slug != null && c.slug == p.category).firstOrNull;
+    final category = p == null
+        ? null
+        : _categoryFor((merchant: p.merchant, category: p.category), cats, ref.watch(merchantProfilesProvider));
     return Glass(
       level: GlassLevel.float,
       padding: const EdgeInsets.fromLTRB(14, 4, 8, 8),
@@ -1103,6 +1127,15 @@ class _TxSheetState extends ConsumerState<_TxSheet> {
             value: _transfer,
             onChanged: (v) => setState(() => _transfer = v),
           ),
+          if (widget.tx.merchant.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(LucideIcons.store, size: 15),
+                label: Text('See all at ${widget.tx.merchant}'),
+                onPressed: () => openMerchant(context, widget.tx.merchant),
+              ),
+            ),
           if (widget.tx.rawMerchant.isNotEmpty && widget.tx.rawMerchant != widget.tx.merchant)
             Text('The message said: ${widget.tx.rawMerchant}', style: OrvText.muted(l).copyWith(fontSize: 12)),
           const SizedBox(height: 14),

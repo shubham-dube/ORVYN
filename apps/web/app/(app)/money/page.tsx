@@ -40,6 +40,7 @@ import {
   ShoppingBag,
   ShoppingBasket,
   Sparkles,
+  Store,
   Trash2,
   TrendingUp,
   Undo2,
@@ -50,6 +51,7 @@ import { Badge, Glass, Label, Segmented, Sheet, SkeletonRows, Switch, useToast }
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { AddTransactionSheet, ManageSheet, transactionsCsv } from '@/components/money-extras';
+import { InsightsPanel, MerchantSheet } from '@/components/money-brain';
 import { cn } from '@/lib/cn';
 import { useMoney } from '@/lib/money';
 
@@ -95,6 +97,7 @@ function MoneyView() {
   const [month, setMonth] = useState(() => monthOf(new Date().toISOString(), tz));
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [adding, setAdding] = useState(false);
+  const [trackSeed, setTrackSeed] = useState<Record<string, string> | null>(null);
   const [managing, setManaging] = useState(false);
   const [f, setF] = useState<Filters>(NO_FILTERS);
   const { accounts } = useMoney();
@@ -193,6 +196,20 @@ function MoneyView() {
           <TxList items={fresh.slice(0, 8)} cat={cat} onOpen={setEditing} fresh />
         </Glass>
       ) : null}
+
+      <InsightsPanel
+        month={month}
+        onOpenTx={(id) => setEditing(transactions.find((t) => t.id === id) ?? null)}
+        onTrack={(x) => {
+          setTrackSeed({
+            amount: String(x.amountMinor / 100),
+            merchant: x.merchant,
+            categoryId: x.categoryId ?? '',
+            rrule: `FREQ=MONTHLY;BYMONTHDAY=${x.day}`,
+          });
+          setAdding(true);
+        }}
+      />
 
       <div className="grid gap-3 md:grid-cols-3">
         <Glass className="p-5">
@@ -319,7 +336,14 @@ function MoneyView() {
       </div>
 
       <TxSheet tx={editing} onClose={() => setEditing(null)} />
-      <AddTransactionSheet open={adding} onClose={() => setAdding(false)} />
+      <AddTransactionSheet
+        open={adding}
+        seed={trackSeed ?? undefined}
+        onClose={() => {
+          setAdding(false);
+          setTrackSeed(null);
+        }}
+      />
       <ManageSheet open={managing} onClose={() => setManaging(false)} />
     </div>
   );
@@ -597,6 +621,7 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
   const toast = useToast();
   const [d, setD] = useState<Transaction | null>(tx);
   const [shown, setShown] = useState<string | null>(null);
+  const [merchant, setMerchant] = useState<string | null>(null);
   if (tx && shown !== tx.id) {
     setShown(tx.id);
     setD(tx);
@@ -759,11 +784,23 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
               label="Transfer between my accounts"
             />
           </div>
+          {d.merchant ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="self-start"
+              onClick={() => setMerchant(d.merchant)}
+            >
+              <Store size={14} /> See all at {d.merchant}
+            </Button>
+          ) : null}
           {d.rawMerchant && d.rawMerchant !== d.merchant ? (
             <p className="text-[12px] text-orv-faint">The message said: {d.rawMerchant}</p>
           ) : null}
         </form>
       ) : null}
+      <MerchantSheet merchant={merchant} onClose={() => setMerchant(null)} />
     </Sheet>
   );
 }

@@ -8,7 +8,8 @@ import {
   type Recurring,
   type Transaction,
 } from '@orvyn/contracts';
-import { occurredAtFor } from '@orvyn/money';
+import { cleanMerchant, merchantKey, occurredAtFor } from '@orvyn/money';
+import { SmartFill, useProfiles } from './money-brain';
 import { describeSpec, nextDates, parseRepeat } from '@orvyn/today-plan';
 import { Pause, Play, Plus, Repeat, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -95,10 +96,33 @@ export function AddTransactionSheet({
         };
   const [d, setD] = useState<Draft>(fresh);
   const [problem, setProblem] = useState<string | null>(null);
+  // smart fill (spec 0013): what the person picked themselves is left alone
+  const profiles = useProfiles();
+  const [touched, setTouched] = useState({ cat: false, acct: false });
+  const [why, setWhy] = useState<string | null>(null);
+  const fill = (merchant: string, extra: Partial<Draft> = {}) => {
+    const p = profiles.get(merchantKey(merchant));
+    const next: Partial<Draft> = { merchant, ...extra };
+    if (!touched.cat) {
+      if (p?.categoryId) {
+        next.categoryId = p.categoryId;
+        const times = Math.round(p.filed * p.categoryShare);
+        setWhy(times <= 1 ? `Like last time at ${p.merchant}` : `Like your last ${times} at ${p.merchant}`);
+      } else {
+        const c = categories.find((c) => c.slug && c.slug === cleanMerchant(merchant).category);
+        next.categoryId = c?.id ?? '';
+        setWhy(c ? `Sounds like ${c.name}` : null);
+      }
+    }
+    if (!touched.acct && p?.accountId) next.accountId = p.accountId;
+    set(next);
+  };
   useEffect(() => {
     if (open) {
       setD(fresh());
       setProblem(null);
+      setTouched({ cat: !!recurring?.categoryId || !!seed?.categoryId, acct: !!recurring?.accountId });
+      setWhy(null);
     }
   }, [open, recurring?.id]);
   const repeats = !!d.rrule;
@@ -218,14 +242,21 @@ export function AddTransactionSheet({
         </div>
         <Field label="Merchant or what for">
           {(id) => (
-            <Input
-              id={id}
-              value={d.merchant}
-              maxLength={120}
-              onChange={(e) => set({ merchant: e.target.value })}
-            />
+            <Input id={id} value={d.merchant} maxLength={120} onChange={(e) => fill(e.target.value)} />
           )}
         </Field>
+        <SmartFill
+          merchant={d.merchant}
+          amountMinor={toMinor(d.amount)}
+          why={why}
+          onPick={(p) =>
+            fill(p.merchant, {
+              direction: p.direction,
+              ...(toMinor(d.amount) ? {} : { amount: String(p.medianMinor / 100) }),
+            })
+          }
+          onAmount={(m) => set({ amount: String(m / 100) })}
+        />
         <div className="flex flex-col gap-2">
           <Label>{repeats ? 'Starts' : 'When'}</Label>
           <div className="flex flex-wrap items-center gap-2">
@@ -270,7 +301,11 @@ export function AddTransactionSheet({
                 id={id}
                 className={select}
                 value={d.categoryId}
-                onChange={(e) => set({ categoryId: e.target.value })}
+                onChange={(e) => {
+                  setTouched((t) => ({ ...t, cat: true }));
+                  setWhy(null);
+                  set({ categoryId: e.target.value });
+                }}
               >
                 <option value="">Uncategorised</option>
                 {categories
@@ -289,7 +324,10 @@ export function AddTransactionSheet({
                 id={id}
                 className={select}
                 value={d.accountId}
-                onChange={(e) => set({ accountId: e.target.value })}
+                onChange={(e) => {
+                  setTouched((t) => ({ ...t, acct: true }));
+                  set({ accountId: e.target.value });
+                }}
               >
                 <option value="">—</option>
                 {accounts

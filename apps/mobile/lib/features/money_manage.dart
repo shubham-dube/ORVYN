@@ -11,7 +11,9 @@ import '../app/today_settings.dart' show todaySettingsProvider;
 import '../design/controls.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
+import '../money/brain.dart';
 import '../money/money.dart';
+import '../money/parse.dart' show cleanMerchant;
 import '../money/spend_date.dart';
 import 'repeat_editor.dart';
 import 'sheets.dart';
@@ -53,9 +55,17 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   String _mode = 'add';
   String? _problem;
 
+  /// the person picked these themselves: smart fill leaves them alone
+  bool _catTouched = false;
+  bool _acctTouched = false;
+
+  /// why the category was chosen for them ("like your last 5 at Swiggy")
+  String? _why;
+
   @override
   void initState() {
     super.initState();
+    _catTouched = widget.recurring?.categoryId != null || widget.seed?['categoryId'] != null;
     final r = widget.recurring;
     final s = widget.seed ?? const {};
     final today = _day(ref.read(clockProvider)());
@@ -73,7 +83,46 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     _time = r != null ? r.time : s['time'] as String?;
     _rrule = r?.rrule ?? (s['rrule'] as String? ?? '');
     _mode = r?.mode ?? 'add';
+    _merchant.addListener(_onMerchant);
+    _amount.addListener(() => setState(() {}));
   }
+
+  /// A merchant you know: file it the way you always do, from your usual account (spec 0013 smart fill).
+  void _onMerchant() {
+    final profiles = ref.read(merchantProfilesProvider);
+    final p = profiles[merchantKey(_merchant.text)];
+    setState(() {
+      if (!_catTouched) {
+        if (p != null && p.categoryId != null) {
+          _categoryId = p.categoryId;
+          final times = (p.filed * p.categoryShare).round();
+          _why = times <= 1 ? 'Like last time at ${p.merchant}' : 'Like your last $times at ${p.merchant}';
+        } else {
+          // never filed by you: what the name suggests (Swiggy → food), if anything
+          final guess = cleanMerchant(_merchant.text).category;
+          final cats = ref.read(categoriesProvider).value ?? const <CategoryItem>[];
+          final c = guess == null ? null : cats.where((c) => c.slug == guess).firstOrNull;
+          _categoryId = c?.id;
+          _why = c == null ? null : 'Sounds like ${c.name}';
+        }
+      }
+      if (!_acctTouched && p?.accountId != null) _accountId = p!.accountId;
+    });
+  }
+
+  /// Fill from a suggestion: the name, and whatever the person hasn't set yet.
+  void _useProfile(MerchantProfile p, {bool amount = true}) {
+    unawaited(HapticFeedback.selectionClick());
+    _merchant.removeListener(_onMerchant);
+    _merchant.text = p.merchant;
+    _merchant.selection = TextSelection.collapsed(offset: p.merchant.length);
+    _merchant.addListener(_onMerchant);
+    if (amount && toMinor(_amount.text) == null) _amount.text = _rupees(p.medianMinor);
+    _credit = p.credit;
+    _onMerchant();
+  }
+
+  static String _rupees(int minor) => minor % 100 == 0 ? (minor ~/ 100).toString() : (minor / 100).toStringAsFixed(2);
 
   @override
   void dispose() {
@@ -199,6 +248,13 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         ),
         const SizedBox(height: 8),
         OrvField(label: 'Merchant or what for', controller: _merchant),
+        _SmartFill(
+          merchant: _merchant.text,
+          amountMinor: toMinor(_amount.text),
+          why: _why,
+          onPick: _useProfile,
+          onAmount: (m) => setState(() => _amount.text = _rupees(m)),
+        ),
         const SizedBox(height: 10),
         Text(repeats ? 'Starts' : 'When', style: OrvText.label(l)),
         const SizedBox(height: 4),
@@ -252,7 +308,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           runSpacing: 6,
           children: [
             for (final c in cats.where((c) => c.kind == (_credit ? 'income' : 'expense') || c.kind == 'transfer'))
-              chip(c.name, _categoryId == c.id, () => _categoryId = _categoryId == c.id ? null : c.id),
+              chip(c.name, _categoryId == c.id, () {
+                _catTouched = true;
+                _why = null;
+                _categoryId = _categoryId == c.id ? null : c.id;
+              }),
           ],
         ),
         if (accounts.isNotEmpty) ...[
@@ -264,11 +324,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             runSpacing: 6,
             children: [
               for (final a in accounts.where((a) => a.data['archived'] != true))
-                chip(
-                  '${a.name}${a.last4 == null ? '' : ' ··${a.last4}'}',
-                  _accountId == a.id,
-                  () => _accountId = _accountId == a.id ? null : a.id,
-                ),
+                chip('${a.name}${a.last4 == null ? '' : ' ··${a.last4}'}', _accountId == a.id, () {
+                  _acctTouched = true;
+                  _accountId = _accountId == a.id ? null : a.id;
+                }),
             ],
           ),
         ],
@@ -661,6 +720,133 @@ class _CategoriesState extends ConsumerState<_Categories> {
           style: OrvText.muted(l).copyWith(fontSize: 12),
         ),
       ],
+    );
+  }
+}
+
+/// Smart fill under the merchant field (spec 0013): merchants you've paid that match what's typed — or, with only an
+/// amount typed, who you paid that much before — and the usual amounts for the merchant you picked.
+class _SmartFill extends ConsumerWidget {
+  const _SmartFill({
+    required this.merchant,
+    required this.amountMinor,
+    required this.why,
+    required this.onPick,
+    required this.onAmount,
+  });
+  final String merchant;
+  final int? amountMinor;
+  final String? why;
+  final void Function(MerchantProfile p, {bool amount}) onPick;
+  final ValueChanged<int> onAmount;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final profiles = ref.watch(merchantProfilesProvider);
+    final cats = ref.watch(categoriesProvider).value ?? const <CategoryItem>[];
+    final now = ref.watch(clockProvider)();
+    final exact = profiles[merchantKey(merchant)];
+    final typed = merchant.trim();
+    final amount = amountMinor;
+    final List<MerchantProfile> people = typed.isEmpty
+        ? (amount != null ? merchantsForAmount(profiles, amount) : suggestMerchants(profiles, '', now, n: 4))
+        : (exact != null ? const [] : suggestMerchants(profiles, typed, now, n: 4));
+    final amounts = exact == null ? const <int>[] : exact.amounts.where((a) => a != amount).take(3).toList();
+    if (people.isEmpty && amounts.isEmpty && why == null) return const SizedBox(height: 4);
+    String catName(String? id) => cats.where((c) => c.id == id).firstOrNull?.name ?? '';
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (people.isNotEmpty) ...[
+            Text(
+              typed.isEmpty && amount != null
+                  ? 'You paid ${formatMoney(amount)} to'
+                  : (typed.isEmpty ? 'Often' : 'From your history'),
+              style: OrvText.muted(l).copyWith(fontSize: 11.5, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 48,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final p in people)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          key: Key('smart-${p.key}'),
+                          borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                          onTap: () => onPick(p, amount: amount == null),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: l.accent.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                              border: Border.all(color: l.accent.withValues(alpha: 0.3)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  p.merchant,
+                                  style: OrvText.body(l).copyWith(fontSize: 13, fontWeight: FontWeight.w700),
+                                ),
+                                Text(
+                                  [
+                                    '~${formatMoney(p.medianMinor)}',
+                                    catName(p.categoryId),
+                                    '${p.count}×',
+                                  ].where((x) => x.isNotEmpty).join(' · '),
+                                  style: OrvText.muted(l).copyWith(fontSize: 11),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          if (amounts.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final a in amounts)
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    avatar: Icon(LucideIcons.history, size: 13, color: l.accent),
+                    label: Text(formatMoney(a)),
+                    onPressed: () => onAmount(a),
+                    backgroundColor: Colors.transparent,
+                    side: BorderSide(color: l.c.edge),
+                  ),
+              ],
+            ),
+          ],
+          if (why != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.sparkles, size: 13, color: l.accent),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(why!, style: OrvText.muted(l).copyWith(fontSize: 12, color: l.accent)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

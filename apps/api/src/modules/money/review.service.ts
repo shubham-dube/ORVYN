@@ -10,7 +10,7 @@ import {
   type ReviewCategory,
   suggestCategories,
 } from '@orvyn/money';
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import { DB, type Db } from '../../db/db.module';
 import { AccessService } from '../access/access.service';
@@ -84,6 +84,28 @@ export class ReviewService {
     if (rule && (rule.always || rule.hits >= LEARN_AFTER)) {
       await this.apply(ownerId, t, rule);
       return 'filed';
+    }
+    // no rule, but the person always filed this merchant the same way: do it for them (spec 0013)
+    if (!rule && name && t.direction === 'debit') {
+      const key = merchantKey(name);
+      const past = (await this.history(ownerId)).filter((h) => h.merchantKey === key && h.categoryId);
+      const counts = new Map<string, number>();
+      for (const h of past) counts.set(h.categoryId!, (counts.get(h.categoryId!) ?? 0) + 1);
+      const [best] = [...counts].sort((x, y) => y[1] - x[1]);
+      if (best && past.length >= 3 && best[1] / past.length >= 0.8) {
+        const cat = (await this.categories(ownerId)).find((c) => c.id === best[0]);
+        if (cat) {
+          await this.write(ownerId, t.id, { categoryId: cat.id, reviewed: true });
+          await this.quiet(
+            ownerId,
+            t.id,
+            `Filed ${formatMoney(t.amountMinor, t.currency)} at ${name}`,
+            `As ${cat.name}, like your last ${best[1]} payments there.`,
+            true,
+          );
+          return 'filed';
+        }
+      }
     }
     await this.ask(ownerId, t);
     return 'asked';
@@ -330,7 +352,7 @@ export class ReviewService {
     const rows = await this.db
       .select()
       .from(moneyMerchantRules)
-      .where(eq(moneyMerchantRules.ownerId, ownerId))
+      .where(and(eq(moneyMerchantRules.ownerId, ownerId), ne(moneyMerchantRules.action, 'ask')))
       .orderBy(desc(moneyMerchantRules.updatedAt));
     const cats = await this.categories(ownerId);
     return rows.map((r) => ({
@@ -344,9 +366,11 @@ export class ReviewService {
     }));
   }
 
+  /** Forget what was learned: from now on ORVYN asks about this merchant again, even if history looks clear. */
   async removeRule(ownerId: string, id: string): Promise<boolean> {
     const r = await this.db
-      .delete(moneyMerchantRules)
+      .update(moneyMerchantRules)
+      .set({ action: 'ask', categoryId: null, hits: 0, always: false, updatedAt: new Date(this.now()) })
       .where(and(eq(moneyMerchantRules.id, id), eq(moneyMerchantRules.ownerId, ownerId)))
       .returning({ id: moneyMerchantRules.id });
     return r.length > 0;
