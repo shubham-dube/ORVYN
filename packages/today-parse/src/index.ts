@@ -6,7 +6,8 @@ import { addDays, instantAt, offsetMinutes, wallIn, weekdayOf, ymd } from './tim
  * Rules only: deterministic, offline, no AI. Every recognised piece is reported as a span so the UI can show it as
  * a chip the person can remove — nothing is applied silently.
  */
-export type SpanKind = 'date' | 'time' | 'repeat' | 'duration' | 'priority' | 'tag' | 'project';
+export type SpanKind =
+  'date' | 'time' | 'repeat' | 'duration' | 'priority' | 'tag' | 'project' | 'deadline' | 'notes';
 
 export interface Span {
   kind: SpanKind;
@@ -28,6 +29,10 @@ export interface Parsed {
   projectId: string | null;
   /** an @name that matched no project (the UI can offer to create it) */
   projectName: string | null;
+  /** "by fri", "due 30 nov", "deadline mon": the last day it may be done (spec 0012 A2) */
+  deadline: string | null;
+  /** everything after "//" (or "-- "): the task's notes */
+  notes: string | null;
   spans: Span[];
 }
 
@@ -37,6 +42,8 @@ export interface ParseOptions {
   projects?: { id: string; name: string }[];
   /** character ranges the person said to read literally (a removed chip): never parsed, kept in the title */
   literal?: [number, number][];
+  /** internal: reading the day inside "by …" */
+  nested?: boolean;
 }
 
 type Hit = { start: number; end: number; kind: SpanKind };
@@ -146,6 +153,43 @@ const PART_RE = Object.keys(PARTS)
   .sort((a, b) => b.length - a.length)
   .join('|');
 
+/** am/pm in any spelling: am, AM, a.m., A.M., a m */
+const MER = '[ap]\\.?\\s?m\\.?';
+const h24 = (h: number, mer: string | undefined): number => {
+  if (!mer) return h;
+  const pm = /^p/i.test(mer);
+  if (h === 12) return pm ? 12 : 0;
+  return pm ? h + 12 : h;
+};
+const wallDate = (iso: string, tz: string) => {
+  const w = wallIn(new Date(iso), tz);
+  return ymd(w.y, w.m, w.d);
+};
+/** what may follow "by / due / deadline": a day, never a time ("by 5pm", "by tonight" stay times) */
+const DAY_PHRASE = [
+  'day\\s+after\\s+tomorrow',
+  'today',
+  'tod',
+  'tomorrow',
+  'tmrw',
+  'tmr',
+  'tomo',
+  'kal',
+  'parso',
+  'next\\s+week',
+  'next\\s+month',
+  'end\\s+of\\s+(?:the\\s+)?month',
+  'eom',
+  'month\\s+end',
+  '(?:this\\s+)?weekend',
+  'in\\s+\\d+\\s+(?:days?|weeks?)',
+  `(?:(?:next|this|coming)\\s+)?(?:${DAY_RE})`,
+  `\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${MONTH_RE})(?:\\s+\\d{4})?`,
+  `(?:${MONTH_RE})\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?`,
+  '\\d{1,2}[/.-]\\d{1,2}(?:[/.-]\\d{2,4})?',
+  '(?:the\\s+)?\\d{1,2}(?:st|nd|rd|th)',
+].join('|');
+
 export function parseTask(input: string, opt: ParseOptions): Parsed {
   const text = input;
   const hits: Hit[] = [];
@@ -210,6 +254,27 @@ export function parseTask(input: string, opt: ParseOptions): Parsed {
         [...s.toLowerCase().matchAll(new RegExp(`\\b(${DAY_RE})\\b`, 'g'))].map((x) => ALL_DAYS[x[1]!]!),
       ),
     ].sort();
+
+  // ------------------------------------------------------------------ 0. notes and deadline (spec 0012 A4)
+  let notes = null as string | null;
+  take(/(^|\s)(?:\/\/|--(?=\s|$))\s*([\s\S]*)$/, 'notes', (m) => {
+    notes = m[2]!.trim() || null;
+  });
+  let deadline = null as string | null;
+  if (!opt.nested)
+    take(
+      new RegExp(
+        `${B}(?:by|due(?:\\s+(?:on|by))?|deadline(?:\\s*:)?|before)\\s+(${DAY_PHRASE})(?![\\w/.-]*\\d)\\b`,
+        'i',
+      ),
+      'deadline',
+      (m) => {
+        const r = parseTask(m[2]!, { ...opt, literal: [], nested: true });
+        const d = r.dueDate ?? (r.dueAt ? wallDate(r.dueAt, opt.timeZone) : null);
+        if (!d) return false;
+        deadline = d;
+      },
+    );
 
   // ------------------------------------------------------------------ 1. repeats
   const EVERY = '(?:every|each|har)';
@@ -308,15 +373,13 @@ export function parseTask(input: string, opt: ParseOptions): Parsed {
 
   // ------------------------------------------------------------------ 2. duration, priority, tags, project
   // ("in 10 min" is when, not how long: the bare form never follows "in")
+  // "for 45m", "45 min", "1h", "1 hr", "1.5h", "1h30", "1h 30m", "2 hrs", "90 minutes" ("in 2 hours" is when)
   take(
-    /(^|\s)(?:for\s+(?:about\s+)?(\d+(?:\.\d+)?)\s*(m|mins?|minutes?|h|hrs?|hours?)|(\d+)h(?:(\d+)m)?|(?<!\bin\s)(\d+)\s*(?:m|min|mins)(?![a-z]))(?=$|\s|[,.;!?)])/i,
+    /(^|\s)(?<!\bin\s)(?:for\s+(?:about\s+)?)?(?:(\d+(?:\.\d+)?)\s*(?:h|hrs?|hours?)(?:\s*(\d{1,2})\s*(?:m|mins?|minutes?)?)?|(\d+)\s*(?:m|mins?|minutes?))(?=$|\s|[,.;!?)])/i,
     'duration',
     (m) => {
-      if (m[2]) {
-        const v = +m[2];
-        durationMin = Math.round(/^h/i.test(m[3]!) ? v * 60 : v);
-      } else if (m[4]) durationMin = +m[4] * 60 + (m[5] ? +m[5] : 0);
-      else durationMin = +m[6]!;
+      if (m[2]) durationMin = Math.round(+m[2] * 60 + (m[3] ? +m[3] : 0));
+      else durationMin = +m[4]!;
       if (!durationMin || durationMin > 24 * 60) return false;
     },
   );
@@ -330,6 +393,10 @@ export function parseTask(input: string, opt: ParseOptions): Parsed {
   take(/(^|\s)(!{1,3}|p[1-4])(?=$|\s|[,.])/i, 'priority', (m) => {
     const t = m[2]!.toLowerCase();
     priority = t.startsWith('p') ? Math.max(0, 4 - +t[1]!) : t.length;
+  });
+  take(/(^|\s)(?:!(high|hi|med|medium|low|lo|urgent)|(urgent|asap))(?=$|\s|[,.!])/i, 'priority', (m) => {
+    const w = (m[2] ?? m[3])!.toLowerCase();
+    priority = /^(high|hi|urgent|asap)$/.test(w) ? 3 : w.startsWith('med') ? 2 : 1;
   });
   take(/(^|\s)(high|medium|low)\s+priority(?=$|\s|[,.])/i, 'priority', (m) => {
     priority = { high: 3, medium: 2, low: 1 }[m[2]!.toLowerCase() as 'high']!;
@@ -379,12 +446,65 @@ export function parseTask(input: string, opt: ParseOptions): Parsed {
     const n = words[m[2]!.toLowerCase()] ?? +m[2]!;
     return setDate(addDays(today, /week/i.test(m[3]!) ? n * 7 : n));
   });
+  // "22 nov", "nov 22", "22nd of november 2027": a day of a month ("nov 22" is never the year 2022)
+  take(
+    new RegExp(
+      `${B}(?:(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${MONTH_RE})|(${MONTH_RE})\\s+(\\d{1,2})(?:st|nd|rd|th)?)(?:,?\\s+(20\\d\\d))?\\b(?!\\s*[:.]\\d)`,
+      'i',
+    ),
+    'date',
+    (m) => {
+      const mo = MONTHS[(m[3] ?? m[4])!.toLowerCase()]!;
+      const d = +(m[2] ?? m[5])!;
+      if (d < 1 || d > new Date(Date.UTC(2024, mo, 0)).getUTCDate()) return false;
+      return setDate(m[6] ? ymd(+m[6], mo, d) : nextYearDay(mo, d));
+    },
+  );
   // "next fri", "this monday", bare "friday", Hindi day names (always the coming one)
   take(new RegExp(`${B}(?:(next|this|coming|agle|is)\\s+)?(${DAY_RE})\\b`, 'i'), 'date', (m) => {
     const wd = ALL_DAYS[m[3]!.toLowerCase()]!;
     const q = m[2]?.toLowerCase();
     // "next friday" said on a Monday means this coming Friday in Indian usage; on Friday it means a week later
     return setDate(nextWeekday(wd, q !== 'next' && q !== 'agle'));
+  });
+  // "3-4pm", "3pm-4:30pm", "10:00 to 11:30", "11-1pm": when it starts and how long (spec 0012 A4)
+  take(
+    new RegExp(
+      `${B}(?:from\\s+)?(\\d{1,2})(?:[:.](\\d{2}))?\\s*(${MER})?\\s*(?:-|–|to|till|until)\\s*(\\d{1,2})(?:[:.](\\d{2}))?\\s*(${MER})?(?=$|\\s|[,;!?)])`,
+      'i',
+    ),
+    'time',
+    (m) => {
+      if (hour !== null) return false;
+      const [sh, sm, smer, eh, em, emer] = [+m[2]!, +(m[3] ?? 0), m[4], +m[5]!, +(m[6] ?? 0), m[7]];
+      if (!smer && !emer && !(m[3] && m[6])) return false; // "3 to 5 servers" is not a time
+      if (sh > 23 || eh > 23 || sm > 59 || em > 59) return false;
+      const e = h24(eh, emer) * 60 + em;
+      let st = h24(sh, smer ?? emer) * 60 + sm;
+      if (!smer && emer && st >= e) st = h24(sh, /^p/i.test(emer) ? 'am' : 'pm') * 60 + sm;
+      if (st >= e) return false;
+      hour = Math.floor(st / 60);
+      minute = st % 60;
+      durationMin ??= e - st;
+    },
+  );
+  // "3am", "3 AM", "3 a.m.", "3a", "3p", "3:30pm", "3.30 pm"
+  take(
+    new RegExp(`${B}(\\d{1,2})(?:[:.](\\d{2}))?(?:\\s*(${MER})|([ap]))(?=$|\\s|[,;!?)])`, 'i'),
+    'time',
+    (m) => {
+      const h = +m[2]!;
+      const mi = +(m[3] ?? 0);
+      if (hour !== null || h < 1 || h > 12 || mi > 59) return false;
+      hour = h24(h, (m[4] ?? m[5])!);
+      minute = mi;
+    },
+  );
+  // "15:00", "09:30" — only a 24-hour clock ("6:30" is left to the bare-hour rules below)
+  take(/(^|\s)(0\d|1[3-9]|2[0-3]):([0-5]\d)(?=$|\s|[,;!?)])/, 'time', (m) => {
+    if (hour !== null) return false;
+    hour = +m[2]!;
+    minute = +m[3]!;
   });
   take(/(^|\s)(eod|end\s+of\s+(?:the\s+)?day|by\s+tonight|tonight)\b/i, 'time', (m) => {
     if (hour === null) {
@@ -579,6 +699,8 @@ export function parseTask(input: string, opt: ParseOptions): Parsed {
     tags,
     projectId,
     projectName,
+    deadline,
+    notes,
     spans: hits.map((h) => ({
       kind: h.kind,
       start: h.start,

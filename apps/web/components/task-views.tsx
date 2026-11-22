@@ -1,7 +1,7 @@
 'use client';
 
 import type { Project, SavedFilter, Task } from '@orvyn/contracts';
-import { PROJECT_COLOURS } from '@orvyn/contracts';
+import { doneLabel } from '@orvyn/contracts';
 import {
   allTags,
   checklistProgress,
@@ -11,13 +11,33 @@ import {
   type TaskQuery,
   type When,
 } from '@orvyn/today-plan';
-import { Bookmark, Check, Flag, ListChecks, Plus, Search, Trash2, X } from 'lucide-react';
+import {
+  Bookmark,
+  CalendarDays,
+  Check,
+  Circle,
+  CircleCheck,
+  CircleDashed,
+  EllipsisVertical,
+  Flag,
+  Folder,
+  FolderOpen,
+  ListChecks,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { motion } from 'motion/react';
 import { useMemo, useState } from 'react';
-import { Badge, Glass, Label, useToast } from '@/components/ui/bits';
+import { Label, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
 import { cn } from '@/lib/cn';
-import { localDay, taskMoment, useToday } from '@/lib/today';
+import { spring } from '@/lib/motion';
+import { localDay, taskDay, taskMoment, useToday } from '@/lib/today';
+import { dayWords, deadlineTone, hm } from '@/lib/work';
+import { FactPill, usePick } from './pick';
+import { ScheduleStrip } from './schedule';
 
 const sel =
   'h-9 rounded-orv-md border border-orv-edge bg-orv-glass px-2 text-[13px] text-orv-text outline-none';
@@ -58,7 +78,7 @@ export function TaskToolbar({
   return (
     <div className="flex flex-col gap-2" role="search" aria-label="Filter tasks">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex h-9 min-w-44 flex-1 items-center gap-2 rounded-orv-md border border-orv-edge bg-orv-glass px-2">
+        <label className="field-ring flex h-9 min-w-44 flex-1 items-center gap-2 rounded-orv-md px-2">
           <Search size={14} className="text-orv-faint" aria-hidden />
           <input
             aria-label="Search tasks"
@@ -217,111 +237,112 @@ export const toQuery = (f: SavedFilter): TaskQuery => ({
   when: f.when as When,
 });
 
-/** What can be done to the ticked tasks in one go. */
-export function BulkBar({ picked, clear, projects }: { picked: Task[]; clear(): void; projects: Project[] }) {
+/** The floating bar while selecting (spec 0012 A7): Done · When · Project · Priority · Delete. */
+export function SelectBar({
+  picked,
+  clear,
+  projects,
+}: {
+  picked: Task[];
+  clear(): void;
+  projects: Project[];
+}) {
   const { updateTask, removeTask } = useToday();
   const toast = useToast();
-  const [day, setDay] = useState('');
-  const each = async (fn: (t: Task) => Promise<void>) => {
+  const { ask, picker } = usePick();
+  const none = !picked.length;
+  const each = async (fn: (t: Task) => Promise<void>, said: string) => {
+    const n = picked.length;
     for (const t of picked) await fn(t);
+    toast({ title: `${said} ${n}`, tone: 'success' });
+    clear();
   };
-  if (!picked.length) return null;
-  return (
-    <Glass
-      level="float"
-      className="sticky bottom-20 z-10 flex flex-wrap items-center gap-2 p-3"
-      aria-label="Bulk actions"
+  const act = (icon: React.ReactNode, label: string, run: () => void, tone?: string) => (
+    <button
+      type="button"
+      disabled={none}
+      onClick={run}
+      className="flex min-w-16 flex-col items-center gap-0.5 rounded-orv-md px-2 py-1.5 text-[11.5px] font-medium transition-colors hover:bg-orv-track disabled:opacity-40"
+      style={tone ? { color: tone } : undefined}
     >
-      <span className="px-1 text-[13px] font-medium">{picked.length} selected</span>
-      <Button
-        size="sm"
-        variant="primary"
-        onClick={async () => {
-          await each((t) => updateTask(t.id, { completedAt: new Date().toISOString() }));
-          toast({ title: `${picked.length} done`, tone: 'success' });
-          clear();
-        }}
-      >
-        <Check size={14} /> Complete
-      </Button>
-      <select
-        aria-label="Move to project"
-        className={sel}
-        value=""
-        onChange={async (e) => {
-          const v = e.target.value;
-          if (!v) return;
-          await each((t) => updateTask(t.id, { projectId: v === 'none' ? null : v }));
-          toast({ title: `Moved ${picked.length}`, tone: 'success' });
-          clear();
-        }}
-      >
-        <option value="">Move to…</option>
-        <option value="none">No project</option>
-        {projects
-          .filter((p) => !p.archived)
-          .map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-      </select>
-      <Input
-        aria-label="Set day for selected"
-        type="date"
-        value={day}
-        onChange={(e) => setDay(e.target.value)}
-        className="h-9 w-40 text-[13px]"
-      />
-      <Button
-        size="sm"
-        variant="secondary"
-        disabled={!day}
-        onClick={async () => {
-          await each((t) => updateTask(t.id, { dueDate: day, dueAt: null, scheduledStart: null }));
-          toast({ title: `Planned ${picked.length} for ${day}`, tone: 'success' });
-          setDay('');
-          clear();
-        }}
-      >
-        Set day
-      </Button>
-      <select
-        aria-label="Set priority for selected"
-        className={sel}
-        value=""
-        onChange={async (e) => {
-          if (e.target.value === '') return;
-          await each((t) => updateTask(t.id, { priority: Number(e.target.value) }));
-          clear();
-        }}
-      >
-        <option value="">Priority…</option>
-        <option value={0}>None</option>
-        <option value={1}>Low</option>
-        <option value={2}>Medium</option>
-        <option value={3}>High</option>
-      </select>
-      <Button
-        size="sm"
-        variant="danger"
-        onClick={async () => {
-          const n = picked.length;
-          await each((t) => removeTask(t.id));
-          toast({ title: `Deleted ${n}` });
-          clear();
-        }}
-      >
-        <Trash2 size={14} /> Delete
-      </Button>
-      <Button size="sm" variant="ghost" onClick={clear}>
-        Cancel
-      </Button>
-    </Glass>
+      {icon}
+      {label}
+    </button>
+  );
+  const now = new Date();
+  const plus = (n: number) => localDay(new Date(now.getTime() + n * 86_400_000));
+  return (
+    <motion.div
+      initial={{ y: 40, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 40, opacity: 0 }}
+      transition={spring.smooth}
+      role="toolbar"
+      aria-label="Selected tasks"
+      className="glass-float fixed inset-x-3 bottom-24 z-40 mx-auto flex max-w-lg items-center justify-around p-1.5 md:bottom-6"
+    >
+      {act(
+        <Check size={18} />,
+        'Done',
+        () => void each((t) => updateTask(t.id, { completedAt: new Date().toISOString() }), 'Done:'),
+        'var(--orv-accent)',
+      )}
+      {act(<CalendarDays size={18} />, 'When', async () => {
+        const v = await ask<string>(`Move ${picked.length} to…`, [
+          { value: plus(0), label: 'Today' },
+          { value: plus(1), label: 'Tomorrow' },
+          { value: plus(7), label: 'In a week' },
+          { value: '', label: 'No day (Inbox)' },
+        ]);
+        if (v !== null)
+          await each(
+            (t) => updateTask(t.id, { dueDate: v || null, dueAt: null, scheduledStart: null }),
+            'Moved',
+          );
+      })}
+      {act(<Folder size={18} />, 'Project', async () => {
+        const v = await ask<string>('Move to project', [
+          ...projects.map((p) => ({ value: p.id, label: p.name, colour: colourOf(p) })),
+          { value: '', label: 'No project' },
+        ]);
+        if (v !== null) await each((t) => updateTask(t.id, { projectId: v || null }), 'Moved');
+      })}
+      {act(<Flag size={18} />, 'Priority', async () => {
+        const v = await ask<number>('Priority', [
+          { value: 3, label: 'High', colour: 'var(--orv-danger)' },
+          { value: 2, label: 'Medium', colour: 'var(--orv-warning)' },
+          { value: 1, label: 'Low', colour: 'var(--orv-faint)' },
+          { value: 0, label: 'None' },
+        ]);
+        if (v !== null) await each((t) => updateTask(t.id, { priority: v }), 'Updated');
+      })}
+      {act(
+        <Trash2 size={18} />,
+        'Delete',
+        () => {
+          if (confirm(`Delete ${picked.length} ${picked.length === 1 ? 'task' : 'tasks'}?`))
+            void each((t) => removeTask(t.id), 'Deleted');
+        },
+        'var(--orv-danger)',
+      )}
+      {picker}
+    </motion.div>
   );
 }
 
-/** Tasks as columns by project; drag a card to another column to move it. */
+const COLUMNS = [
+  { key: 'todo', name: 'To do', icon: <Circle size={14} aria-hidden />, tone: 'var(--orv-muted)' },
+  { key: 'doing', name: 'Doing', icon: <CircleDashed size={14} aria-hidden />, tone: 'var(--orv-accent)' },
+  {
+    key: 'done',
+    name: 'Done today',
+    icon: <CircleCheck size={14} aria-hidden />,
+    tone: 'var(--orv-success)',
+  },
+] as const;
+type Col = (typeof COLUMNS)[number]['key'];
+
+/** The board (spec 0012 A8): To do · Doing · Done today, a project pill, drag a card to another column. */
 export function Board({
   tasks,
   projects,
@@ -331,118 +352,207 @@ export function Board({
   projects: Project[];
   onOpen(t: Task): void;
 }) {
-  const { updateTask, addProject } = useToday();
-  const [over, setOver] = useState<string | null>(null);
-  const [adding, setAdding] = useState('');
-  const columns = [
-    { id: 'none', name: 'No project', project: null as Project | null },
-    ...projects.filter((p) => !p.archived).map((p) => ({ id: p.id, name: p.name, project: p })),
-  ];
-  const open = tasks.filter((t) => !t.completedAt);
+  const { updateTask } = useToday();
+  const toast = useToast();
+  const { ask, picker } = usePick();
+  const [project, setProject] = useState<string | null>(null); // null all, '' none
+  const [over, setOver] = useState<Col | null>(null);
+  const today = localDay(new Date());
+  const shown = tasks.filter((t) => project === null || (t.projectId ?? '') === project);
+  const col = (k: Col) =>
+    (k === 'done'
+      ? shown.filter((t) => t.completedAt && localDay(new Date(t.completedAt)) === today)
+      : shown.filter((t) => !t.completedAt && (t.status ?? 'todo') === k)
+    ).sort((a, b) =>
+      k === 'done'
+        ? (b.completedAt ?? '').localeCompare(a.completedAt ?? '')
+        : (taskDay(a) ?? '9999').localeCompare(taskDay(b) ?? '9999') ||
+          (taskMoment(a) ?? Infinity) - (taskMoment(b) ?? Infinity) ||
+          b.priority - a.priority,
+    );
+  const move = async (t: Task, k: Col) => {
+    if (k === 'done') {
+      if (!t.completedAt) await updateTask(t.id, { completedAt: new Date().toISOString() });
+    } else await updateTask(t.id, { status: k, ...(t.completedAt ? { completedAt: null } : {}) });
+    toast({ title: `Moved to ${COLUMNS.find((c) => c.key === k)!.name}`, body: t.title, tone: 'success' });
+  };
+  const current = projects.find((p) => p.id === project);
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-3 overflow-x-auto pb-2" role="list" aria-label="Board">
-        {columns.map((c) => {
-          const items = open
-            .filter((t) => (c.id === 'none' ? t.projectId === null : t.projectId === c.id))
-            .sort(
-              (a, b) => (taskMoment(a) ?? Infinity) - (taskMoment(b) ?? Infinity) || b.priority - a.priority,
-            );
+      <div className="flex flex-wrap items-center gap-2">
+        <FactPill
+          icon={<FolderOpen size={13} />}
+          label={project === null ? 'All projects' : (current?.name ?? 'No project')}
+          tone={current ? colourOf(current) : undefined}
+          onClick={async () => {
+            const v = await ask<string>('Show on the board', [
+              { value: '*', label: 'All projects', selected: project === null },
+              ...projects.map((p) => ({
+                value: p.id,
+                label: p.name,
+                colour: colourOf(p),
+                selected: project === p.id,
+              })),
+              { value: '', label: 'No project', selected: project === '' },
+            ]);
+            if (v !== null) setProject(v === '*' ? null : v);
+          }}
+        />
+        <span className="text-[12px] text-orv-faint">Drag a card to move it</span>
+      </div>
+      <ScheduleStrip />
+      <div className="grid snap-x grid-flow-col auto-cols-[minmax(17rem,1fr)] gap-3 overflow-x-auto pb-2">
+        {COLUMNS.map((c) => {
+          const items = col(c.key);
           return (
             <section
-              key={c.id}
-              role="listitem"
+              key={c.key}
               aria-label={`${c.name}, ${items.length} tasks`}
               onDragOver={(e) => {
                 e.preventDefault();
-                setOver(c.id);
+                setOver(c.key);
               }}
-              onDragLeave={() => setOver((o) => (o === c.id ? null : o))}
+              onDragLeave={() => setOver(null)}
               onDrop={(e) => {
-                e.preventDefault();
                 setOver(null);
-                const id = e.dataTransfer.getData('text/task');
-                if (id) void updateTask(id, { projectId: c.id === 'none' ? null : c.id });
+                const id = e.dataTransfer.getData('application/x-orvyn-card');
+                const t = tasks.find((x) => x.id === id);
+                if (t) void move(t, c.key);
               }}
-              className={cn(
-                'glass-pane flex w-72 shrink-0 flex-col gap-2 p-3 transition-shadow',
-                over === c.id && 'shadow-[0_0_0_2px_var(--orv-accent)]',
-              )}
+              className={cn('glass-pane flex min-h-72 snap-start flex-col gap-2 p-3 transition-shadow')}
+              style={over === c.key ? { boxShadow: `0 0 0 2px ${c.tone}`, borderColor: c.tone } : undefined}
             >
-              <header className="flex items-center gap-2 px-1">
-                <span
-                  className="size-2.5 rounded-full"
-                  style={{ background: colourOf(c.project) }}
-                  aria-hidden
-                />
-                <Label>{c.name}</Label>
+              <div className="flex items-center gap-2 px-1" style={{ color: c.tone }}>
+                {c.icon}
+                <Label className="!text-current">{c.name}</Label>
                 <span className="text-[12px] text-orv-muted">{items.length}</span>
-              </header>
+              </div>
               {items.map((t) => (
-                <BoardCard key={t.id} task={t} onOpen={onOpen} />
+                <BoardCard
+                  key={t.id}
+                  task={t}
+                  project={project === null ? projects.find((p) => p.id === t.projectId) : undefined}
+                  onOpen={onOpen}
+                  column={c.key}
+                  onMove={(k) => void move(t, k)}
+                />
               ))}
-              {!items.length ? <p className="px-1 py-3 text-[12px] text-orv-faint">Nothing here.</p> : null}
+              {!items.length ? (
+                <p className="px-1 py-6 text-center text-small text-orv-muted">
+                  {c.key === 'doing'
+                    ? 'Drop what you’re on here.'
+                    : c.key === 'done'
+                      ? 'Nothing finished today yet.'
+                      : 'All clear.'}
+                </p>
+              ) : null}
             </section>
           );
         })}
-        <form
-          className="flex w-60 shrink-0 flex-col gap-2 self-start p-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const n = adding.trim();
-            if (!n) return;
-            const colour = PROJECT_COLOURS[projects.length % PROJECT_COLOURS.length];
-            void addProject(n, colour).then(() => setAdding(''));
-          }}
-        >
-          <Input
-            aria-label="New project"
-            placeholder="New project"
-            value={adding}
-            maxLength={80}
-            onChange={(e) => setAdding(e.target.value)}
-            className="h-10 text-[14px]"
-          />
-          <Button size="sm" type="submit" variant="secondary" disabled={!adding.trim()}>
-            <Plus size={14} /> Add project
-          </Button>
-        </form>
       </div>
+      {picker}
     </div>
   );
 }
 
-function BoardCard({ task, onOpen }: { task: Task; onOpen(t: Task): void }) {
-  const { projects } = useToday();
-  void projects;
+function BoardCard({
+  task,
+  project,
+  onOpen,
+  column,
+  onMove,
+}: {
+  task: Task;
+  project?: Project;
+  onOpen(t: Task): void;
+  column: Col;
+  onMove(k: Col): void;
+}) {
+  const [menu, setMenu] = useState(false);
   const prog = checklistProgress(task);
+  const day = taskDay(task);
+  const today = localDay(new Date());
+  const dl = deadlineTone(task.deadline);
   const moment = taskMoment(task);
-  const day = task.dueDate ?? (moment ? localDay(new Date(moment)) : null);
   return (
-    <button
+    <div
       draggable
-      onDragStart={(e) => e.dataTransfer.setData('text/task', task.id)}
-      onClick={() => onOpen(task)}
-      className="flex flex-col gap-1.5 rounded-orv-md border border-orv-edge bg-orv-field p-3 text-left hover:border-orv-accent"
+      onDragStart={(e) => e.dataTransfer.setData('application/x-orvyn-card', task.id)}
+      className="group relative cursor-grab rounded-[12px] border border-orv-edge bg-orv-field p-3 transition-shadow hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] active:cursor-grabbing"
+      style={{ borderLeft: `3px solid ${project ? colourOf(project) : 'var(--orv-edge)'}` }}
     >
-      <span className="text-[14px] font-medium">{task.title}</span>
-      <span className="flex flex-wrap items-center gap-1.5 text-[12px] text-orv-muted">
-        {day ? (
-          <span>
-            {new Date(`${day}T00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-          </span>
-        ) : null}
-        {task.priority ? <PriorityFlag p={task.priority} /> : null}
-        {prog.total ? (
-          <span>
-            {prog.done}/{prog.total}
-          </span>
-        ) : null}
-        {task.tags.slice(0, 3).map((t) => (
-          <Badge key={t}>#{t}</Badge>
-        ))}
-      </span>
-    </button>
+      <button
+        type="button"
+        onClick={() => onOpen(task)}
+        className="flex w-full flex-col items-start gap-1 text-left"
+      >
+        <span
+          className={cn(
+            'line-clamp-3 pr-6 text-[14px] font-semibold',
+            task.completedAt && 'text-orv-muted line-through',
+          )}
+        >
+          {task.title}
+        </span>
+        <span className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-orv-muted">
+          {task.completedAt ? (
+            <span className="text-orv-success">
+              {doneLabel(task.completedAt, new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)}
+            </span>
+          ) : moment ? (
+            <span className={cn(moment < Date.now() && 'text-orv-danger')}>
+              {day !== today && day ? `${dayWords(day)}, ` : ''}
+              {new Date(moment).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+            </span>
+          ) : day ? (
+            <span className={cn(day < today && 'text-orv-danger')}>{dayWords(day)}</span>
+          ) : null}
+          {task.durationMin ? <span>{hm(task.durationMin)}</span> : null}
+          {task.deadline && !task.completedAt ? (
+            <span className={cn(dl === 'past' ? 'text-orv-danger' : dl === 'near' ? 'text-orv-warning' : '')}>
+              by {dayWords(task.deadline)}
+            </span>
+          ) : null}
+          {prog.total ? (
+            <span>
+              {prog.done}/{prog.total}
+            </span>
+          ) : null}
+          {project ? <span style={{ color: colourOf(project) }}>{project.name}</span> : null}
+          {task.priority >= 2 ? <PriorityFlag p={task.priority} /> : null}
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label="Move to"
+        aria-expanded={menu}
+        onClick={() => setMenu((v) => !v)}
+        className="absolute right-1.5 top-1.5 grid size-7 place-items-center rounded-full text-orv-faint opacity-0 transition-opacity hover:bg-orv-track group-hover:opacity-100 focus:opacity-100"
+      >
+        <EllipsisVertical size={14} />
+      </button>
+      {menu ? (
+        <div
+          role="menu"
+          className="glass-float absolute right-1 top-9 z-20 flex w-44 flex-col p-1"
+          onMouseLeave={() => setMenu(false)}
+        >
+          {COLUMNS.filter((c) => c.key !== column).map((c) => (
+            <button
+              key={c.key}
+              role="menuitem"
+              className="rounded-orv-sm px-3 py-2 text-left text-[13.5px] hover:bg-orv-track"
+              onClick={() => {
+                setMenu(false);
+                onMove(c.key);
+              }}
+            >
+              Move to {c.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -475,7 +585,7 @@ export function TagsInput({
   };
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex flex-wrap items-center gap-1.5 rounded-orv-md border border-orv-edge bg-orv-field p-2">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-orv-md field-ring p-2">
         {value.map((t) => (
           <span
             key={t}
@@ -594,7 +704,7 @@ export function ChecklistEditor({
             setText('');
           }
         }}
-        className="h-9 rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px] outline-none"
+        className="h-9 rounded-orv-md field-ring px-3 text-[14px] outline-none"
       />
     </div>
   );

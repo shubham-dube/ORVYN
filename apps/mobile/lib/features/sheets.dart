@@ -19,6 +19,8 @@ Future<T?> showGlassSheet<T>(BuildContext context, Widget Function(BuildContext)
   final look = context.orv;
   return showModalBottomSheet<T>(
     context: context,
+    // above the shell's bottom nav, never under it (spec 0012 follow-up)
+    useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: look.c.scrim,
@@ -442,29 +444,22 @@ class _ReplyFieldState extends State<ReplyField> {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              key: Key('reply-${widget.label}'),
-              controller: _c,
-              maxLength: 200,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
-              style: OrvText.body(l).copyWith(fontSize: 14),
-              decoration: InputDecoration(
-                isDense: true,
-                counterText: '',
-                hintText: widget.hint,
-                hintStyle: OrvText.muted(l).copyWith(color: l.c.faint, fontSize: 13),
-                filled: true,
-                fillColor: l.c.field,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide(color: l.c.edge),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide(color: l.c.edge),
-                ),
+            child: FocusRing(
+              radius: 20,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: TextField(
+                key: Key('reply-${widget.label}'),
+                controller: _c,
+                maxLength: 200,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
+                style: OrvText.body(l).copyWith(fontSize: 14),
+                decoration: bareInput(
+                  l,
+                  hint: widget.hint,
+                  fontSize: 15,
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ).copyWith(counterText: ''),
               ),
             ),
           ),

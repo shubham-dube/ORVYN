@@ -24,6 +24,8 @@ export interface GEvent {
   summary?: string;
   description?: string;
   location?: string;
+  /** the Google Meet link, when the event has one */
+  hangoutLink?: string;
   start?: GEventTime;
   end?: GEventTime;
   recurrence?: string[];
@@ -50,9 +52,25 @@ export class GoogleHttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Google's own reason, e.g. accessNotConfigured, insufficientPermissions, rateLimitExceeded */
+    readonly reason: string | null = null,
   ) {
     super(message);
   }
+}
+
+/** What a person can do about a Google error, in words (spec 0012 X): never the raw "GET … 403". */
+export function googleProblem(e: unknown, api = 'Gmail'): string {
+  if (!(e instanceof GoogleHttpError)) return `${api} didn’t answer. Trying again shortly.`;
+  if (e.reason === 'accessNotConfigured' || e.reason === 'SERVICE_DISABLED')
+    return `The ${api} API is switched off in ORVYN’s Google Cloud project. Enable it (APIs & Services → Library → ${api} API), then refresh.`;
+  if (e.reason === 'insufficientPermissions' || e.reason === 'ACCESS_TOKEN_SCOPE_INSUFFICIENT')
+    return `${api} permission is missing. Reconnect this Google account with ${api} switched on.`;
+  if (e.status === 401) return 'Google signed this account out. Reconnect it.';
+  if (e.status === 429 || e.reason === 'rateLimitExceeded' || e.reason === 'userRateLimitExceeded')
+    return `${api} is busy. Trying again shortly.`;
+  if (e.status >= 500) return `${api} is having trouble right now. Trying again shortly.`;
+  return `${api} refused the request (${e.status}${e.reason ? `, ${e.reason}` : ''}).`;
 }
 
 /** A thin, typed HTTP client for Google OAuth + Calendar v3. Base URLs come from the environment (tests: a fake). */
@@ -146,7 +164,21 @@ export class GoogleCalendarClient {
     if (r.status === 410) throw new SyncTokenGone('sync token gone');
     if (r.status === 412) throw new EtagMismatch('etag mismatch');
     if (r.status === 401) throw new GoogleHttpError(401, 'unauthorized');
-    if (!r.ok) throw new GoogleHttpError(r.status, `${method} ${u.pathname}: ${r.status}`);
+    if (!r.ok) {
+      const j = (await r.json().catch(() => null)) as {
+        error?: { errors?: { reason?: string }[]; status?: string; details?: { reason?: string }[] };
+      } | null;
+      const reason =
+        j?.error?.errors?.[0]?.reason ??
+        j?.error?.details?.find((d) => d.reason)?.reason ??
+        j?.error?.status ??
+        null;
+      throw new GoogleHttpError(
+        r.status,
+        `${method} ${u.pathname}: ${r.status}${reason ? ` ${reason}` : ''}`,
+        reason,
+      );
+    }
     return (r.status === 204 ? undefined : await r.json()) as T;
   }
 

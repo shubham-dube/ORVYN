@@ -69,7 +69,8 @@ export function fromGoogle(
     ...base,
     title: (g.summary ?? '').trim() || '(no title)',
     notes: g.description ?? '',
-    location: g.location ?? '',
+    // a Meet call shows its link where the place would be (spec 0012 M: Join from the list); never written back
+    location: g.location || g.hangoutLink || '',
     allDay,
     start: allDay ? null : iso(new Date(g.start!.dateTime!)),
     end: allDay ? null : iso(new Date(g.end!.dateTime!)),
@@ -84,12 +85,14 @@ export function fromGoogle(
   };
 }
 
+const MEET = /^https:\/\/meet\.google\.com\//;
+
 /** ORVYN → Google body for insert/patch. */
 export function toGoogle(e: EventFields): Partial<GEvent> {
   const body: Partial<GEvent> = {
     summary: e.title,
     description: e.notes,
-    location: e.location,
+    ...(MEET.test(e.location) ? {} : { location: e.location }),
     start: e.allDay ? { date: e.startDate! } : { dateTime: e.start!, timeZone: e.timeZone },
     end: e.allDay ? { date: e.endDate! } : { dateTime: e.end!, timeZone: e.timeZone },
   };

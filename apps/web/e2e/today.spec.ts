@@ -15,7 +15,8 @@ test('Today: add, complete, and the task follows you to another device — live,
   await other.goto('/today');
   await expect(other.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 
-  await page.getByLabel('New task').fill('Pay electricity bill');
+  // a day written: today (with nothing about a day it would wait in the Inbox, spec 0012 A5)
+  await page.getByLabel('New task').fill('Pay electricity bill today');
   await page.keyboard.press('Enter');
   const todayList = page.getByRole('list', { name: 'Today' });
   await expect(todayList.getByText('Pay electricity bill')).toBeVisible();
@@ -28,8 +29,6 @@ test('Today: add, complete, and the task follows you to another device — live,
   // offline on the first device: still works, syncs when back
   await page.context().setOffline(true);
   await page.getByLabel('New task').fill('Call the plumber');
-  await page.getByRole('radio', { name: 'Someday' }).click();
-  await page.keyboard.press('Enter');
   await page.getByLabel('New task').press('Enter');
   await expect(page.getByRole('list', { name: 'Inbox' }).getByText('Call the plumber')).toBeVisible();
   await expect(page.getByText(/waiting to sync/)).toBeVisible();
@@ -51,10 +50,13 @@ test('Today: add, complete, and the task follows you to another device — live,
 
   // edit in the sheet: give it a time and high priority
   await page.getByRole('button', { name: 'Call the plumber' }).click();
-  await page.getByLabel('Day', { exact: true }).fill(new Date().toISOString().slice(0, 10));
-  await page.getByLabel('Time', { exact: true }).fill('23:30');
-  await page.getByRole('radio', { name: 'High' }).click();
-  await page.getByRole('button', { name: 'Save' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Task' });
+  await sheet.getByRole('button', { name: 'When' }).click();
+  await sheet.getByLabel('Day', { exact: true }).fill(new Date().toISOString().slice(0, 10));
+  await sheet.getByLabel('Time', { exact: true }).fill('23:30');
+  await sheet.getByRole('button', { name: 'Priority' }).click();
+  await page.getByRole('option', { name: 'High' }).click();
+  await sheet.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('list', { name: 'Today' }).getByText('Call the plumber')).toBeVisible();
   await expect(page.getByLabel('High priority')).toBeVisible();
 
@@ -85,18 +87,19 @@ test('type naturally: chips show what was understood, and removing one keeps the
   await expect(chips.getByText('45 min')).toBeVisible();
   await expect(chips.getByText('Medium')).toBeVisible();
   await expect(chips.getByText(/Fri/)).toBeVisible();
-  await expect(page.getByText('“Dentist”')).toBeVisible();
+  await expect(page.getByText('Dentist', { exact: true })).toBeVisible(); // the title it will get
   await add.press('Enter');
   await expect(page.getByRole('button', { name: 'Dentist' })).toBeVisible();
   await expect(page.getByLabel('Medium priority')).toBeVisible();
 
   // "Friday" here is part of the name, not a date
   await add.fill('book Friday show tickets');
-  await expect(page.getByText('“Book show tickets”')).toBeVisible();
+  await expect(page.getByText('Book show tickets', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Not a date: “Friday”' }).click();
-  await expect(chips).toHaveCount(0);
+  await expect(chips.getByRole('listitem')).toHaveCount(0);
+  await expect(page.getByText('Inbox · pick a day')).toBeVisible(); // no day left: it will wait in the Inbox
   await add.press('Enter');
-  await expect(page.getByRole('list', { name: 'Today' }).getByText('Book Friday show tickets')).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Inbox' }).getByText('Book Friday show tickets')).toBeVisible();
 
   // a new @project is created on the way
   await add.fill('plan beds @garden every saturday');
@@ -104,8 +107,9 @@ test('type naturally: chips show what was understood, and removing one keeps the
   await expect(chips.getByText('every Sat')).toBeVisible();
   await add.press('Enter');
   await page.getByRole('button', { name: 'Plan beds' }).click();
-  await expect(page.getByLabel('Project')).toHaveValue(/.+/);
-  await expect(page.getByLabel('Project').locator('option:checked')).toHaveText('garden');
+  await expect(
+    page.getByRole('dialog', { name: 'Task' }).getByRole('button', { name: 'garden' }),
+  ).toBeVisible();
 });
 
 test('the command bar reads naturally too', async ({ page }) => {

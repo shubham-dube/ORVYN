@@ -550,7 +550,7 @@ export function IpoSettingsSheet({ open, onClose }: { open: boolean; onClose(): 
                 onChange={(e) =>
                   setS({ ...s, minGmpPct: e.target.value === '' ? null : Number(e.target.value) })
                 }
-                className="h-9 rounded-orv-md border border-orv-edge bg-orv-field px-2 text-[14px]"
+                className="h-9 rounded-orv-md field-ring px-2 text-[14px]"
               >
                 <option value="">any</option>
                 {[5, 10, 20, 30, 50].map((v) => (
@@ -589,7 +589,7 @@ export function IpoSettingsSheet({ open, onClose }: { open: boolean; onClose(): 
                 aria-label="GMP move"
                 value={s.gmpMovePct}
                 onChange={(e) => setS({ ...s, gmpMovePct: Number(e.target.value) })}
-                className="h-9 rounded-orv-md border border-orv-edge bg-orv-field px-2 text-[14px]"
+                className="h-9 rounded-orv-md field-ring px-2 text-[14px]"
               >
                 {[3, 5, 10, 20].map((v) => (
                   <option key={v} value={v}>
@@ -604,7 +604,7 @@ export function IpoSettingsSheet({ open, onClose }: { open: boolean; onClose(): 
                 aria-label="At most a day"
                 value={s.maxPerDay}
                 onChange={(e) => setS({ ...s, maxPerDay: Number(e.target.value) })}
-                className="h-9 rounded-orv-md border border-orv-edge bg-orv-field px-2 text-[14px]"
+                className="h-9 rounded-orv-md field-ring px-2 text-[14px]"
               >
                 {[2, 4, 6, 10, 20].map((v) => (
                   <option key={v} value={v}>

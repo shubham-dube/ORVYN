@@ -63,6 +63,53 @@ export const Reminder = z.union([
   z.object({ kind: z.literal('at'), at: isoDateTime, via: Ways.optional() }),
 ]);
 
+export const TASK_STATUSES = ['todo', 'doing'] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+/**
+ * "Done 3:40 pm", "Done yesterday, 6:10 pm", "Done Mon, 6:10 pm", "Done 18 Nov", "Done 18 Nov 2025" (spec 0012 A1),
+ * in the person's zone. `long` gives the sheet's wording: "Done on Mon 18 Nov, 6:10 pm".
+ */
+export function doneLabel(completedAt: string, now: Date, timeZone: string, long = false): string {
+  const at = new Date(completedAt);
+  const fmt = (d: Date, o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat('en-GB', { timeZone, ...o }).format(d);
+  /** the wall date in the zone, as a UTC midnight, so days can be subtracted */
+  const dayMs = (d: Date) =>
+    Date.parse(
+      `${fmt(d, { year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-')}T00:00:00Z`,
+    );
+  const time = fmt(at, { hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(/\s/g, ' ')
+    .toLowerCase();
+  const sameYear = fmt(at, { year: 'numeric' }) === fmt(now, { year: 'numeric' });
+  const date = (weekday: boolean) =>
+    fmt(at, {
+      ...(weekday ? { weekday: 'short' } : {}),
+      day: 'numeric',
+      month: 'short',
+      ...(sameYear ? {} : { year: 'numeric' }),
+    }).replace(',', '');
+  if (long) return `Done on ${date(true)}, ${time}`;
+  const days = Math.round((dayMs(now) - dayMs(at)) / 86_400_000);
+  if (days <= 0) return `Done ${time}`;
+  if (days === 1) return `Done yesterday, ${time}`;
+  if (days < 7) return `Done ${fmt(at, { weekday: 'short' })}, ${time}`;
+  return `Done ${date(false)}`;
+}
+
+/** The day header a done task sits under: "Today", "Yesterday", "Mon 18 Nov", "18 Nov 2025" (spec 0012 A1). */
+export function doneDayHeader(completedAt: string, now: Date, timeZone: string): string {
+  const label = doneLabel(completedAt, now, timeZone, true)
+    .replace(/^Done on /, '')
+    .replace(/, [^,]+$/, '');
+  const key = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone }).format(d);
+  const at = new Date(completedAt);
+  if (key(at) === key(now)) return 'Today';
+  if (key(at) === key(new Date(now.getTime() - 86_400_000))) return 'Yesterday';
+  return label;
+}
+
 export const TaskFields = z.object({
   title: z.string().trim().min(1).max(500),
   notes: z.string().max(20_000).default(''),
@@ -71,7 +118,7 @@ export const TaskFields = z.object({
   tags: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
   /** 0 none · 1 low · 2 medium · 3 high */
   priority: z.number().int().min(0).max(3).default(0),
-  /** a day, or a moment */
+  /** a day, or a moment: when I plan to do it (puts it in Today) */
   dueDate: isoDate.nullable().default(null),
   dueAt: isoDateTime.nullable().default(null),
   /** a time block on the river */
@@ -93,6 +140,10 @@ export const TaskFields = z.object({
   lastDoneAt: isoDateTime.nullable().default(null),
   /** how it was created: typed, spoken, orb, email … (analytics-free; shown in the task sheet) */
   source: z.string().max(20).default('typed'),
+  /** the last day it may be done, separate from when I plan to do it (spec 0012 A2) */
+  deadline: isoDate.nullable().default(null),
+  /** where an open task stands; done is `completedAt` (so the two can never disagree) */
+  status: z.enum(TASK_STATUSES).default('todo'),
 });
 export type TaskFields = z.infer<typeof TaskFields>;
 

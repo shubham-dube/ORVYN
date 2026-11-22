@@ -65,10 +65,21 @@ void main() {
     expect(h.widget.last?['signedIn'], true);
     expect((h.widget.last?['lines'] as List).map((l) => (l as Map)['title']), ['Water the plants']);
 
-    // a task added in the app reaches the widget
+    // a task added in the app for today reaches the widget (one with no day waits in the Inbox)
+    h.server.on(
+      'POST /today/parse',
+      (_) => {
+        'title': 'Buy milk', 'dueDate': '2026-11-16', 'dueAt': null, 'priority': 0, 'tags': <String>[], //
+        'spans': [
+          {'kind': 'date', 'text': 'today', 'start': 9, 'end': 14},
+        ],
+      },
+    );
     await tester.tap(find.bySemanticsLabel('Today'));
     await settle(tester);
-    await tester.enterText(find.byKey(const Key('quick-add')), 'Buy milk');
+    await tester.enterText(find.byKey(const Key('quick-add')), 'Buy milk today');
+    await tester.pump(const Duration(milliseconds: 300));
+    await settle(tester);
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester, 20);
     expect(

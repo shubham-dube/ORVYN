@@ -219,7 +219,7 @@ export function Sheet({
     <AnimatePresence>
       {open ? (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-3"
+          className="fixed inset-0 z-[60] flex items-end justify-center p-0 sm:items-center sm:p-3"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

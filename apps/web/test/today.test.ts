@@ -20,6 +20,8 @@ const base: Task = {
   completedAt: null,
   lastDoneAt: null,
   source: 'typed',
+  deadline: null,
+  status: 'todo',
 };
 const t = (id: string, f: Partial<Task>): Task => ({ ...base, id, title: id, ...f });
 const now = new Date(2026, 10, 16, 9, 0); // 16 Nov 2026, 09:00 local
@@ -67,5 +69,13 @@ describe('Today grouping', () => {
   it('days are local, not UTC (late evening in India is still today)', () => {
     const lateEvening = new Date(2026, 10, 16, 23, 30);
     expect(localDay(lateEvening)).toBe('2026-11-16');
+  });
+});
+
+describe('a deadline that has come puts a task in Today (spec 0012 A2)', () => {
+  it('only a deadline: Today when it is today, the Inbox when it is later', () => {
+    const g = groupTasks([t('tax', { deadline: localDay(now) }), t('visa', { deadline: '2026-12-01' })], now);
+    expect(g.today.map((x) => x.id)).toEqual(['tax']);
+    expect(g.inbox.map((x) => x.id)).toEqual(['visa']);
   });
 });

@@ -40,7 +40,7 @@ void main() {
     });
     expect(find.text('Ship release notes'), findsOneWidget);
     expect(find.text('Buy milk'), findsOneWidget);
-    expect(find.textContaining('1/2 steps'), findsOneWidget);
+    expect(find.text('1/2'), findsOneWidget); // checklist progress on the row
     expect(find.textContaining('#urgent'), findsWidgets);
 
     // words: found through the steps too
@@ -89,43 +89,53 @@ void main() {
     Map<String, dynamic> row(String id) => b.rows['today.task/$id']!;
 
     await tapIt(tester, find.text('Plan offsite'));
+    // the sheet stays short: tags, checklist and repeat open from their "+" rows (spec 0012 A3)
+    expect(find.byKey(const Key('task-tag-input')), findsNothing);
+    await tapIt(tester, find.text('Tags'));
     await tester.enterText(find.byKey(const Key('task-tag-input')), 'work');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
+    await tapIt(tester, find.text('Checklist'));
     await tester.enterText(find.byKey(const Key('task-step-input')), 'book venue');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
     await tester.tap(find.bySemanticsLabel('Done: book venue'));
     await settle(tester);
-    await tapIt(tester, find.text('1 h'));
+    await tapIt(tester, find.bySemanticsLabel('Duration'));
+    await tapIt(tester, find.text('1h'));
+    expect(find.bySemanticsLabel('1h'), findsOneWidget, reason: 'the pill now says how long');
+    await tapIt(tester, find.text('Repeat'));
     await tapIt(tester, find.text('Weekly'));
     expect(find.text('Every week on Mon'), findsOneWidget);
     expect(find.textContaining('Next: 2026-11-16 · 2026-11-23'), findsOneWidget);
-    await tapIt(tester, find.text('Save'));
+    await tapIt(tester, find.byKey(const Key('task-save')));
     expect(row('a')['tags'], ['work']);
     expect(row('a')['durationMin'], 60);
     expect(row('a')['rrule'], 'FREQ=WEEKLY;BYDAY=MO');
     expect((row('a')['checklist'] as List).single, containsPair('done', true));
 
-    // the board has a column per project; long-press moves a card
+    // the board has a column per status; ⋯ on a card moves it (long-press drags it)
     await tapIt(tester, find.bySemanticsLabel('Board'));
-    expect(find.bySemanticsLabel(RegExp(r'^No project, 3 tasks')), findsOneWidget);
-    expect(find.bySemanticsLabel(RegExp(r'^Home, 0 tasks')), findsOneWidget);
-    await tester.longPress(find.text('Buy bread'));
-    await settle(tester);
-    await tapIt(tester, find.text('Move to: Home'));
-    expect(row('c')['projectId'], 'p-home');
+    expect(find.text('TO DO'), findsOneWidget);
+    expect(find.text('DOING'), findsOneWidget);
+    final card = find.ancestor(of: find.text('Buy bread'), matching: find.byType(Row)).first;
+    await tapIt(tester, find.descendant(of: card, matching: find.byTooltip('Move to')));
+    await tapIt(tester, find.text('Move to Doing'));
+    expect(row('c')['status'], 'doing');
 
-    // bulk: select two tasks and move them
+    // select: hold a row (or tap Select), tick two, move them with the floating bar
     await tapIt(tester, find.bySemanticsLabel('List'));
-    await tapIt(tester, find.bySemanticsLabel('Select'));
-    await tapIt(tester, find.text('Buy milk'));
+    await tester.longPress(find.text('Buy milk'));
+    await settle(tester);
+    expect(find.text('1 selected'), findsOneWidget);
     await tapIt(tester, find.text('Plan offsite'));
     expect(find.text('2 selected'), findsOneWidget);
-    await tapIt(tester, find.text('Move to…'));
-    await tapIt(tester, find.descendant(of: find.byType(PopupMenuItem<String>), matching: find.text('Home')));
+    await tapIt(tester, find.bySemanticsLabel('Project'));
+    await tapIt(tester, find.descendant(of: find.byType(BottomSheet), matching: find.text('Home')));
     expect(row('a')['projectId'], 'p-home');
     expect(row('b')['projectId'], 'p-home');
+    expect(find.text('2 selected'), findsNothing, reason: 'select mode ends after the action');
+    await tester.pump(const Duration(seconds: 5));
     await finish(tester);
   });
 }

@@ -486,7 +486,7 @@ export function LeadTimes({
           aria-label={`Add a reminder (${label})`}
           value=""
           onChange={(e) => e.target.value && add(Number(e.target.value))}
-          className="h-8 rounded-full border border-orv-edge bg-orv-field px-2 text-[12px]"
+          className="h-8 rounded-full field-ring px-2 text-[12px]"
         >
           <option value="">+ add</option>
           {[0, ...LEAD_CHOICES]
@@ -509,7 +509,7 @@ export function LeadTimes({
               setCustom('');
             }
           }}
-          className="h-8 w-16 rounded-full border border-orv-edge bg-orv-field px-2 text-[12px]"
+          className="h-8 w-16 rounded-full field-ring px-2 text-[12px]"
         />
       </div>
     </div>

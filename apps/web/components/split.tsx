@@ -817,7 +817,7 @@ function ExpenseSheet({
                 aria-label="Paid by"
                 value={payer}
                 onChange={(e) => setPayer(e.target.value)}
-                className="h-10 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px]"
+                className="h-10 w-full rounded-orv-md field-ring px-3 text-[14px]"
               >
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -936,7 +936,7 @@ function PaymentSheet({
           id={id}
           value={v}
           onChange={(e) => set(e.target.value)}
-          className="h-10 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px]"
+          className="h-10 w-full rounded-orv-md field-ring px-3 text-[14px]"
         >
           {group.members.map((x) => (
             <option key={x.id} value={x.id}>
@@ -989,7 +989,7 @@ function PaymentSheet({
               id={id}
               value={f.method}
               onChange={(e) => setF({ ...f, method: e.target.value })}
-              className="h-10 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px]"
+              className="h-10 w-full rounded-orv-md field-ring px-3 text-[14px]"
             >
               {['UPI', 'Cash', 'Bank'].map((x) => (
                 <option key={x}>{x}</option>

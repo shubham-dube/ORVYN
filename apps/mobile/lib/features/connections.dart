@@ -10,6 +10,8 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
+import 'clickup.dart' show ClickUpStatusesSheet;
+import 'prs.dart' show PrPingsSheet;
 import 'sheets.dart';
 import 'tools.dart';
 
@@ -24,17 +26,44 @@ class Connection {
   List<String> get capabilities => ((data['capabilities'] as List?) ?? const []).cast<String>();
 }
 
+/// Kept between visits, so Today knows at once which tools are connected — no widget popping in late (spec 0012 B6).
 final connectionsProvider = FutureProvider.autoDispose<List<Connection>>((ref) async {
+  ref.keepAlive();
   final r = await ref.read(apiProvider).get<List<dynamic>>('/connections');
   return [for (final x in r) Connection(Map<String, dynamic>.from(x as Map))];
 });
 
+/// Open ClickUp tasks, each with `working` (shown in Today) and its status colour; kept between visits.
 final clickupTasksProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  ref.keepAlive();
   final conns = await ref.watch(connectionsProvider.future);
   if (!conns.any((c) => c.provider == 'clickup')) return const [];
   final r = await ref.read(apiProvider).get<List<dynamic>>('/connections/clickup/tasks');
-  return [for (final x in r) Map<String, dynamic>.from(x as Map)];
+  return [
+    for (final x in r)
+      {
+        ...Map<String, dynamic>.from(x as Map),
+        // a server that doesn't say yet: the same rule as the API's default
+        if (x['working'] == null) 'working': isWorkingStatus(x['status'] as String? ?? '', x['statusType'] as String?),
+      },
+  ];
 });
+
+final _notWorking = RegExp(
+  r'fix|deploy|prod|release|qa|review|test|verif|done|complete|closed|block|hold|cancel|backlog|archiv',
+  caseSensitive: false,
+);
+final _working = RegExp(
+  r'design|develop|progress|doing|working|wip|build|implement|coding|active|ongoing',
+  caseSensitive: false,
+);
+
+/// "I'm on this": a name that says so (DESIGN, DEVELOPMENT, IN PROGRESS …) or an in-progress (custom) status,
+/// never one past building or closed. Mirrors `defaultWorking` in the API.
+bool isWorkingStatus(String status, String? type) {
+  if (type == 'closed' || type == 'done' || _notWorking.hasMatch(status)) return false;
+  return _working.hasMatch(status) || type == 'custom';
+}
 
 Future<void> openMeetingSheet(BuildContext context) => showGlassSheet<void>(context, (_) => const MeetingSheet());
 
@@ -101,6 +130,18 @@ class ConnectionsPanel extends ConsumerWidget {
                         TextButton(
                           onPressed: () => _google(ref, context, hint: c.account, gmail: true),
                           child: const Text('Add Gmail'),
+                        ),
+                      if (c.provider == 'clickup')
+                        IconButton(
+                          tooltip: 'What shows in Today',
+                          icon: Icon(LucideIcons.slidersHorizontal, size: 18, color: l.c.muted),
+                          onPressed: () => showGlassSheet<void>(context, (_) => const ClickUpStatusesSheet()),
+                        ),
+                      if (c.provider == 'github')
+                        IconButton(
+                          tooltip: 'Pull request notifications',
+                          icon: Icon(LucideIcons.bellRing, size: 18, color: l.c.muted),
+                          onPressed: () => showGlassSheet<void>(context, (_) => const PrPingsSheet()),
                         ),
                       if (c.provider != 'google')
                         IconButton(
@@ -300,6 +341,7 @@ class _MeetingSheetState extends ConsumerState<MeetingSheet> {
   void initState() {
     super.initState();
     _title.addListener(() => setState(() {}));
+    _who.addListener(() => setState(() {}));
   }
 
   @override
@@ -483,35 +525,55 @@ class _MeetingSheetState extends ConsumerState<MeetingSheet> {
         ),
         const SizedBox(height: 12),
         const SectionLabel('Who'),
-        const SizedBox(height: 4),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          children: [
-            for (final p in _people)
-              InputChip(
-                label: Text(p),
-                onDeleted: () => setState(() => _people.remove(p)),
-                deleteButtonTooltipMessage: 'Remove $p',
+        const SizedBox(height: 6),
+        // one box: the people as chips, then where you type the next (spec 0012 U)
+        FocusRing(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final p in _people)
+                InputChip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: OrvAvatar(name: p, size: 22),
+                  label: Text(p),
+                  onDeleted: () => setState(() => _people.remove(p)),
+                  deleteButtonTooltipMessage: 'Remove $p',
+                  side: BorderSide(color: l.c.edge),
+                  backgroundColor: l.c.glassStrong,
+                ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 160, maxWidth: 400),
+                child: IntrinsicWidth(
+                  child: TextField(
+                    key: const Key('meeting-who'),
+                    controller: _who,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    onChanged: (v) {
+                      if (RegExp(r'[,;\s]$').hasMatch(v)) _add(v);
+                    },
+                    onSubmitted: _add,
+                    style: OrvText.body(l),
+                    decoration: bareInput(
+                      l,
+                      hint: _people.isEmpty ? 'name@email.com, Enter to add' : 'Add another',
+                      fontSize: 15,
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                    ),
+                  ),
+                ),
               ),
-          ],
-        ),
-        TextField(
-          key: const Key('meeting-who'),
-          controller: _who,
-          keyboardType: TextInputType.emailAddress,
-          textInputAction: TextInputAction.next,
-          onChanged: (v) {
-            if (RegExp(r'[,;\s]$').hasMatch(v)) _add(v);
-          },
-          onSubmitted: _add,
-          style: OrvText.body(l),
-          decoration: InputDecoration(
-            hintText: 'raj@example.com',
-            hintStyle: OrvText.muted(l).copyWith(color: l.c.faint),
-            border: InputBorder.none,
+            ],
           ),
         ),
+        if (_who.text.trim().isNotEmpty && !_email.hasMatch(_who.text.trim()))
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 4),
+            child: Text('Type a full email address', style: OrvText.muted(l).copyWith(fontSize: 12)),
+          ),
         const SizedBox(height: 4),
         OrvSwitchRow(label: 'Add a Google Meet link', value: _meet, onChanged: (v) => setState(() => _meet = v)),
         if (accounts.length > 1) ...[

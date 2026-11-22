@@ -122,33 +122,31 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
                 ],
               ),
-              TextField(
-                key: const Key('lib-search'),
-                controller: _search,
-                onChanged: (_) => setState(() {}),
-                style: OrvText.body(l),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: l.c.field,
-                  prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-                  suffixIcon: _search.text.isEmpty
-                      ? null
-                      : IconButton(
-                          tooltip: 'Clear search',
-                          icon: Icon(LucideIcons.x, size: 16, color: l.c.muted),
-                          onPressed: () => setState(_search.clear),
-                        ),
-                  hintText: 'Search in plain words — “pan card”, “rent”',
-                  hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: l.c.edge),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: l.c.edge),
-                  ),
+              FocusRing(
+                radius: 14,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: TextField(
+                  key: const Key('lib-search'),
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  style: OrvText.body(l),
+                  decoration:
+                      bareInput(
+                        l,
+                        hint: 'Search in plain words — “pan card”, “rent”',
+                        fontSize: 15,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ).copyWith(
+                        prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                        prefixIconConstraints: const BoxConstraints(minWidth: 30),
+                        suffixIcon: _search.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                icon: Icon(LucideIcons.x, size: 16, color: l.c.muted),
+                                onPressed: () => setState(_search.clear),
+                              ),
+                      ),
                 ),
               ),
               if (used.length > 1)

@@ -56,19 +56,21 @@ void main() {
     await tester.enterText(find.byKey(const Key('quick-add')), 'Pay electricity bill');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
-    expect(find.text('Pay electricity bill'), findsOneWidget);
+    expect(find.text('Pay electricity bill'), findsWidgets); // the row (and the "added" toast)
     expect(backend.rows.values.single['title'], 'Pay electricity bill', reason: 'pushed to the server');
-    expect(backend.rows.values.single['dueDate'], '2026-11-16');
+    // nothing about a day written: it waits in the Inbox (spec 0012 A5)
+    expect(backend.rows.values.single['dueDate'], isNull);
+    await tester.pump(const Duration(seconds: 5)); // the toast goes
 
     // offline: the server can't be reached, the app keeps going
     final push = h.server.routes['POST /sync/push']!;
     h.server.on('POST /sync/push', (_) => const Reply(503));
     await tester.enterText(find.byKey(const Key('quick-add')), 'Call the plumber');
     await settle(tester);
-    await tester.tap(find.text('Someday'));
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
-    expect(find.text('Call the plumber'), findsOneWidget);
+    expect(find.text('Call the plumber'), findsWidgets);
+    await tester.pump(const Duration(seconds: 5));
     expect(backend.rows.values.where((r) => r['title'] == 'Call the plumber'), isEmpty);
 
     // complete → it settles into "Done today"
@@ -184,7 +186,8 @@ void main() {
     await settle(tester);
     expect(find.text('45 min'), findsOneWidget);
     expect(find.text('Medium'), findsOneWidget);
-    expect(find.text('“Dentist”'), findsOneWidget);
+    expect(find.text('Dentist'), findsOneWidget); // the title it will get
+    expect(find.text('Fri'), findsOneWidget); // the day, in words
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester, 20);
     final dentist = backend.rows.values.firstWhere((r) => r['title'] == 'Dentist');
@@ -194,24 +197,21 @@ void main() {
     await tester.enterText(find.byKey(const Key('quick-add')), 'book Friday show tickets');
     await tester.pump(const Duration(milliseconds: 300));
     await settle(tester);
-    await tester.tap(find.byTooltip('Not a date: “Friday”'));
+    await tester.tap(find.bySemanticsLabel('Not a date: “Friday”'));
     await settle(tester);
     expect(parses.last['literal'], [
       [5, 11],
     ]);
-    expect(find.text('“Book Friday show tickets”'), findsNothing); // no chips left → no preview line
+    expect(find.text('Book Friday show tickets'), findsNothing); // no chips left → no preview line
 
-    // offline: the words are saved as typed, on the chosen day
+    // offline: the words are saved as typed, in the Inbox
     h.server.on('POST /today/parse', (_) => const Reply(503));
     await tester.enterText(find.byKey(const Key('quick-add')), 'water plants tomorrow');
     await tester.pump(const Duration(milliseconds: 300));
     await settle(tester);
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester, 20);
-    expect(
-      backend.rows.values.any((r) => r['title'] == 'water plants tomorrow' && r['dueDate'] == '2026-11-16'),
-      isTrue,
-    );
+    expect(backend.rows.values.any((r) => r['title'] == 'water plants tomorrow' && r['dueDate'] == null), isTrue);
     await tester.pump(const Duration(seconds: 2));
     await finish(tester);
   });

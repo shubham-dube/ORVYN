@@ -10,15 +10,63 @@ export class ClickUpError extends Error {
   }
 }
 
+export interface ClickUpUser {
+  id: number;
+  username: string | null;
+  email?: string;
+  color?: string | null;
+  initials?: string;
+  profilePicture?: string | null;
+}
+
+export interface ClickUpStatus {
+  status: string;
+  type: string;
+  color?: string;
+  orderindex?: number | string;
+}
+
 export interface ClickUpTask {
   id: string;
   name: string;
   url: string;
-  status: { status: string; type: string; color?: string };
+  status: ClickUpStatus;
   due_date: string | null;
-  priority: { priority: string } | null;
+  priority: { priority: string; color?: string } | null;
   list: { id: string; name: string };
+  folder?: { id: string; name: string; hidden?: boolean };
   space?: { id: string };
+  team_id?: string;
+  parent?: string | null;
+  time_spent?: number | null;
+  time_estimate?: number | null;
+  date_updated?: string;
+  date_closed?: string | null;
+  date_done?: string | null;
+  assignees?: ClickUpUser[];
+  description?: string | null;
+  markdown_description?: string | null;
+  text_content?: string | null;
+  subtasks?: ClickUpTask[];
+}
+
+export interface ClickUpComment {
+  id: string;
+  comment_text: string;
+  user: ClickUpUser;
+  date: string;
+}
+
+export interface ClickUpTimeEntry {
+  id: string;
+  task?: { id: string; name: string } | null;
+  user?: ClickUpUser;
+  start: string;
+  end?: string | null;
+  /** milliseconds; negative while the timer runs */
+  duration: string | number;
+  description?: string;
+  billable?: boolean;
 }
 
 /** A small client for ClickUp's v2 API with a personal token (spec 0007 C2). Base URL from the environment. */
@@ -33,8 +81,9 @@ export class ClickUpClient {
       headers: { authorization: token, ...(body ? { 'content-type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (!r.ok) throw new ClickUpError(r.status, `${method} ${path}: ${r.status}`);
-    return (await r.json()) as T;
+    if (!r.ok) throw new ClickUpError(r.status, `${method} ${path.split('?')[0]}: ${r.status}`);
+    const text = await r.text();
+    return (text ? JSON.parse(text) : undefined) as T;
   }
 
   me(token: string) {
@@ -45,16 +94,130 @@ export class ClickUpClient {
     return this.call<{ teams: { id: string; name: string }[] }>(token, 'GET', '/team');
   }
 
-  /** Open tasks assigned to this person in one workspace, soonest due first. */
-  async myTasks(token: string, teamId: string, userId: string): Promise<ClickUpTask[]> {
+  /**
+   * Tasks assigned to this person in one workspace. Open ones by default; `closedSince` (ms) gives the done/closed
+   * ones updated since then. Up to 3 pages of 100.
+   */
+  async myTasks(
+    token: string,
+    teamId: string,
+    userId: string,
+    o: { closedSince?: number } = {},
+  ): Promise<ClickUpTask[]> {
+    const out: ClickUpTask[] = [];
+    for (let page = 0; page < 3; page++) {
+      const q = new URLSearchParams({
+        'assignees[]': userId,
+        include_closed: o.closedSince ? 'true' : 'false',
+        subtasks: 'true',
+        order_by: o.closedSince ? 'updated' : 'due_date',
+        page: String(page),
+        ...(o.closedSince ? { date_updated_gt: String(o.closedSince) } : {}),
+      });
+      const r = await this.call<{ tasks: ClickUpTask[]; last_page?: boolean }>(
+        token,
+        'GET',
+        `/team/${teamId}/task?${q.toString()}`,
+      );
+      out.push(...r.tasks.map((t) => ({ ...t, team_id: t.team_id ?? teamId })));
+      if (r.tasks.length < 100 || r.last_page !== false) break;
+    }
+    return o.closedSince ? out.filter((t) => t.status.type === 'closed' || t.status.type === 'done') : out;
+  }
+
+  /** One task with its subtasks and its description as markdown. */
+  task(token: string, taskId: string) {
+    return this.call<ClickUpTask>(
+      token,
+      'GET',
+      `/task/${encodeURIComponent(taskId)}?include_subtasks=true&include_markdown_description=true`,
+    );
+  }
+
+  /** A list's statuses, in ClickUp's order. */
+  async statuses(token: string, listId: string): Promise<ClickUpStatus[]> {
+    const l = await this.call<{ statuses?: ClickUpStatus[] }>(
+      token,
+      'GET',
+      `/list/${encodeURIComponent(listId)}`,
+    );
+    return [...(l.statuses ?? [])].sort((a, b) => Number(a.orderindex ?? 0) - Number(b.orderindex ?? 0));
+  }
+
+  async update(token: string, taskId: string, set: { status?: string; priority?: number | null }) {
+    await this.call(token, 'PUT', `/task/${encodeURIComponent(taskId)}`, set);
+  }
+
+  async comments(token: string, taskId: string): Promise<ClickUpComment[]> {
+    const r = await this.call<{ comments: ClickUpComment[] }>(
+      token,
+      'GET',
+      `/task/${encodeURIComponent(taskId)}/comment`,
+    );
+    return r.comments;
+  }
+
+  addComment(token: string, taskId: string, text: string) {
+    return this.call<{ id: string | number; date: number | string }>(
+      token,
+      'POST',
+      `/task/${encodeURIComponent(taskId)}/comment`,
+      { comment_text: text, notify_all: false },
+    );
+  }
+
+  /** My time entries on a task over the last year (ClickUp returns only the caller's own by default). */
+  async timeEntries(token: string, teamId: string, taskId: string): Promise<ClickUpTimeEntry[]> {
+    const now = Date.now();
     const q = new URLSearchParams({
-      'assignees[]': userId,
-      include_closed: 'false',
-      subtasks: 'true',
-      order_by: 'due_date',
+      task_id: taskId,
+      start_date: String(now - 365 * 86_400_000),
+      end_date: String(now + 86_400_000),
     });
-    const r = await this.call<{ tasks: ClickUpTask[] }>(token, 'GET', `/team/${teamId}/task?${q.toString()}`);
-    return r.tasks;
+    const r = await this.call<{ data: ClickUpTimeEntry[] }>(
+      token,
+      'GET',
+      `/team/${teamId}/time_entries?${q.toString()}`,
+    );
+    return r.data ?? [];
+  }
+
+  async runningTimer(token: string, teamId: string): Promise<ClickUpTimeEntry | null> {
+    const r = await this.call<{ data: ClickUpTimeEntry | null }>(
+      token,
+      'GET',
+      `/team/${teamId}/time_entries/current`,
+    );
+    return r.data && r.data.id ? r.data : null;
+  }
+
+  startTimer(token: string, teamId: string, taskId: string) {
+    return this.call<{ data: ClickUpTimeEntry }>(token, 'POST', `/team/${teamId}/time_entries/start`, {
+      tid: taskId,
+    });
+  }
+
+  stopTimer(token: string, teamId: string) {
+    return this.call<{ data: ClickUpTimeEntry }>(token, 'POST', `/team/${teamId}/time_entries/stop`, {});
+  }
+
+  /** A finished entry: start (ms) and duration (ms). */
+  addTime(
+    token: string,
+    teamId: string,
+    e: { taskId: string; start: number; duration: number; description?: string; billable?: boolean },
+  ) {
+    return this.call<{ data: ClickUpTimeEntry }>(token, 'POST', `/team/${teamId}/time_entries`, {
+      tid: e.taskId,
+      start: e.start,
+      duration: e.duration,
+      ...(e.description ? { description: e.description } : {}),
+      ...(e.billable !== undefined ? { billable: e.billable } : {}),
+    });
+  }
+
+  async deleteTime(token: string, teamId: string, entryId: string): Promise<void> {
+    await this.call(token, 'DELETE', `/team/${teamId}/time_entries/${encodeURIComponent(entryId)}`);
   }
 
   /** Closes a task with its list's own "closed" status (lists name their statuses differently). */

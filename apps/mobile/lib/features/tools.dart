@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -11,7 +12,10 @@ import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
 import 'connections.dart';
+import 'clickup.dart';
+import 'prs.dart';
 import 'sheets.dart';
+import 'today_kit.dart';
 
 // ------------------------------------------------------------------ data (spec 0008 B)
 
@@ -172,9 +176,112 @@ class _MailboxSheetState extends ConsumerState<MailboxSheet> {
   }
 }
 
-// ------------------------------------------------------------------ From your tools (Today)
+// ------------------------------------------------------------------ Working on (ClickUp in Today, spec 0012 B1)
 
-/// ClickUp tasks and GitHub work, under the list: tick, change a day, add to ClickUp, close an issue.
+/// The ClickUp tasks I'm on right now (working statuses only), with the rest one tap away. While the list is on
+/// its way it breathes; it never says "nothing assigned" before ClickUp has answered (spec 0012 B6).
+class WorkingOnGroup extends ConsumerWidget {
+  const WorkingOnGroup({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final conns = ref.watch(connectionsProvider);
+    final hasCu = (conns.value ?? const []).any((c) => c.provider == 'clickup');
+    if (!hasCu) return const SizedBox.shrink();
+    final async = ref.watch(clickupTasksProvider);
+    final all = async.value;
+    final working = (all ?? const []).where((t) => t['working'] == true).toList();
+    final others = (all?.length ?? 0) - working.length;
+    final timing = ref.watch(clickupTimerProvider).value?['taskId'];
+    return GroupCard(
+      children: [
+        GroupHeader(
+          title: 'Working on',
+          icon: LucideIcons.hammer,
+          count: working.length,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (async.isRefreshing)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: SizedBox.square(
+                    dimension: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.6, color: l.c.faint),
+                  ),
+                ),
+              IconButton(
+                tooltip: 'Which statuses show here',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(LucideIcons.slidersHorizontal, size: 15, color: l.c.muted),
+                onPressed: () => showGlassSheet<void>(context, (_) => const ClickUpStatusesSheet()),
+              ),
+            ],
+          ),
+        ),
+        if (all == null && async.hasError)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 4, 6, 6),
+            child: Row(
+              children: [
+                Expanded(child: Text('ClickUp didn’t answer.', style: OrvText.muted(l))),
+                OrvButton(
+                  label: 'Retry',
+                  small: true,
+                  variant: ButtonVariant.ghost,
+                  onPressed: () => ref.invalidate(clickupTasksProvider),
+                ),
+              ],
+            ),
+          )
+        else if (all == null)
+          const SkeletonRows(count: 2)
+        else ...[
+          if (working.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 2, 6, 6),
+              child: Text(
+                all.isEmpty
+                    ? 'Nothing open is assigned to you in ClickUp.'
+                    : 'Nothing in design or development right now.',
+                style: OrvText.muted(l),
+              ),
+            ),
+          for (final t in working) ClickUpRow(task: t, timing: timing == t['id']),
+        ],
+        InkWell(
+          borderRadius: BorderRadius.circular(OrvTokens.radiusSm),
+          onTap: () => context.push('/clickup'),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 4),
+            child: Row(
+              children: [
+                const ProviderMark(provider: 'clickup', size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    all == null
+                        ? 'All of ClickUp'
+                        : others > 0
+                        ? '$others more in other statuses'
+                        : 'All statuses, done and closed',
+                    style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600, color: l.accent),
+                  ),
+                ),
+                Icon(LucideIcons.chevronRight, size: 16, color: l.accent),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ------------------------------------------------------------------ GitHub in Today
+
+/// My PRs as one line (opens Pull requests), then reviews waiting for me and issues assigned to me.
 class FromYourToolsSection extends ConsumerWidget {
   const FromYourToolsSection({super.key});
 
@@ -182,295 +289,89 @@ class FromYourToolsSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l = context.orv;
     final conns = ref.watch(connectionsProvider).value ?? const [];
-    final hasCu = conns.any((c) => c.provider == 'clickup');
-    final hasGh = conns.any((c) => c.provider == 'github');
-    if (!hasCu && !hasGh) return const SizedBox.shrink();
-    final tasks = ref.watch(clickupTasksProvider).value ?? const [];
-    final work = ref.watch(githubWorkProvider).value ?? const [];
+    if (!conns.any((c) => c.provider == 'github')) return const SizedBox.shrink();
+    final prs = ref.watch(githubPrsProvider);
+    final work = ref.watch(githubWorkProvider);
+    final issues = (work.value ?? const []).where((w) => w['kind'] == 'issue').toList();
+    final reviews = (work.value ?? const []).where((w) => w['kind'] == 'review').toList();
     final toaster = Toaster.of(context);
     final api = ref.read(apiProvider);
     final open = ref.read(urlOpenerProvider);
+    final now = ref.watch(clockProvider)();
 
-    Future<void> setDue(Map<String, dynamic> t) async {
-      final now = DateTime.now();
-      final cur = t['due'] == null ? null : DateTime.parse(t['due'] as String).toLocal();
-      final d = await showDatePicker(
-        context: context,
-        initialDate: cur ?? now,
-        firstDate: now.subtract(const Duration(days: 365)),
-        lastDate: now.add(const Duration(days: 365 * 3)),
-      );
-      if (d == null) return;
-      try {
-        await api.patch<dynamic>('/connections/clickup/tasks/${Uri.encodeComponent(t['id'] as String)}/due', {
-          'connectionId': t['connectionId'],
-          'dueDate': _day(d),
-        });
-        ref.invalidate(clickupTasksProvider);
-        toaster.show('Due ${_short(d)} in ClickUp', tone: ToastTone.success);
-      } catch (_) {
-        toaster.show('ClickUp didn’t take it', tone: ToastTone.danger);
-      }
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: Glass(
-        padding: const EdgeInsets.fromLTRB(14, 10, 6, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    return GroupCard(
+      children: [
+        GroupHeader(title: 'GitHub', icon: LucideIcons.gitBranch, count: reviews.length + issues.length),
+        InkWell(
+          borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+          onTap: () => context.push('/prs'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: Row(
               children: [
-                Expanded(child: Text('FROM YOUR TOOLS', style: OrvText.label(l))),
-                if (hasCu)
-                  TextButton.icon(
-                    icon: const Icon(LucideIcons.listPlus, size: 16),
-                    label: const Text('Add to ClickUp'),
-                    onPressed: () => showGlassSheet<void>(context, (_) => const ClickUpAddSheet()),
-                  ),
-              ],
-            ),
-            if (hasCu) ...[
-              _SubHead(provider: 'clickup', text: 'ClickUp · ${tasks.length} open'),
-              if (tasks.isEmpty) _Quiet('Nothing assigned to you.'),
-              for (final t in tasks.take(10))
-                _ToolRow(
-                  leading: IconButton(
-                    tooltip: 'Done: ${t['name']}',
-                    icon: Icon(LucideIcons.circle, color: l.c.muted),
-                    onPressed: () async {
-                      try {
-                        await api.post<dynamic>(
-                          '/connections/clickup/tasks/${Uri.encodeComponent(t['id'] as String)}/complete',
-                          {'connectionId': t['connectionId']},
-                        );
-                        ref.invalidate(clickupTasksProvider);
-                        toaster.show('Closed in ClickUp', body: t['name'] as String, tone: ToastTone.success);
-                      } catch (_) {
-                        toaster.show('ClickUp didn’t take it', tone: ToastTone.danger);
-                      }
-                    },
-                  ),
-                  title: t['name'] as String,
-                  sub:
-                      '${t['list']} · ${t['status']}${t['due'] == null ? '' : ' · due ${_short(DateTime.parse(t['due'] as String).toLocal())}'}',
-                  onTap: () => open(Uri.parse(t['url'] as String)),
-                  trailing: IconButton(
-                    tooltip: 'Change the due day',
-                    icon: Icon(LucideIcons.calendarClock, size: 18, color: l.c.muted),
-                    onPressed: () => setDue(t),
+                Icon(LucideIcons.gitPullRequest, size: 20, color: l.c.success),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('My pull requests', style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+                      if (prs.hasValue)
+                        Text(prSummary(prs.value!), style: OrvText.muted(l).copyWith(fontSize: 12))
+                      else if (prs.isLoading)
+                        Text('Looking…', style: OrvText.muted(l).copyWith(fontSize: 12, color: l.c.faint)),
+                    ],
                   ),
                 ),
-            ],
-            if (hasGh) ...[
-              _SubHead(provider: 'github', text: 'GitHub · ${work.length} waiting'),
-              if (work.isEmpty) _Quiet('No issues or reviews waiting for you.'),
-              for (final w in work.take(10))
-                _ToolRow(
-                  leading: w['kind'] == 'issue'
-                      ? IconButton(
-                          tooltip: 'Close issue: ${w['title']}',
-                          icon: Icon(LucideIcons.circleDot, color: l.c.muted),
-                          onPressed: () async {
-                            try {
-                              await api.post<dynamic>('/connections/github/issues/close', {
-                                'connectionId': w['connectionId'],
-                                'repo': w['repo'],
-                                'number': w['number'],
-                              });
-                              ref.invalidate(githubWorkProvider);
-                              toaster.show(
-                                'Issue closed on GitHub',
-                                body: '${w['repo']} #${w['number']}',
-                                tone: ToastTone.success,
-                              );
-                            } catch (_) {
-                              toaster.show('GitHub didn’t take it', tone: ToastTone.danger);
-                            }
-                          },
-                        )
-                      : Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Icon(LucideIcons.gitPullRequest, size: 22, color: l.accent),
-                        ),
-                  title: w['title'] as String,
-                  sub: '${w['kind'] == 'review' ? 'Review requested · ' : ''}${w['repo']} #${w['number']}',
-                  onTap: () => open(Uri.parse(w['url'] as String)),
-                ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SubHead extends StatelessWidget {
-  const _SubHead({required this.provider, required this.text});
-  final String provider;
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 6, bottom: 2),
-    child: Row(
-      children: [
-        ProviderMark(provider: provider, size: 18),
-        const SizedBox(width: 8),
-        Text(text, style: OrvText.muted(context.orv).copyWith(fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
-    ),
-  );
-}
-
-class _Quiet extends StatelessWidget {
-  const _Quiet(this.text);
-  final String text;
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Text(text, style: OrvText.muted(context.orv)),
-  );
-}
-
-class _ToolRow extends StatelessWidget {
-  const _ToolRow({required this.leading, required this.title, required this.sub, required this.onTap, this.trailing});
-  final Widget leading;
-  final String title;
-  final String sub;
-  final VoidCallback onTap;
-  final Widget? trailing;
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    return Row(
-      children: [
-        leading,
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: OrvText.body(l), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(sub, style: OrvText.muted(l).copyWith(fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Icon(LucideIcons.chevronRight, size: 16, color: l.c.muted),
               ],
             ),
           ),
         ),
-        ?trailing,
-      ],
-    );
-  }
-}
-
-/// A new ClickUp task in a chosen list, assigned to me, with an optional day.
-class ClickUpAddSheet extends ConsumerStatefulWidget {
-  const ClickUpAddSheet({super.key});
-  @override
-  ConsumerState<ClickUpAddSheet> createState() => _ClickUpAddSheetState();
-}
-
-class _ClickUpAddSheetState extends ConsumerState<ClickUpAddSheet> {
-  final _name = TextEditingController();
-  List<Map<String, dynamic>>? _lists;
-  Map<String, dynamic>? _list;
-  DateTime? _due;
-  bool _busy = false;
-  String? _problem;
-
-  @override
-  void initState() {
-    super.initState();
-    _name.addListener(() => setState(() {}));
-    ref.read(apiProvider).get<List<dynamic>>('/connections/clickup/lists').then((r) {
-      if (!mounted) return;
-      setState(() {
-        _lists = [for (final x in r) Map<String, dynamic>.from(x as Map)];
-        _list = _lists!.firstOrNull;
-      });
-    }, onError: (_) => mounted ? setState(() => _lists = const []) : null);
-  }
-
-  @override
-  void dispose() {
-    _name.dispose();
-    super.dispose();
-  }
-
-  Future<void> _add() async {
-    setState(() {
-      _busy = true;
-      _problem = null;
-    });
-    final toaster = Toaster.of(context);
-    try {
-      await ref.read(apiProvider).post<dynamic>('/connections/clickup/tasks', {
-        'connectionId': _list!['connectionId'],
-        'listId': _list!['id'],
-        'name': _name.text.trim(),
-        'dueDate': _due == null ? null : _day(_due!),
-      });
-      ref.invalidate(clickupTasksProvider);
-      if (mounted) Navigator.of(context).pop();
-      toaster.show('Added to ClickUp', body: _name.text.trim(), tone: ToastTone.success);
-    } catch (e) {
-      setState(() => _problem = messageFor(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    return StickySheet(
-      title: 'Add to ClickUp',
-      footer: Align(
-        alignment: Alignment.centerRight,
-        child: OrvButton(
-          label: 'Add',
-          variant: ButtonVariant.primary,
-          loading: _busy,
-          onPressed: _name.text.trim().isEmpty || _list == null ? null : _add,
-        ),
-      ),
-      children: [
-        OrvField(label: 'Task', controller: _name, autofocus: true, error: _problem),
-        const SizedBox(height: 10),
-        Text('LIST', style: OrvText.label(l)),
-        const SizedBox(height: 6),
-        if (_lists == null)
-          const LinearProgressIndicator(minHeight: 2)
-        else
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+        if (!work.hasValue && work.isLoading) const SkeletonRows(count: 1, dense: true),
+        for (final w in reviews.take(5)) PrRow(pr: {...w, 'state': 'open'}, now: now, review: true),
+        for (final w in issues.take(5))
+          Row(
             children: [
-              for (final x in _lists!)
-                _chip(context, '${x['space']} · ${x['name']}', identical(_list, x), () => setState(() => _list = x)),
+              IconButton(
+                tooltip: 'Close issue: ${w['title']}',
+                icon: Icon(LucideIcons.circleDot, color: l.c.success, size: 19),
+                onPressed: () async {
+                  try {
+                    await api.post<dynamic>('/connections/github/issues/close', {
+                      'connectionId': w['connectionId'],
+                      'repo': w['repo'],
+                      'number': w['number'],
+                    });
+                    ref.invalidate(githubWorkProvider);
+                    toaster.show(
+                      'Issue closed on GitHub',
+                      body: '${w['repo']} #${w['number']}',
+                      tone: ToastTone.success,
+                    );
+                  } catch (_) {
+                    toaster.show('GitHub didn’t take it', tone: ToastTone.danger);
+                  }
+                },
+              ),
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => open(Uri.parse(w['url'] as String)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(w['title'] as String, style: OrvText.body(l), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(
+                        'Assigned issue · ${w['repo']} #${w['number']}',
+                        style: OrvText.muted(l).copyWith(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(child: Text(_due == null ? 'No due day' : 'Due ${_short(_due!)}', style: OrvText.body(l))),
-            TextButton(
-              onPressed: () async {
-                final now = DateTime.now();
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: _due ?? now,
-                  firstDate: now.subtract(const Duration(days: 30)),
-                  lastDate: now.add(const Duration(days: 365 * 3)),
-                );
-                if (d != null) setState(() => _due = d);
-              },
-              child: Text(_due == null ? 'Pick a day' : 'Change'),
-            ),
-          ],
-        ),
       ],
     );
   }

@@ -23,6 +23,13 @@ class TaskItem {
   DateTime? get scheduledStart => _time('scheduledStart');
   DateTime? get completedAt => _time('completedAt');
   String? get projectId => data['projectId'] as String?;
+
+  /// the last day it may be done (spec 0012 A2); separate from [day], the day I plan to do it
+  String? get deadline => data['deadline'] as String?;
+
+  /// 'todo' or 'doing'; done is [completedAt]
+  String get status => (data['status'] as String?) == 'doing' ? 'doing' : 'todo';
+  bool get done => completedAt != null;
   bool get repeats => data['rrule'] != null;
   String? get rrule => data['rrule'] as String?;
   int? get durationMin => (data['durationMin'] as num?)?.toInt();
@@ -63,7 +70,9 @@ TaskGroups groupTasks(List<TaskItem> tasks, DateTime now) {
       if (dayKey(done) == today) g.doneToday.add(t);
       continue;
     }
-    final d = t.day;
+    // no plan day but the deadline has come: it belongs to today (or is overdue), not the Inbox
+    final dl = t.deadline;
+    final d = t.day ?? (dl != null && dl.compareTo(today) <= 0 ? dl : null);
     if (d == null) {
       g.inbox.add(t);
     } else if (d.compareTo(today) < 0) {
@@ -173,4 +182,65 @@ class TodayActions {
     unawaited(sync.sync().catchError((Object _) {})); // offline: the outbox waits for the next sync
     return r;
   }
+}
+
+// ------------------------------------------------------------------ when it was done (spec 0012 A1)
+
+const _wd = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+String clock12(DateTime t) {
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  return '$h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'am' : 'pm'}';
+}
+
+int _daysBetween(DateTime a, DateTime b) =>
+    DateTime.utc(b.year, b.month, b.day).difference(DateTime.utc(a.year, a.month, a.day)).inDays;
+
+/// "Done 3:40 pm", "Done yesterday, 6:10 pm", "Done Mon, 6:10 pm", "Done 18 Nov", "Done 18 Nov 2025" — same words as
+/// `doneLabel` in packages/contracts. [long]: "Done on Mon 18 Nov, 6:10 pm" for the task sheet.
+String doneLabel(DateTime at, DateTime now, {bool long = false}) {
+  final sameYear = at.year == now.year;
+  final date = '${at.day} ${_mo[at.month - 1]}${sameYear ? '' : ' ${at.year}'}';
+  if (long) return 'Done on ${_wd[at.weekday - 1]} $date, ${clock12(at)}';
+  final days = _daysBetween(at, now);
+  if (days <= 0) return 'Done ${clock12(at)}';
+  if (days == 1) return 'Done yesterday, ${clock12(at)}';
+  if (days < 7) return 'Done ${_wd[at.weekday - 1]}, ${clock12(at)}';
+  return 'Done $date';
+}
+
+/// The header a done task sits under: "Today", "Yesterday", "Mon 18 Nov", "Tue 18 Nov 2025".
+String doneDayHeader(DateTime at, DateTime now) {
+  final days = _daysBetween(at, now);
+  if (days <= 0) return 'Today';
+  if (days == 1) return 'Yesterday';
+  return '${_wd[at.weekday - 1]} ${at.day} ${_mo[at.month - 1]}${at.year == now.year ? '' : ' ${at.year}'}';
+}
+
+/// "Fri 20 Nov" for a YYYY-MM-DD, "Today"/"Tomorrow"/"Yesterday" when near.
+String dayWords(String day, DateTime now) {
+  final d = DateTime.parse(day);
+  final n = _daysBetween(now, d);
+  if (n == 0) return 'Today';
+  if (n == 1) return 'Tomorrow';
+  if (n == -1) return 'Yesterday';
+  if (n > 1 && n < 7) return _wd[d.weekday - 1];
+  return '${_wd[d.weekday - 1]} ${d.day} ${_mo[d.month - 1]}${d.year == now.year ? '' : ' ${d.year}'}';
+}
+
+/// How close a deadline is: 'past', 'near' (today … 2 days), or null.
+String? deadlineTone(String? deadline, DateTime now) {
+  if (deadline == null) return null;
+  final n = _daysBetween(now, DateTime.parse(deadline));
+  if (n < 0) return 'past';
+  if (n <= 2) return 'near';
+  return null;
+}
+
+String durationWords(int min) {
+  if (min < 60) return '${min}m';
+  final h = min ~/ 60;
+  final m = min % 60;
+  return m == 0 ? '${h}h' : '${h}h ${m}m';
 }

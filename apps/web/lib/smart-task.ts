@@ -67,11 +67,19 @@ export function chipLabel(span: Span, p: Parsed, projects: { id: string; name: s
       return p.projectId
         ? (projects.find((x) => x.id === p.projectId)?.name ?? span.text)
         : `${span.text.slice(1)} (new project)`;
+    case 'deadline':
+      return p.deadline
+        ? `by ${new Date(`${p.deadline}T12:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}`
+        : span.text;
+    case 'notes': {
+      const n = p.notes ?? '';
+      return n.length > 24 ? `${n.slice(0, 24)}…` : n;
+    }
   }
 }
 
-/** Fields for a new task from a parse (the server fills the rest). */
-export function taskFields(p: Parsed, fallbackDay: string | null): Partial<Task> & { title: string } {
+/** Fields for a new task from a parse (the server fills the rest). No day written → the Inbox (spec 0012 A5). */
+export function taskFields(p: Parsed, fallbackDay: string | null = null): Partial<Task> & { title: string } {
   const timed = !!p.dueAt;
   return {
     title: p.title,
@@ -82,5 +90,7 @@ export function taskFields(p: Parsed, fallbackDay: string | null): Partial<Task>
     priority: p.priority,
     tags: p.tags,
     projectId: p.projectId,
+    ...(p.deadline ? { deadline: p.deadline } : {}),
+    ...(p.notes ? { notes: p.notes } : {}),
   };
 }

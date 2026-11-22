@@ -101,6 +101,15 @@ ThemeData materialTheme(OrvLook l) {
     fontFamily: fontFamily,
     scaffoldBackgroundColor: Colors.transparent,
     splashFactory: NoSplash.splashFactory,
+    // no Material outline or underline ever draws inside ORVYN's own field boxes (spec 0012 U)
+    inputDecorationTheme: const InputDecorationTheme(
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+    ),
     textSelectionTheme: TextSelectionThemeData(cursorColor: l.accent, selectionColor: l.accent.withValues(alpha: 0.3)),
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {TargetPlatform.android: FadeForwardsPageTransitionsBuilder()},

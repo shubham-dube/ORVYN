@@ -17,6 +17,8 @@ import '../features/vault_screen.dart';
 import '../features/gallery_screen.dart';
 import '../features/home_screen.dart';
 import '../features/settings_screen.dart';
+import '../features/clickup.dart' show ClickUpScreen;
+import '../features/prs.dart' show PrsScreen;
 import '../features/today_screen.dart';
 import '../features/today_settings_screen.dart';
 import '../features/shell.dart';
@@ -66,6 +68,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/people', builder: (_, _) => const PeopleScreen()),
       GoRoute(path: '/mail', builder: (_, _) => const MailScreen()),
+      GoRoute(path: '/clickup', builder: (_, _) => const ClickUpScreen()),
+      GoRoute(path: '/prs', builder: (_, _) => const PrsScreen()),
       GoRoute(
         path: '/chat/:id',
         builder: (_, s) => ChatThreadScreen(id: s.pathParameters['id']!),

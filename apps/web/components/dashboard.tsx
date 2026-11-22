@@ -520,7 +520,7 @@ export function QuickAddCard() {
                 ? 'spent 240 on lunch yesterday'
                 : 'A link, a thought, something to sort out…'
           }
-          className="h-11 flex-1 rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[15px] outline-none placeholder:text-orv-faint"
+          className="h-11 flex-1 rounded-orv-md field-ring px-3 text-[15px] outline-none placeholder:text-orv-faint"
         />
         <Button type="submit" variant="primary" disabled={!text.trim() || (mode === 'expense' && !spend)}>
           Add

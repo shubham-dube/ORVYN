@@ -14,27 +14,35 @@ test('Tasks: steps, tags, repeat, projects, search, saved filters, board, and bu
   await expect(page.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
   await page.waitForLoadState('networkidle');
 
-  // a task with everything on it
+  // a task with everything on it: the sheet stays short, each thing opens from its pill or "+" row (spec 0012 A3)
   await page.getByLabel('New task').fill('Plan offsite');
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Plan offsite' }).first().click();
   const sheet = page.getByRole('dialog', { name: 'Task' });
+  await sheet.getByRole('button', { name: 'When' }).click();
   await sheet.getByLabel('Day', { exact: true }).fill(day());
+  await sheet.getByRole('button', { name: 'Tags' }).click();
   await sheet.getByLabel('Add tag').fill('work');
   await sheet.getByLabel('Add tag').press('Enter');
   await sheet.getByLabel('Add tag').fill('urgent');
   await sheet.getByLabel('Add tag').press('Enter');
+  await sheet.getByRole('button', { name: 'Checklist' }).click();
   await sheet.getByLabel('Add a step').fill('book venue');
   await sheet.getByLabel('Add a step').press('Enter');
   await sheet.getByLabel('Add a step').fill('send invite');
   await sheet.getByLabel('Add a step').press('Enter');
   await sheet.getByLabel('Done: book venue').check();
   await expect(sheet.getByText('1/2')).toBeVisible();
-  await sheet.getByLabel('Takes').selectOption('60');
-  await sheet.getByRole('radio', { name: 'High' }).click();
-  await sheet.getByLabel('Or start a new one').fill('Offsite');
-  await sheet.getByRole('button', { name: 'Add', exact: true }).click();
+  await sheet.getByRole('button', { name: 'Duration' }).click();
+  await page.getByRole('option', { name: '1h', exact: true }).click();
+  await sheet.getByRole('button', { name: 'Priority' }).click();
+  await page.getByRole('option', { name: /^High/ }).click();
+  page.once('dialog', (d) => void d.accept('Offsite'));
+  await sheet.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('option', { name: 'New project…' }).click();
+  await expect(sheet.getByRole('button', { name: 'Offsite' })).toBeVisible();
   // a repeat: every week, with the words and the next dates
+  await sheet.getByRole('button', { name: 'Repeat' }).click();
   await sheet.getByRole('radio', { name: 'Weekly' }).click();
   await expect(sheet.getByText(/^Every week on /)).toBeVisible();
   await expect(sheet.getByText(/^Next: /)).toBeVisible();
@@ -49,8 +57,9 @@ test('Tasks: steps, tags, repeat, projects, search, saved filters, board, and bu
   await expect(row).toBeVisible();
   await expect(row.getByText('#work')).toBeVisible();
   await expect(row.getByText('1/2')).toBeVisible();
-  await expect(row.getByText('· Offsite')).toBeVisible();
-  await expect(row.getByText('repeats')).toBeVisible();
+  await expect(row.getByText('Offsite')).toBeVisible();
+  await expect(row.getByText('1h')).toBeVisible();
+  await expect(row.getByLabel('Repeats')).toBeVisible();
   await expect(row.getByLabel('High priority')).toBeVisible();
 
   // search and filters
@@ -87,34 +96,39 @@ test('Tasks: steps, tags, repeat, projects, search, saved filters, board, and bu
     .click(); // off again
   await expect(page.getByLabel('Tag filter')).toHaveValue('');
 
-  // the board: a column per project
+  // the board: a column per status; the project pill narrows it
   await page.getByRole('radio', { name: 'Board' }).click();
   await expect(
-    page.getByRole('listitem', { name: /^Offsite, 1 tasks?$/ }).getByText('Plan offsite'),
+    page.getByRole('region', { name: /^To do, \d+ tasks?$/ }).getByText('Plan offsite'),
   ).toBeVisible();
+  await expect(page.getByRole('region', { name: /^Doing, 0 tasks$/ })).toBeVisible();
 
-  // bulk: two tasks into the project at once
+  // select: two tasks into the project at once, from the floating bar
   await page.getByRole('radio', { name: 'List' }).click();
-  for (const t of ['Buy milk', 'Buy bread']) {
+  for (const t of ['Buy milk today', 'Buy bread today']) {
     await page.getByLabel('New task').fill(t);
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('button', { name: t }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: t.replace(' today', '') }).first()).toBeVisible();
   }
   await page.getByRole('button', { name: 'Select' }).click();
   await page.getByRole('button', { name: 'Buy milk' }).first().click();
   await page.getByRole('button', { name: 'Buy bread' }).first().click();
-  const bulk = page.getByLabel('Bulk actions');
-  await expect(bulk.getByText('2 selected')).toBeVisible();
-  await bulk.getByLabel('Move to project').selectOption({ label: 'Offsite' });
+  await expect(page.getByText('2 selected')).toBeVisible();
+  const bar = page.getByRole('toolbar', { name: 'Selected tasks' });
+  await bar.getByRole('button', { name: 'Project' }).click();
+  await page.getByRole('option', { name: 'Offsite' }).click();
   await page.getByRole('radio', { name: 'Board' }).click();
-  await expect(page.getByRole('listitem', { name: /^Offsite, 3 tasks$/ })).toBeVisible();
+  await page.getByRole('button', { name: 'All projects' }).click();
+  await page.getByRole('option', { name: 'Offsite' }).click();
+  await expect(page.getByRole('region', { name: /^To do, 3 tasks$/ })).toBeVisible();
 
   // clean up: delete all three in one go
   await page.getByRole('radio', { name: 'List' }).click();
   await page.getByRole('button', { name: 'Select' }).click();
   for (const t of ['Plan offsite', 'Buy milk', 'Buy bread'])
     await page.getByRole('button', { name: t }).first().click();
-  await page.getByLabel('Bulk actions').getByRole('button', { name: 'Delete' }).click();
+  page.once('dialog', (d) => void d.accept());
+  await page.getByRole('toolbar', { name: 'Selected tasks' }).getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByRole('button', { name: 'Buy milk' })).toHaveCount(0);
   // remove the saved filter
   await page.getByRole('button', { name: 'Delete filter Urgent work' }).click();

@@ -66,6 +66,8 @@ export const todayTasks = pgTable(
     completedAt: ts('completed_at'),
     lastDoneAt: ts('last_done_at'),
     source: text('source').notNull().default('typed'),
+    deadline: text('deadline'),
+    status: text('status').notNull().default('todo'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: ts('deleted_at'),

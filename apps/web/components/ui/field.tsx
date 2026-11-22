@@ -11,13 +11,29 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
     <input
       ref={ref}
       className={cn(
-        'h-12 w-full rounded-orv-md border border-orv-edge bg-orv-field px-4 text-[16px] text-orv-text placeholder:text-orv-faint outline-none transition-shadow focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--orv-accent)_28%,transparent)]',
+        'field-ring h-12 w-full rounded-orv-md px-4 text-[16px] text-orv-text placeholder:text-orv-faint outline-none disabled:opacity-55',
         className,
       )}
       {...rest}
     />
   );
 });
+
+/** A multi-line field with the same look as Input. */
+export const TextArea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function TextArea({ className, ...rest }, ref) {
+    return (
+      <textarea
+        ref={ref}
+        className={cn(
+          'field-ring w-full rounded-orv-md p-3 text-[15px] text-orv-text placeholder:text-orv-faint outline-none',
+          className,
+        )}
+        {...rest}
+      />
+    );
+  },
+);
 
 export function Field({
   label,
@@ -91,7 +107,7 @@ export function CodeInput({
               set(value.slice(0, i - 1));
             }
           }}
-          className="tabular h-14 w-full min-w-0 rounded-orv-md border border-orv-edge bg-orv-field text-center font-mono text-2xl font-semibold text-orv-text outline-none transition-shadow focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--orv-accent)_28%,transparent)]"
+          className="field-ring tabular h-14 w-full min-w-0 rounded-orv-md text-center font-mono text-2xl font-semibold text-orv-text outline-none"
         />
       ))}
     </div>

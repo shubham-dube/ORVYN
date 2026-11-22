@@ -504,35 +504,31 @@ class _ChatThreadScreenState extends ConsumerState<ChatThreadScreen> {
                                 },
                         ),
                         Expanded(
-                          child: TextField(
-                            key: const Key('chat-text'),
-                            controller: _text,
-                            minLines: 1,
-                            maxLines: 5,
-                            style: OrvText.body(l),
-                            onChanged: (_) {
-                              if (DateTime.now().difference(_lastTyping).inSeconds > 3) {
-                                _lastTyping = DateTime.now();
-                                unawaited(
-                                  ref
-                                      .read(apiProvider)
-                                      .post<dynamic>('/chat/conversations/${widget.id}/typing')
-                                      .then((_) {}, onError: (_) {}),
-                                );
-                              }
-                            },
-                            decoration: InputDecoration(
-                              isDense: true,
-                              filled: true,
-                              fillColor: l.c.field,
-                              hintText: 'Message',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(22),
-                                borderSide: BorderSide(color: l.c.edge),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(22),
-                                borderSide: BorderSide(color: l.c.edge),
+                          child: FocusRing(
+                            radius: 22,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: TextField(
+                              key: const Key('chat-text'),
+                              controller: _text,
+                              minLines: 1,
+                              maxLines: 5,
+                              style: OrvText.body(l),
+                              onChanged: (_) {
+                                if (DateTime.now().difference(_lastTyping).inSeconds > 3) {
+                                  _lastTyping = DateTime.now();
+                                  unawaited(
+                                    ref
+                                        .read(apiProvider)
+                                        .post<dynamic>('/chat/conversations/${widget.id}/typing')
+                                        .then((_) {}, onError: (_) {}),
+                                  );
+                                }
+                              },
+                              decoration: bareInput(
+                                l,
+                                hint: 'Message',
+                                fontSize: 15,
+                                padding: const EdgeInsets.symmetric(vertical: 11),
                               ),
                             ),
                           ),

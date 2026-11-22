@@ -219,7 +219,7 @@ function People({
   return (
     <div className="flex flex-col gap-3">
       {users.length > 6 ? (
-        <label className="glass-pane flex items-center gap-2 px-3">
+        <label className="field-ring flex items-center gap-2 rounded-orv-md px-3">
           <Search size={16} className="text-orv-muted" aria-hidden />
           <input
             value={q}
@@ -749,7 +749,7 @@ function Activity({ users }: { users: AdminUserView[] }) {
   if (!rows) return <SkeletonRows rows={6} label="Loading activity" />;
   return (
     <div className="flex flex-col gap-4">
-      <label className="glass-pane flex items-center gap-2 px-3">
+      <label className="field-ring flex items-center gap-2 rounded-orv-md px-3">
         <Search size={16} className="text-orv-muted" aria-hidden />
         <input
           value={q}

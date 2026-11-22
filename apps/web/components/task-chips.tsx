@@ -1,7 +1,18 @@
 'use client';
 
 import type { Parsed, SpanKind } from '@orvyn/today-parse';
-import { CalendarDays, Clock, Flag, Folder, Hash, Repeat, Timer, X } from 'lucide-react';
+import {
+  CalendarDays,
+  Clock,
+  Flag,
+  FlagTriangleRight,
+  Folder,
+  Hash,
+  Repeat,
+  StickyNote,
+  Timer,
+  X,
+} from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { ReactNode } from 'react';
 import { spring } from '@/lib/motion';
@@ -15,6 +26,8 @@ const ICON: Record<SpanKind, ReactNode> = {
   priority: <Flag size={12} aria-hidden />,
   tag: <Hash size={12} aria-hidden />,
   project: <Folder size={12} aria-hidden />,
+  deadline: <FlagTriangleRight size={12} aria-hidden />,
+  notes: <StickyNote size={12} aria-hidden />,
 };
 
 /** What ORVYN understood, as chips. Removing one makes that part plain text again (it stays in the title). */

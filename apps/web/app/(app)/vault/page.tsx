@@ -109,7 +109,7 @@ function Setup({ recovery, setRecovery }: { recovery: string | null; setRecovery
           nobody can. It is shown once. Print it or write it down and keep it somewhere safe.
         </p>
         <p
-          className="select-all rounded-orv-md border border-orv-edge bg-orv-field p-4 text-center font-mono text-[18px] tracking-wider"
+          className="select-all rounded-orv-md field-ring p-4 text-center font-mono text-[18px] tracking-wider"
           data-testid="recovery-key"
         >
           {recovery}
@@ -606,7 +606,7 @@ function ItemSheet({
           {!state.id ? (
             <select
               aria-label="Kind"
-              className="h-11 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px]"
+              className="h-11 w-full rounded-orv-md field-ring px-3 text-[14px]"
               value={d.kind}
               onChange={(e) => setD({ ...d, kind: e.target.value as VaultKind, fields: {} })}
             >
@@ -637,7 +637,7 @@ function ItemSheet({
                     rows={4}
                     value={d.fields[f.key] ?? ''}
                     onChange={(e) => set(f.key, e.target.value)}
-                    className="w-full rounded-orv-md border border-orv-edge bg-orv-field p-3 font-mono text-[14px] outline-none"
+                    className="w-full rounded-orv-md field-ring p-3 font-mono text-[14px] outline-none"
                   />
                 ) : (
                   <div className="flex gap-2">

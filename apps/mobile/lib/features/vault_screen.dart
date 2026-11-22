@@ -432,26 +432,24 @@ class _OpenState extends ConsumerState<_Open> {
         Row(
           children: [
             Expanded(
-              child: TextField(
-                key: const Key('vault-search'),
-                controller: _search,
-                onChanged: (_) => setState(() {}),
-                style: OrvText.body(l),
-                decoration: InputDecoration(
-                  isDense: true,
-                  filled: true,
-                  fillColor: l.c.field,
-                  prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-                  hintText: 'Titles, usernames, websites',
-                  hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: l.c.edge),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: l.c.edge),
-                  ),
+              child: FocusRing(
+                radius: 14,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: TextField(
+                  key: const Key('vault-search'),
+                  controller: _search,
+                  onChanged: (_) => setState(() {}),
+                  style: OrvText.body(l),
+                  decoration:
+                      bareInput(
+                        l,
+                        hint: 'Titles, usernames, websites',
+                        fontSize: 15,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ).copyWith(
+                        prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                        prefixIconConstraints: const BoxConstraints(minWidth: 30),
+                      ),
                 ),
               ),
             ),

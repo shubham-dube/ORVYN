@@ -36,7 +36,7 @@ export default function LibraryPage() {
   );
 }
 
-const sel = 'h-11 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px] text-orv-text';
+const sel = 'h-11 w-full rounded-orv-md field-ring px-3 text-[14px] text-orv-text';
 
 function LibraryView() {
   const { ready, docs, addFile } = useLibrary();
@@ -367,7 +367,7 @@ function DocSheet({ doc, onClose }: { doc: LibraryDoc | null; onClose(): void })
               rows={3}
               value={d.summary}
               onChange={(ev) => setD({ ...d, summary: ev.target.value })}
-              className="w-full rounded-orv-md border border-orv-edge bg-orv-field p-3 text-[14px] outline-none"
+              className="w-full rounded-orv-md field-ring p-3 text-[14px] outline-none"
             />
           )}
         </Field>
@@ -379,7 +379,7 @@ function DocSheet({ doc, onClose }: { doc: LibraryDoc | null; onClose(): void })
                 rows={6}
                 value={d.text}
                 onChange={(ev) => setD({ ...d, text: ev.target.value })}
-                className="w-full rounded-orv-md border border-orv-edge bg-orv-field p-3 text-[14px] outline-none"
+                className="w-full rounded-orv-md field-ring p-3 text-[14px] outline-none"
               />
             )}
           </Field>
@@ -528,7 +528,7 @@ function NoteSheet({ open, onClose }: { open: boolean; onClose(): void }) {
               autoFocus
               value={text}
               onChange={(e) => setText(e.target.value)}
-              className="w-full rounded-orv-md border border-orv-edge bg-orv-field p-3 text-[15px] outline-none"
+              className="w-full rounded-orv-md field-ring p-3 text-[15px] outline-none"
             />
           )}
         </Field>

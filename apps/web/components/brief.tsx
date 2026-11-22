@@ -272,7 +272,7 @@ export function BriefSettingsSheet({
             aria-label="Brief time"
             value={s.at}
             onChange={(e) => setS({ ...s, at: e.target.value || '07:30' })}
-            className="h-9 rounded-orv-md border border-orv-edge bg-orv-field px-2 text-[14px]"
+            className="h-9 rounded-orv-md field-ring px-2 text-[14px]"
           />
           <Switch label="Morning Brief" checked={s.enabled} onChange={(v) => setS({ ...s, enabled: v })} />
         </div>
@@ -324,7 +324,7 @@ export function BriefSettingsSheet({
                 value={s.nudges.max}
                 disabled={!s.nudges.enabled}
                 onChange={(e) => setS({ ...s, nudges: { ...s.nudges, max: Number(e.target.value) } })}
-                className="h-9 rounded-orv-md border border-orv-edge bg-orv-field px-2 text-[14px]"
+                className="h-9 rounded-orv-md field-ring px-2 text-[14px]"
               >
                 {[1, 2, 3, 4, 5].map((n) => (
                   <option key={n} value={n}>

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CalendarModule } from '../calendar/calendar.module';
 import { ClickUpClient } from './clickup.client';
+import { ClickUpHub } from './clickup.hub';
 import { ConnectionsController } from './connections.controller';
 import { ConnectionsService } from './connections.service';
 import { ConnectionsWatcher } from './connections.watcher';
@@ -14,6 +15,7 @@ import { ImapMailbox, Mailbox } from './mailbox';
     ConnectionsService,
     ConnectionsWatcher,
     ClickUpClient,
+    ClickUpHub,
     GitHubClient,
     { provide: Mailbox, useClass: ImapMailbox },
   ],

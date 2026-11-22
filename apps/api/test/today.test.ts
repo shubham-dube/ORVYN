@@ -45,6 +45,25 @@ beforeAll(async () => {
 afterAll(() => h.close());
 
 describe('Today: projects and tasks over sync', () => {
+  it('a deadline and a status (spec 0012 A2): stored, synced, defaulted, and checked', async () => {
+    const id = v7();
+    const r = await push(phone, [task(id, { title: 'Tax return', deadline: '2026-12-31', status: 'doing' })]);
+    expect(r.body.rejected).toEqual([]);
+    const got = (await pullAll(laptop)).changes.find((c: any) => c.entityId === id).data;
+    expect(got).toMatchObject({ deadline: '2026-12-31', status: 'doing', dueDate: null });
+    // an older device that knows neither field: the defaults fill in
+    const old = v7();
+    await push(phone, [task(old, { title: 'Old client' })]);
+    const o = (await pullAll(laptop)).changes.find((c: any) => c.entityId === old).data;
+    expect(o).toMatchObject({ deadline: null, status: 'todo' });
+    // nonsense is refused
+    const bad = await push(phone, [
+      task(v7(), { title: 'x', status: 'someday' }),
+      task(v7(), { title: 'y', deadline: '31/12' }),
+    ]);
+    expect(bad.body.rejected).toHaveLength(2);
+  });
+
   it('a task with a project, due moment and reminders round-trips with defaults filled in', async () => {
     const project = v7();
     const id = v7();

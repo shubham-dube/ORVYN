@@ -23,13 +23,15 @@ class ParsedTask {
   List<String> get tags => [for (final t in (raw['tags'] as List? ?? const [])) t as String];
   String? get projectId => raw['projectId'] as String?;
   String? get projectName => raw['projectName'] as String?;
+  String? get deadline => raw['deadline'] as String?;
+  String? get notes => raw['notes'] as String?;
   List<ParsedSpan> get spans => [
     for (final s in (raw['spans'] as List? ?? const []).cast<Map<String, dynamic>>())
       ParsedSpan(s['kind'] as String, s['text'] as String, (s['start'] as num).toInt(), (s['end'] as num).toInt()),
   ];
 
-  /// Task fields for a new task; [fallbackDay] when nothing in the text named a day.
-  Map<String, dynamic> fields(String? fallbackDay) => {
+  /// Task fields for a new task. Nothing about a day written = the Inbox (spec 0012 A5), unless [fallbackDay].
+  Map<String, dynamic> fields([String? fallbackDay]) => {
     'title': title,
     'dueAt': dueAt,
     'dueDate': dueAt != null ? null : (dueDate ?? fallbackDay),
@@ -38,6 +40,8 @@ class ParsedTask {
     'priority': priority,
     'tags': tags,
     'projectId': projectId,
+    'deadline': ?deadline,
+    'notes': ?notes,
   };
 }
 
@@ -100,6 +104,11 @@ String chipLabel(ParsedSpan s, ParsedTask p, String Function(DateTime) day, Stri
       return const ['No priority', 'Low', 'Medium', 'High'][p.priority.clamp(0, 3)];
     case 'project':
       return p.projectId != null ? s.text.substring(1) : '${s.text.substring(1)} (new project)';
+    case 'deadline':
+      return p.deadline == null ? s.text : 'by ${day(DateTime.parse(p.deadline!))}';
+    case 'notes':
+      final n = p.notes ?? '';
+      return n.length > 24 ? '${n.substring(0, 24)}…' : n;
     default:
       return s.text;
   }

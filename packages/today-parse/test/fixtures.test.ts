@@ -18,6 +18,8 @@ function actual(input: string): Expect {
   if (p.priority) e.p = p.priority;
   if (p.tags.length) e.tags = p.tags;
   if (p.projectId) e.project = p.projectId;
+  if (p.deadline) e.dl = p.deadline;
+  if (p.notes) e.notes = p.notes;
   return e;
 }
 
@@ -51,5 +53,7 @@ function canonical(w: Expect): Expect {
   if (w.p) e.p = w.p;
   if (w.tags?.length) e.tags = w.tags;
   if (w.project) e.project = w.project;
+  if (w.dl) e.dl = w.dl;
+  if (w.notes) e.notes = w.notes;
   return e;
 }

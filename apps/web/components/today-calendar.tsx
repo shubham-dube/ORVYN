@@ -700,7 +700,7 @@ function PlanSheet({ plan, onClose }: { plan: Plan | null; onClose(): void }) {
 
 // ================================================================== creating and editing events
 
-interface EventDraft {
+export interface EventDraft {
   /** the stored row being edited (null = new) */
   id: string | null;
   /** when editing one occurrence of a series */
@@ -740,7 +740,7 @@ function newDraft(day: string, minutes: number, settings: TodaySettingsFields | 
   };
 }
 
-function draftFrom(events: CalEvent[], i: Instance): EventDraft {
+export function draftFrom(events: CalEvent[], i: Instance): EventDraft {
   const row = events.find((e) => e.id === i.eventId)!;
   const series = i.seriesId ? (events.find((e) => e.id === i.seriesId) ?? row) : row;
   const s = i.start ? new Date(i.start) : null;
@@ -783,7 +783,7 @@ function fieldsOf(d: EventDraft): Partial<CalEvent> {
 }
 const toMinutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 
-function EventSheet({ draft, onClose }: { draft: EventDraft | null; onClose(): void }) {
+export function EventSheet({ draft, onClose }: { draft: EventDraft | null; onClose(): void }) {
   const { events, calendars, addEvent, updateEvent, removeEvent } = useToday();
   const toast = useToast();
   const [d, setD] = useState<EventDraft | null>(draft);

@@ -9,8 +9,16 @@ import { AiBadAnswer, AiOff, AiPaused, AiService } from '../ai/ai.service';
 import { NotifyService } from '../notify/notify.service';
 import { todaySettings } from '../today/today.schema';
 import { TokenBox } from '../calendar/token-box';
+import { googleProblem } from '../calendar/google.client';
 import { ClickUpClient, ClickUpError } from './clickup.client';
-import { GitHubClient, GitHubError } from './github.client';
+import { ClickUpHub } from './clickup.hub';
+import {
+  type ChecksState,
+  GitHubClient,
+  GitHubError,
+  type GitHubItem,
+  type ReviewState,
+} from './github.client';
 import { MAIL_PROVIDERS, Mailbox, type MailItem } from './mailbox';
 import { connections } from './connections.schema';
 
@@ -27,7 +35,11 @@ export const PROVIDERS = [
   {
     id: 'clickup',
     name: 'ClickUp',
-    gives: ['Your open tasks in Today', 'Add tasks and change due dates', 'Tick them done from ORVYN'],
+    gives: [
+      'What you’re working on, in Today',
+      'Every status, comments and time tracking without opening ClickUp',
+      'Change status, due date and priority; start and stop the timer',
+    ],
     how: 'token',
     tokenHelp: 'ClickUp → avatar → Settings → Apps → API Token (starts with pk_).',
   },
@@ -35,13 +47,13 @@ export const PROVIDERS = [
     id: 'github',
     name: 'GitHub',
     gives: [
+      'Your pull requests: open, merged, closed — with reviews and checks',
       'Issues assigned to you and reviews waiting for you, in Today',
-      'Close issues from ORVYN',
-      'A ping when something new lands',
+      'A ping when your PR is merged or needs changes',
     ],
     how: 'token',
     tokenHelp:
-      'github.com → Settings → Developer settings → Personal access tokens → Fine-grained: repository access as you like, permissions Issues: read & write, Pull requests: read.',
+      'github.com → Settings → Developer settings → Personal access tokens → Fine-grained: repository access as you like, permissions Issues: read & write, Pull requests: read, Commit statuses: read (for checks).',
   },
   {
     id: 'mail',
@@ -74,6 +86,7 @@ export class ConnectionsService {
     private readonly mailbox: Mailbox,
     private readonly notify: NotifyService,
     private readonly ai: AiService,
+    private readonly hub: ClickUpHub,
   ) {}
 
   providers() {
@@ -164,55 +177,12 @@ export class ConnectionsService {
     return r.length > 0;
   }
 
-  /** Open ClickUp tasks assigned to the person, across every connected ClickUp account and workspace. */
-  async clickupTasks(ownerId: string) {
-    const rows = await this.db
-      .select()
-      .from(connections)
-      .where(and(eq(connections.ownerId, ownerId), eq(connections.provider, 'clickup')));
-    const out: {
-      id: string;
-      connectionId: string;
-      account: string;
-      workspace: string;
-      name: string;
-      url: string;
-      status: string;
-      list: string;
-      due: string | null;
-      priority: string | null;
-    }[] = [];
-    for (const r of rows) {
-      const meta = r.meta as { userId: string; teams: { id: string; name: string }[] };
-      try {
-        const token = await this.box.open(r.secretEnc);
-        for (const team of meta.teams ?? []) {
-          for (const t of await this.clickup.myTasks(token, team.id, meta.userId))
-            out.push({
-              id: t.id,
-              connectionId: r.id,
-              account: r.label,
-              workspace: team.name,
-              name: t.name,
-              url: t.url,
-              status: t.status.status,
-              list: t.list.name,
-              due: t.due_date ? new Date(Number(t.due_date)).toISOString() : null,
-              priority: t.priority?.priority ?? null,
-            });
-        }
-        if (r.lastError) await this.mark(r, null);
-      } catch (e) {
-        this.log.warn(`clickup ${r.id}: ${(e as Error).message}`);
-        await this.mark(
-          r,
-          e instanceof ClickUpError && e.status === 401
-            ? 'The token was revoked. Connect again.'
-            : 'ClickUp didn’t answer.',
-        );
-      }
-    }
-    return out.sort((a, b) => (a.due ?? '9').localeCompare(b.due ?? '9'));
+  /**
+   * Open ClickUp tasks assigned to the person, across every connected ClickUp account and workspace, each marked
+   * `working` or not (spec 0012 B1). Served from a short cache so Today never waits on ClickUp.
+   */
+  async clickupTasks(ownerId: string, o: { fresh?: boolean } = {}) {
+    return (await this.hub.openTasks(ownerId, o)).tasks;
   }
 
   async completeClickUp(ownerId: string, connectionId: string, taskId: string): Promise<boolean> {
@@ -228,6 +198,7 @@ export class ConnectionsService {
       );
     if (!r) return false;
     await this.clickup.complete(await this.box.open(r.secretEnc), taskId);
+    this.hub.invalidate(r.id);
     return true;
   }
 
@@ -342,6 +313,67 @@ export class ConnectionsService {
       }
     }
     return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  private readonly prCache = new Map<string, { at: number; prs: Pr[] }>();
+
+  /**
+   * My pull requests across every GitHub account (spec 0012 G): open ones with their review and checks, and those
+   * merged or closed in the last 30 days. Cached for 2 minutes per account.
+   */
+  async githubPrs(ownerId: string, o: { fresh?: boolean } = {}): Promise<Pr[]> {
+    const out: Pr[] = [];
+    for (const r of await this.rows(ownerId, 'github')) {
+      const c = this.prCache.get(r.id);
+      if (!o.fresh && c && Date.now() - c.at < 2 * 60_000) {
+        out.push(...c.prs);
+        continue;
+      }
+      try {
+        const token = await this.box.open(r.secretEnc);
+        const since = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+        const mine = await this.github.myPrs(token, since);
+        const open = await Promise.all(
+          mine.open.slice(0, 20).map(async (i) => {
+            const repo = GitHubClient.repoOf(i.repository_url);
+            const [review, checks] = await Promise.all([
+              this.github.reviewState(token, repo, i.number).catch(() => 'pending' as const),
+              this.github.checks(token, repo, i.number).catch(() => 'none' as const),
+            ]);
+            return prOf(r, i, 'open', review, checks);
+          }),
+        );
+        const closed = mine.closed.map((i) =>
+          prOf(r, i, i.pull_request?.merged_at ? 'merged' : 'closed', null, null),
+        );
+        const prs = [...open, ...closed];
+        this.prCache.set(r.id, { at: Date.now(), prs });
+        out.push(...prs);
+        if (r.lastError) await this.mark(r, null);
+      } catch (e) {
+        this.log.warn(`github prs ${r.id}: ${(e as Error).message}`);
+        if (c) out.push(...c.prs);
+        await this.mark(
+          r,
+          e instanceof GitHubError && e.status === 401
+            ? 'The token was revoked or expired. Connect again.'
+            : 'GitHub didn’t answer.',
+        );
+      }
+    }
+    return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  /** Which PR changes ping me (spec 0012 G; defaults D-0012-5: merged and changes requested). */
+  async setGitHubPings(ownerId: string, connectionId: string, pings: Partial<PrPings>): Promise<boolean> {
+    const r = await this.one(ownerId, connectionId, 'github');
+    if (!r) return false;
+    const meta = r.meta as { pings?: PrPings };
+    await this.db
+      .update(connections)
+      .set({ meta: { ...r.meta, pings: { ...PR_PINGS, ...meta.pings, ...pings } } })
+      .where(and(eq(connections.id, r.id), eq(connections.ownerId, ownerId)));
+    return true;
   }
 
   async closeIssue(ownerId: string, connectionId: string, repo: string, number: number): Promise<boolean> {
@@ -469,8 +501,9 @@ export class ConnectionsService {
           provider: 'gmail',
           unread: 0,
           items: [],
-          problem: (e as Error).message,
+          problem: googleProblem(e),
         });
+        this.log.warn(`gmail ${g.id}: ${(e as Error).message}`);
       }
     }
     for (const r of await this.rows(ownerId, 'mail')) {
@@ -519,7 +552,8 @@ export class ConnectionsService {
     const parsed = parseTask(subject, { now: new Date(), timeZone: tz });
     let out = {
       title: parsed.title || subject,
-      dueDate: parsed.dueAt ? null : parsed.dueDate,
+      // "Send the invoice by Friday": in a mail the deadline is the day to do it
+      dueDate: parsed.dueAt ? null : (parsed.dueDate ?? parsed.deadline),
       dueAt: parsed.dueAt,
       notes: [`From: ${m.from}`, m.url ? m.url : null].filter(Boolean).join('\n'),
       smart: false,
@@ -585,7 +619,7 @@ export class ConnectionsService {
                   body: `${w.repo} #${w.number}`,
                   url: w.url,
                 }))
-            : (await this.clickupTasks(r.ownerId))
+            : (await this.clickupTasks(r.ownerId, { fresh: true }))
                 .filter((t) => t.connectionId === r.id)
                 .map((t) => ({
                   key: `task:${t.id}`,
@@ -616,12 +650,15 @@ export class ConnectionsService {
             title: `${fresh.length - 3} more new in ${r.provider === 'github' ? 'GitHub' : 'ClickUp'}`,
             url: '/today',
           });
+        const prs = r.provider === 'github' ? await this.prPings(r) : undefined;
+        if (prs) sent += prs.sent;
         await this.db
           .update(connections)
           .set({
             meta: {
               ...r.meta,
               seen: [...new Set([...now.map((n) => n.key), ...(meta.seen ?? [])])].slice(0, 500),
+              ...(prs ? { prs: prs.state } : {}),
             },
           })
           .where(eq(connections.id, r.id));
@@ -632,10 +669,102 @@ export class ConnectionsService {
     return sent;
   }
 
+  /**
+   * My PRs that changed since the last look: merged, changes requested, approved — one ping each, as the person
+   * chose (spec 0012 G). The first look only remembers. Returns the new remembered state.
+   */
+  private async prPings(r: Row): Promise<{ sent: number; state: Record<string, string> }> {
+    const meta = r.meta as { prs?: Record<string, string>; pings?: Partial<PrPings> };
+    const pings = { ...PR_PINGS, ...meta.pings };
+    const prs = (await this.githubPrs(r.ownerId, { fresh: true })).filter((p) => p.connectionId === r.id);
+    const state: Record<string, string> = {};
+    for (const p of prs) state[p.id] = p.state === 'open' ? `open:${p.review ?? 'pending'}` : p.state;
+    let sent = 0;
+    if (!meta.prs) return { sent, state };
+    for (const p of prs) {
+      const was = meta.prs[p.id];
+      const is = state[p.id]!;
+      if (!was || was === is) continue;
+      const ping =
+        is === 'merged' && pings.merged
+          ? { title: `PR merged: ${p.title}`, key: 'merged' }
+          : is === 'open:changes' && pings.changes
+            ? { title: `Changes requested: ${p.title}`, key: 'changes' }
+            : is === 'open:approved' && pings.approved
+              ? { title: `PR approved: ${p.title}`, key: 'approved' }
+              : null;
+      if (!ping) continue;
+      await this.notify.send({
+        userId: r.ownerId,
+        module: 'today',
+        kind: 'connection',
+        title: ping.title,
+        body: `${p.repo} #${p.number}`,
+        url: p.url,
+        dedupeKey: `pr:${r.id}:${p.id}:${ping.key}:${p.updatedAt}`,
+      });
+      sent++;
+    }
+    // a PR merged more than 30 days ago drops out of the search; keep what's still there plus the open ones
+    return { sent, state };
+  }
+
   private async mark(r: Row, problem: string | null) {
     await this.db
       .update(connections)
       .set({ lastError: problem, status: problem ? 'needs_attention' : 'active' })
       .where(eq(connections.id, r.id));
   }
+}
+
+export interface PrPings {
+  merged: boolean;
+  changes: boolean;
+  approved: boolean;
+}
+export const PR_PINGS: PrPings = { merged: true, changes: true, approved: false };
+
+export interface Pr {
+  id: string;
+  connectionId: string;
+  account: string;
+  repo: string;
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'merged' | 'closed';
+  draft: boolean;
+  review: ReviewState | null;
+  checks: ChecksState | null;
+  comments: number;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+}
+
+function prOf(
+  r: { id: string; label: string },
+  i: GitHubItem,
+  state: Pr['state'],
+  review: ReviewState | null,
+  checks: ChecksState | null,
+): Pr {
+  const repo = GitHubClient.repoOf(i.repository_url);
+  return {
+    id: `${repo}#${i.number}`,
+    connectionId: r.id,
+    account: r.label,
+    repo,
+    number: i.number,
+    title: i.title,
+    url: i.html_url,
+    state,
+    draft: !!i.draft,
+    review,
+    checks,
+    comments: i.comments ?? 0,
+    createdAt: i.created_at ?? i.updated_at,
+    updatedAt: i.updated_at,
+    closedAt: i.pull_request?.merged_at ?? i.closed_at ?? null,
+  };
 }

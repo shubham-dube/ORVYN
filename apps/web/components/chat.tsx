@@ -258,10 +258,7 @@ function ShareCard({ p }: { p: Extract<ChatPayload, { t: 'share' }> }) {
     p.ref.kind
   ];
   return (
-    <Link
-      href={href}
-      className="block rounded-orv-md border border-orv-edge bg-orv-field px-3 py-2 hover:border-orv-accent"
-    >
+    <Link href={href} className="block rounded-orv-md field-ring px-3 py-2 hover:border-orv-accent">
       <span className="text-[11px] uppercase tracking-wide text-orv-muted">
         {p.ref.kind === 'split' ? 'Split' : p.ref.kind}
       </span>
@@ -457,7 +454,7 @@ export function Thread({ id }: { id: string }) {
                         >
                           <SmilePlus size={14} />
                         </summary>
-                        <div className="absolute bottom-7 z-10 flex gap-1 rounded-full border border-orv-edge bg-orv-field p-1 shadow">
+                        <div className="absolute bottom-7 z-10 flex gap-1 rounded-full field-ring p-1 shadow">
                           {EMOJI.map((e) => (
                             <button
                               key={e}
@@ -518,7 +515,7 @@ export function Thread({ id }: { id: string }) {
                       type="button"
                       title={r.by.map(name).join(', ')}
                       onClick={() => void react(l, r.emoji)}
-                      className="rounded-full border border-orv-edge bg-orv-field px-1.5 text-[12px]"
+                      className="rounded-full field-ring px-1.5 text-[12px]"
                     >
                       {r.emoji} {r.by.length}
                     </button>
@@ -623,7 +620,7 @@ export function Thread({ id }: { id: string }) {
                 void submit();
               }
             }}
-            className="max-h-36 min-h-10 flex-1 resize-none rounded-[20px] border border-orv-edge bg-orv-field px-4 py-2 text-[14px] outline-none focus:border-orv-accent"
+            className="max-h-36 min-h-10 flex-1 resize-none rounded-[20px] field-ring px-4 py-2 text-[14px] outline-none focus:border-orv-accent"
           />
           <Button
             type="submit"

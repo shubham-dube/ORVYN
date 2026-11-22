@@ -739,7 +739,7 @@ export function MoneySheet({
           id={id}
           value={value ?? ''}
           onChange={(e) => set(e.target.value)}
-          className="h-10 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px]"
+          className="h-10 w-full rounded-orv-md field-ring px-3 text-[14px]"
         >
           <option value="" disabled>
             Choose…
@@ -822,7 +822,7 @@ export function MoneySheet({
                 id={id}
                 value={f.method}
                 onChange={(e) => setF({ ...f, method: e.target.value })}
-                className="h-10 w-full rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[14px]"
+                className="h-10 w-full rounded-orv-md field-ring px-3 text-[14px]"
               >
                 {['UPI', 'IMPS', 'NEFT', 'Cash', 'Card'].map((x) => (
                   <option key={x}>{x}</option>

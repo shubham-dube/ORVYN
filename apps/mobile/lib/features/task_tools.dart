@@ -1,18 +1,12 @@
-import 'dart:async';
-
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../app/state.dart';
 import '../app/task_query.dart';
 import '../app/today.dart';
 import '../design/controls.dart';
-import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
-import 'today_calendar.dart' show labelColour;
 
 /// How many filters (besides words) are on — shown as a badge on the filter button.
 int filterCount(TaskQuery q) =>
@@ -70,27 +64,25 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
         if (widget.searching)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: TextField(
-              key: const Key('task-search'),
-              controller: _search,
-              autofocus: q.text.isEmpty,
-              onChanged: (v) => widget.onChanged(q.copy(text: v)),
-              style: OrvText.body(l),
-              decoration: InputDecoration(
-                isDense: true,
-                filled: true,
-                fillColor: l.c.field,
-                prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
-                hintText: 'Search tasks, notes, tags',
-                hintStyle: OrvText.body(l).copyWith(color: l.c.faint),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: l.c.edge),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide(color: l.c.edge),
-                ),
+            child: FocusRing(
+              radius: 14,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: TextField(
+                key: const Key('task-search'),
+                controller: _search,
+                autofocus: q.text.isEmpty,
+                onChanged: (v) => widget.onChanged(q.copy(text: v)),
+                style: OrvText.body(l),
+                decoration:
+                    bareInput(
+                      l,
+                      hint: 'Search tasks, notes, tags',
+                      fontSize: 15,
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                    ).copyWith(
+                      prefixIcon: Icon(LucideIcons.search, size: 16, color: l.c.faint),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 30),
+                    ),
               ),
             ),
           ),
@@ -270,284 +262,6 @@ class _TaskFilterSheetState extends ConsumerState<TaskFilterSheet> {
           ),
           OrvButton(label: 'Show tasks', variant: ButtonVariant.primary, onPressed: () => Navigator.of(context).pop()),
         ],
-      ),
-    );
-  }
-}
-
-/// What can be done to the ticked tasks in one go.
-class BulkBar extends ConsumerWidget {
-  const BulkBar({super.key, required this.picked, required this.onDone});
-  final List<TaskItem> picked;
-  final VoidCallback onDone;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l = context.orv;
-    final actions = ref.read(todayActionsProvider);
-    final projects = ref.watch(projectsProvider).value ?? const <ProjectItem>[];
-    final toaster = Toaster.of(context);
-    Future<void> each(Future<void> Function(TaskItem t) fn) async {
-      for (final t in picked) {
-        await fn(t);
-      }
-      onDone();
-    }
-
-    return Glass(
-      level: GlassLevel.float,
-      padding: const EdgeInsets.all(10),
-      child: Semantics(
-        container: true,
-        label: 'Bulk actions',
-        child: Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text('${picked.length} selected', style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
-            OrvButton(
-              label: 'Complete',
-              small: true,
-              variant: ButtonVariant.primary,
-              icon: LucideIcons.check,
-              onPressed: () async {
-                final n = picked.length;
-                await each((t) => actions.complete(t.id, true));
-                toaster.show('$n done', tone: ToastTone.success);
-              },
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Move to project',
-              onSelected: (v) async {
-                final n = picked.length;
-                await each((t) => actions.update(t.id, {'projectId': v == 'none' ? null : v}));
-                toaster.show('Moved $n', tone: ToastTone.success);
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'none', child: Text('No project')),
-                for (final p in projects) PopupMenuItem(value: p.id, child: Text(p.name)),
-              ],
-              child: const Chip(label: Text('Move to…')),
-            ),
-            PopupMenuButton<int>(
-              tooltip: 'Set priority',
-              onSelected: (v) => each((t) => actions.update(t.id, {'priority': v})),
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 0, child: Text('No priority')),
-                PopupMenuItem(value: 1, child: Text('Low')),
-                PopupMenuItem(value: 2, child: Text('Medium')),
-                PopupMenuItem(value: 3, child: Text('High')),
-              ],
-              child: const Chip(label: Text('Priority…')),
-            ),
-            ActionChip(
-              label: const Text('Set day'),
-              avatar: const Icon(LucideIcons.calendar, size: 14),
-              onPressed: () async {
-                final now = ref.read(clockProvider)();
-                final d = await showDatePicker(
-                  context: context,
-                  initialDate: now,
-                  firstDate: now.subtract(const Duration(days: 365)),
-                  lastDate: now.add(const Duration(days: 365 * 5)),
-                );
-                if (d == null) return;
-                final n = picked.length;
-                await each((t) => actions.update(t.id, {'dueDate': dayKey(d), 'dueAt': null, 'scheduledStart': null}));
-                toaster.show('Planned $n for ${dayKey(d)}', tone: ToastTone.success);
-              },
-            ),
-            OrvButton(
-              label: 'Delete',
-              small: true,
-              variant: ButtonVariant.danger,
-              icon: LucideIcons.trash2,
-              onPressed: () async {
-                final n = picked.length;
-                await each((t) => actions.remove(t.id));
-                toaster.show('Deleted $n');
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Tasks as columns by project. Long-press a card to move it to another column.
-class TaskBoard extends ConsumerWidget {
-  const TaskBoard({super.key, required this.tasks, required this.onOpen});
-  final List<TaskItem> tasks;
-  final ValueChanged<TaskItem> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l = context.orv;
-    final projects = ref.watch(projectsProvider).value ?? const <ProjectItem>[];
-    final open = tasks.where((t) => t.completedAt == null).toList();
-    final columns = <(String, String, ProjectItem?)>[
-      ('none', 'No project', null),
-      for (final p in projects) (p.id, p.name, p),
-    ];
-    return SizedBox(
-      height: 420,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          for (final (id, name, project) in columns)
-            Builder(
-              builder: (context) {
-                final items = open.where((t) => id == 'none' ? t.projectId == null : t.projectId == id).toList()
-                  ..sort((a, b) {
-                    final am = a.moment?.millisecondsSinceEpoch ?? 1 << 62;
-                    final bm = b.moment?.millisecondsSinceEpoch ?? 1 << 62;
-                    return am != bm ? am.compareTo(bm) : b.priority.compareTo(a.priority);
-                  });
-                return Container(
-                  width: 250,
-                  margin: const EdgeInsets.only(right: 10),
-                  child: Semantics(
-                    container: true,
-                    label: '$name, ${items.length} tasks',
-                    explicitChildNodes: true,
-                    child: Glass(
-                      padding: const EdgeInsets.all(10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: labelColour(l, project?.colour),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(child: Text(name.toUpperCase(), style: OrvText.label(l))),
-                              Text('${items.length}', style: OrvText.muted(l)),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            child: ListView(
-                              children: [
-                                for (final t in items) _BoardCard(task: t, projects: projects, onOpen: onOpen),
-                                if (items.isEmpty) Text('Nothing here.', style: OrvText.muted(l)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          _NewProject(),
-        ],
-      ),
-    );
-  }
-}
-
-class _NewProject extends ConsumerStatefulWidget {
-  @override
-  ConsumerState<_NewProject> createState() => _NewProjectState();
-}
-
-class _NewProjectState extends ConsumerState<_NewProject> {
-  final _c = TextEditingController();
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 220,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          OrvField(label: 'New project', controller: _c),
-          const SizedBox(height: 8),
-          OrvButton(
-            label: 'Add project',
-            small: true,
-            icon: LucideIcons.plus,
-            onPressed: () async {
-              final n = _c.text.trim();
-              if (n.isEmpty) return;
-              const colours = ['sky', 'emerald', 'violet', 'amber', 'coral', 'cyan', 'gold'];
-              final count = (ref.read(projectsProvider).value ?? const []).length;
-              await ref.read(todayActionsProvider).addProject(n, colour: colours[count % colours.length]);
-              _c.clear();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BoardCard extends ConsumerWidget {
-  const _BoardCard({required this.task, required this.projects, required this.onOpen});
-  final TaskItem task;
-  final List<ProjectItem> projects;
-  final ValueChanged<TaskItem> onOpen;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l = context.orv;
-    final prog = checklistProgress(task);
-    final day = task.day;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => onOpen(task),
-        onLongPress: () async {
-          unawaited(HapticFeedback.selectionClick());
-          final box = context.findRenderObject() as RenderBox;
-          final pos = box.localToGlobal(Offset.zero);
-          final v = await showMenu<String>(
-            context: context,
-            position: RelativeRect.fromLTRB(pos.dx, pos.dy, pos.dx + 1, pos.dy + 1),
-            items: [
-              const PopupMenuItem(value: 'none', child: Text('Move to: No project')),
-              for (final p in projects) PopupMenuItem(value: p.id, child: Text('Move to: ${p.name}')),
-            ],
-          );
-          if (v != null) await ref.read(todayActionsProvider).update(task.id, {'projectId': v == 'none' ? null : v});
-        },
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: l.c.edge),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(task.title, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
-              Text(
-                [
-                  if (day != null) day.substring(5),
-                  if (task.priority > 0) ['', 'low', 'medium', 'high'][task.priority],
-                  if (prog.total > 0) '${prog.done}/${prog.total}',
-                  ...task.tags.take(3).map((t) => '#$t'),
-                ].join(' · '),
-                style: OrvText.muted(l).copyWith(fontSize: 12),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

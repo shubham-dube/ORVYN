@@ -123,6 +123,76 @@ class _OrvButtonState extends State<OrvButton> {
   }
 }
 
+/// A text input with no border of its own: the box around it ([FocusRing]) draws the only one (spec 0012 U).
+InputDecoration bareInput(OrvLook l, {String? hint, double fontSize = 16, EdgeInsetsGeometry? padding}) =>
+    InputDecoration(
+      isDense: true,
+      hintText: hint,
+      hintStyle: OrvText.body(l).copyWith(color: l.c.faint, fontSize: fontSize),
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      errorBorder: InputBorder.none,
+      focusedErrorBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      contentPadding: padding ?? const EdgeInsets.symmetric(vertical: 12),
+    );
+
+/// One field look everywhere (spec 0012 U): a fill and a hairline edge; when anything inside has focus, that **same**
+/// edge turns the accent and a soft halo grows outside it. Never a second border inside the box. The width never
+/// changes, so nothing shifts while typing.
+class FocusRing extends StatefulWidget {
+  const FocusRing({
+    super.key,
+    required this.child,
+    this.radius = OrvTokens.radiusMd,
+    this.padding = const EdgeInsets.symmetric(horizontal: 14),
+    this.error = false,
+    this.fill = true,
+    this.focused,
+  });
+  final Widget child;
+  final double radius;
+  final EdgeInsetsGeometry padding;
+  final bool error;
+  final bool fill;
+
+  /// set to drive the look from outside (e.g. a card that is itself the field)
+  final bool? focused;
+  @override
+  State<FocusRing> createState() => _FocusRingState();
+}
+
+class _FocusRingState extends State<FocusRing> {
+  bool _on = false;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final on = widget.focused ?? _on;
+    final edge = widget.error ? l.c.danger : (on ? l.accent : l.c.edge);
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      includeSemantics: false,
+      onFocusChange: (v) => setState(() => _on = v),
+      child: AnimatedContainer(
+        duration: OrvTokens.durationFast,
+        curve: Curves.easeOut,
+        padding: widget.padding,
+        decoration: BoxDecoration(
+          color: widget.fill ? l.c.field : null,
+          borderRadius: BorderRadius.circular(widget.radius),
+          border: Border.all(color: edge, width: 1.2),
+          boxShadow: on || widget.error
+              ? [BoxShadow(color: edge.withValues(alpha: l.dark ? 0.28 : 0.20), spreadRadius: 3.5)]
+              : const [],
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class OrvField extends StatelessWidget {
   const OrvField({
     super.key,
@@ -136,6 +206,8 @@ class OrvField extends StatelessWidget {
     this.autofocus = false,
     this.obscure = false,
     this.maxLines = 1,
+    this.focusNode,
+    this.prefix,
   });
   final bool obscure;
   final int maxLines;
@@ -147,44 +219,49 @@ class OrvField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
+  final FocusNode? focusNode;
+  final IconData? prefix;
 
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
-    OutlineInputBorder b(Color c, [double w = 1]) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-      borderSide: BorderSide(color: c, width: w),
-    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          autofocus: autofocus,
-          obscureText: obscure,
-          enableSuggestions: !obscure,
-          autocorrect: !obscure,
-          maxLines: obscure ? 1 : maxLines,
-          keyboardType: keyboardType,
-          autofillHints: autofillHints,
-          onSubmitted: onSubmitted,
-          style: OrvText.body(l).copyWith(fontSize: 16),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: OrvText.body(l).copyWith(color: l.c.faint, fontSize: 16),
-            filled: true,
-            fillColor: l.c.field,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-            enabledBorder: b(l.c.edge),
-            focusedBorder: b(l.accent, 2),
-            errorBorder: b(l.c.danger),
-            focusedErrorBorder: b(l.c.danger, 2),
-            errorText: error,
-            errorStyle: OrvText.muted(l).copyWith(color: l.c.danger),
+        if (label.isNotEmpty) ...[
+          Text(label, style: OrvText.muted(l).copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+        ],
+        FocusRing(
+          error: error != null,
+          child: Row(
+            children: [
+              if (prefix != null) ...[Icon(prefix, size: 17, color: l.c.faint), const SizedBox(width: 10)],
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  autofocus: autofocus,
+                  obscureText: obscure,
+                  enableSuggestions: !obscure,
+                  autocorrect: !obscure,
+                  maxLines: obscure ? 1 : maxLines,
+                  minLines: 1,
+                  keyboardType: keyboardType ?? (maxLines > 1 ? TextInputType.multiline : null),
+                  autofillHints: autofillHints,
+                  onSubmitted: onSubmitted,
+                  style: OrvText.body(l).copyWith(fontSize: 16),
+                  decoration: bareInput(l, hint: hint, padding: const EdgeInsets.symmetric(vertical: 14)),
+                ),
+              ),
+            ],
           ),
         ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 4),
+            child: Text(error!, style: OrvText.muted(l).copyWith(color: l.c.danger)),
+          ),
       ],
     );
   }

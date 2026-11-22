@@ -26,6 +26,26 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+/* text fields show focus on their own border (and their box's), never with a second outline inside it (spec 0012 U) */
+input:not([type='checkbox']):not([type='radio']):not([type='range']):focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: none;
+}
+/* one look for every field and for any box that holds a bare input: the same edge turns the accent, a soft halo
+   grows outside it; the width never changes, so nothing shifts while typing */
+@utility field-ring {
+  border: 1px solid var(--orv-edge);
+  background: var(--orv-field);
+  transition:
+    border-color var(--orv-duration-fast) ease,
+    box-shadow var(--orv-duration-fast) ease;
+  &:focus-within {
+    border-color: var(--orv-accent);
+    box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--orv-accent) 22%, transparent);
+  }
+}
 .tabular {
   font-variant-numeric: tabular-nums;
 }

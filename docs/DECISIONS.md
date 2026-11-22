@@ -2,6 +2,26 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-22 (spec 0013, Money brain — chosen for you; change any)
+
+| #        | Topic            | Decision                                                                                                                             |
+| -------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| D-0013-1 | How it thinks    | **Rules, not AI**: counting the person's own payments. Free, instant, private.                                                       |
+| D-0013-2 | Filing by itself | A captured payment is filed without asking only when that merchant was filed the same way **3+ times, ≥ 80%**; a quiet note says so. |
+| D-0013-3 | Removing a rule  | Means **"ask me"** for that merchant from then on (history doesn't file it either).                                                  |
+| D-0013-4 | Where it runs    | Web: in the browser. Android: `GET /money/insights`. Same function (`moneyInsights`).                                                |
+
+## Decided — 2026-11-22 (spec 0012, Today refined — defaults chosen for you; change any)
+
+| #        | Topic            | Decision                                                                                                                                                                                                    |
+| -------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0012-1 | ClickUp in Today | Only **working** statuses show in Today: in-progress (custom) ones that aren't past building (fixed, QA, review, deployed, done…). Changed per account in "Show in Today"; the rest is on the ClickUp page. |
+| D-0012-2 | Deadline         | A separate, optional **Deadline** next to **When** (the day you plan to do it). A task with only a deadline shows in Today once that day comes. "by / due / deadline …" in quick add sets it.               |
+| D-0012-3 | Task status      | **To do · Doing** for ORVYN tasks; done stays `completedAt`. No custom statuses. The board's columns are these, plus Done today.                                                                            |
+| D-0012-4 | Meetings         | Shown in the list and board; they **end by themselves** at their end time and fold under "Earlier today". A meeting is not a task.                                                                          |
+| D-0012-5 | PR pings         | **Merged** and **changes requested** ping you; **approved** is off until you switch it on. One ping per change.                                                                                             |
+| D-0012-6 | Quick add        | Nothing about a day written → **the Inbox** (the Today / Tomorrow / Someday chips are gone). The Orb and the command bar still add "to Today" because that's what they say.                                 |
+
 ## Decided — 2026-11-19 (spec 0011, Chat and Split — defaults chosen for you; change any)
 
 | #        | Topic       | Decision                                                                                                                                                                          |

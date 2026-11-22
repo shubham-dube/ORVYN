@@ -14,6 +14,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import 'sheets.dart';
+import 'today_kit.dart';
 
 const hourPx = 56.0;
 
@@ -333,118 +334,122 @@ class _DayRiverState extends ConsumerState<DayRiver> {
           ),
         Glass(
           padding: EdgeInsets.zero,
-          child: SizedBox(
-            height: 480,
-            child: SingleChildScrollView(
-              controller: _scroll,
-              child: SizedBox(
-                height: 24 * hourPx,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 48,
-                      child: Stack(
-                        children: [
-                          for (var h = 1; h < 24; h++)
-                            Positioned(
-                              top: h * hourPx - 7,
-                              right: 6,
-                              child: Text(
-                                _hm(context, _at(day, h * 60)).replaceAll(':00', ''),
-                                style: OrvText.muted(l).copyWith(fontSize: 10, color: l.c.faint),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: DragTarget<TaskItem>(
-                        onAcceptWithDetails: (d) {
-                          final box = _riverKey.currentContext!.findRenderObject()! as RenderBox;
-                          final y = box.globalToLocal(d.offset).dy;
-                          final m = ((y / hourPx * 60) ~/ 15 * 15).clamp(0, 24 * 60 - 15);
-                          unawaited(place(d.data, m));
-                        },
-                        builder: (context, candidates, _) => LayoutBuilder(
-                          key: _riverKey,
-                          builder: (context, box) => GestureDetector(
-                            behavior: HitTestBehavior.translucent,
-                            onLongPressStart: (d) => showGlassSheet<void>(
-                              context,
-                              (_) => EventSheet(
-                                draft: EventDraft.blank(
-                                  day,
-                                  ((d.localPosition.dy / hourPx * 60) ~/ 15 * 15).clamp(0, 23 * 60),
+          child: FitAboveNav(
+            min: 300,
+            builder: (height) => SizedBox(
+              height: height,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                child: SizedBox(
+                  height: 24 * hourPx,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 48,
+                        child: Stack(
+                          children: [
+                            for (var h = 1; h < 24; h++)
+                              Positioned(
+                                top: h * hourPx - 7,
+                                right: 6,
+                                child: Text(
+                                  _hm(context, _at(day, h * 60)).replaceAll(':00', ''),
+                                  style: OrvText.muted(l).copyWith(fontSize: 10, color: l.c.faint),
                                 ),
                               ),
-                            ),
-                            child: Stack(
-                              children: [
-                                for (var h = 0; h < 24; h++)
-                                  Positioned(
-                                    top: h * hourPx,
-                                    left: 0,
-                                    right: 0,
-                                    child: Container(height: 1, color: l.c.hairline),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: DragTarget<TaskItem>(
+                          onAcceptWithDetails: (d) {
+                            final box = _riverKey.currentContext!.findRenderObject()! as RenderBox;
+                            final y = box.globalToLocal(d.offset).dy;
+                            final m = ((y / hourPx * 60) ~/ 15 * 15).clamp(0, 24 * 60 - 15);
+                            unawaited(place(d.data, m));
+                          },
+                          builder: (context, candidates, _) => LayoutBuilder(
+                            key: _riverKey,
+                            builder: (context, box) => GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onLongPressStart: (d) => showGlassSheet<void>(
+                                context,
+                                (_) => EventSheet(
+                                  draft: EventDraft.blank(
+                                    day,
+                                    ((d.localPosition.dy / hourPx * 60) ~/ 15 * 15).clamp(0, 23 * 60),
                                   ),
-                                for (final f in free)
-                                  Positioned(
-                                    top: f.start / 60 * hourPx,
-                                    height: (f.end - f.start) / 60 * hourPx,
-                                    left: 2,
-                                    right: 6,
-                                    child: Semantics(
-                                      label: 'Free, ${_dur(f.end - f.start)}',
-                                      excludeSemantics: true,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: l.accent.withValues(alpha: candidates.isNotEmpty ? 0.12 : 0.05),
-                                          borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-                                          border: Border.all(color: l.c.edge),
-                                        ),
-                                        alignment: Alignment.topRight,
-                                        padding: const EdgeInsets.all(4),
-                                        child: Text(
-                                          'Free · ${_dur(f.end - f.start)}',
-                                          style: OrvText.muted(l).copyWith(fontSize: 10, color: l.c.faint),
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  for (var h = 0; h < 24; h++)
+                                    Positioned(
+                                      top: h * hourPx,
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(height: 1, color: l.c.hairline),
+                                    ),
+                                  for (final f in free)
+                                    Positioned(
+                                      top: f.start / 60 * hourPx,
+                                      height: (f.end - f.start) / 60 * hourPx,
+                                      left: 2,
+                                      right: 6,
+                                      child: Semantics(
+                                        label: 'Free, ${_dur(f.end - f.start)}',
+                                        excludeSemantics: true,
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: l.accent.withValues(alpha: candidates.isNotEmpty ? 0.12 : 0.05),
+                                            borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                                            border: Border.all(color: l.c.edge),
+                                          ),
+                                          alignment: Alignment.topRight,
+                                          padding: const EdgeInsets.all(4),
+                                          child: Text(
+                                            'Free · ${_dur(f.end - f.start)}',
+                                            style: OrvText.muted(l).copyWith(fontSize: 10, color: l.c.faint),
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                for (final b in blocks)
-                                  Positioned(
-                                    top: b.start / 60 * hourPx + 1,
-                                    height: ((b.end - b.start) / 60 * hourPx - 2).clamp(20, double.infinity),
-                                    left: b.col * (box.maxWidth - 6) / b.cols + 2,
-                                    width: (box.maxWidth - 6) / b.cols - 4,
-                                    child: _BlockTile(
-                                      block: b,
-                                      day: day,
-                                      onTap: () =>
-                                          b.task != null ? widget.onOpenTask(b.task!) : _openEvent(events, b.instance!),
-                                    ),
-                                  ),
-                                if (isToday)
-                                  Positioned(
-                                    top: (now.hour * 60 + now.minute) / 60 * hourPx - 1,
-                                    left: 0,
-                                    right: 0,
-                                    child: Semantics(
-                                      label: 'Now, ${_hm(context, now)}',
-                                      child: Container(
-                                        height: 2,
-                                        decoration: BoxDecoration(gradient: l.accentGradient),
+                                  for (final b in blocks)
+                                    Positioned(
+                                      top: b.start / 60 * hourPx + 1,
+                                      height: ((b.end - b.start) / 60 * hourPx - 2).clamp(20, double.infinity),
+                                      left: b.col * (box.maxWidth - 6) / b.cols + 2,
+                                      width: (box.maxWidth - 6) / b.cols - 4,
+                                      child: _BlockTile(
+                                        block: b,
+                                        day: day,
+                                        onTap: () => b.task != null
+                                            ? widget.onOpenTask(b.task!)
+                                            : _openEvent(events, b.instance!),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                  if (isToday)
+                                    Positioned(
+                                      top: (now.hour * 60 + now.minute) / 60 * hourPx - 1,
+                                      left: 0,
+                                      right: 0,
+                                      child: Semantics(
+                                        label: 'Now, ${_hm(context, now)}',
+                                        child: Container(
+                                          height: 2,
+                                          decoration: BoxDecoration(gradient: l.accentGradient),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

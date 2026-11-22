@@ -14,6 +14,7 @@ import {
   Video,
   X,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Glass, Label, Segmented, Sheet, SkeletonRows, Switch, useToast } from '@/components/ui/bits';
@@ -109,9 +110,14 @@ export function ProviderMark({ id, size = 36 }: { id: string; size?: number }) {
  * Settings → Connections (spec 0007 C2): every account in one place — several Google accounts (Calendar, Meet,
  * optionally Gmail) and ClickUp workspaces — and what is coming next.
  */
+// loaded when needed (and so these modules, which use this one, don't import each other at load time)
+const ClickUpStatusesSheet = dynamic(() => import('./clickup').then((m) => m.ClickUpStatusesSheet));
+const PrPingsSheet = dynamic(() => import('./prs').then((m) => m.PrPingsSheet));
+
 export function ConnectionsSection() {
   const toast = useToast();
   const { list, reload } = useConnections();
+  const [settingsFor, setSettingsFor] = useState<'clickup' | 'github' | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [adding, setAdding] = useState<Provider | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -185,6 +191,16 @@ export function ConnectionsSection() {
                   onClick={() => void google({ hint: c.account, gmail: true })}
                 >
                   <Mail size={14} /> Add Gmail
+                </Button>
+              ) : null}
+              {c.provider === 'clickup' || c.provider === 'github' ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSettingsFor(c.provider as 'clickup' | 'github')}
+                  aria-label={c.provider === 'clickup' ? 'What shows in Today' : 'Pull request notifications'}
+                >
+                  {c.provider === 'clickup' ? 'Show in Today' : 'Notifications'}
                 </Button>
               ) : null}
               {c.provider === 'google' ? (
@@ -268,6 +284,8 @@ export function ConnectionsSection() {
           await reload();
         }}
       />
+      {settingsFor === 'clickup' ? <ClickUpStatusesSheet open onClose={() => setSettingsFor(null)} /> : null}
+      {settingsFor === 'github' ? <PrPingsSheet open onClose={() => setSettingsFor(null)} /> : null}
     </Glass>
   );
 }
@@ -560,7 +578,7 @@ export function MeetingSheet({ open, onClose }: { open: boolean; onClose(): void
           </div>
           <Field label="Who" hint="Type or paste emails; Enter or comma adds each.">
             {(id) => (
-              <div className="flex min-h-12 flex-wrap items-center gap-1.5 rounded-orv-md border border-orv-edge bg-orv-field px-2 py-1.5">
+              <div className="flex min-h-12 flex-wrap items-center gap-1.5 rounded-orv-md field-ring px-2 py-1.5">
                 {people.map((p) => (
                   <span
                     key={p}
@@ -612,7 +630,7 @@ export function MeetingSheet({ open, onClose }: { open: boolean; onClose(): void
                       id={id}
                       value={accountId}
                       onChange={(e) => setAccountId(e.target.value)}
-                      className="h-11 rounded-orv-md border border-orv-edge bg-orv-field px-3 text-[15px]"
+                      className="h-11 rounded-orv-md field-ring px-3 text-[15px]"
                     >
                       {accounts.map((a) => (
                         <option key={a.id} value={a.id}>
@@ -634,7 +652,7 @@ export function MeetingSheet({ open, onClose }: { open: boolean; onClose(): void
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-orv-md border border-orv-edge bg-orv-field p-3 text-[15px] outline-none"
+                    className="w-full rounded-orv-md field-ring p-3 text-[15px] outline-none"
                   />
                 )}
               </Field>

@@ -162,7 +162,8 @@ export function groupTasks(tasks: Task[], now: Date): Groups {
       if (localDay(new Date(t.completedAt)) === today) g.doneToday.push(t);
       continue;
     }
-    const day = taskDay(t);
+    // no plan day but the deadline has come: it belongs to today (or is overdue), not the Inbox
+    const day = taskDay(t) ?? (t.deadline && t.deadline <= today ? t.deadline : null);
     if (!day) g.inbox.push(t);
     else if (day < today) g.overdue.push(t);
     else if (day === today) g.today.push(t);

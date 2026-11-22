@@ -166,7 +166,7 @@ function ReplyBox({
         placeholder={placeholder}
         aria-label={label}
         maxLength={200}
-        className="h-9 min-w-0 flex-1 rounded-full border border-orv-edge bg-orv-field px-3 text-[14px] outline-none placeholder:text-orv-faint focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--orv-accent)_25%,transparent)]"
+        className="h-9 min-w-0 flex-1 rounded-full field-ring px-3 text-[14px] outline-none placeholder:text-orv-faint focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--orv-accent)_25%,transparent)]"
       />
       <Button
         size="sm"

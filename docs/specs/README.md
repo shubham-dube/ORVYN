@@ -1,6 +1,8 @@
 # Specs
 
-| Spec                                               | Feature                                                                    | Status                          |
-| -------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------- |
-| [0001-foundation](0001-foundation/spec.md)         | Sign-in, devices, entitlements, sync, notifications, design system, deploy | Draft — awaiting O1, O2, O4, O5 |
-| [0002-tasks-calendar](0002-tasks-calendar/spec.md) | "Today": tasks + calendar                                                  | Draft                           |
+| Spec                                               | Feature                                                                          | Status                          |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------- |
+| [0001-foundation](0001-foundation/spec.md)         | Sign-in, devices, entitlements, sync, notifications, design system, deploy       | Draft — awaiting O1, O2, O4, O5 |
+| [0002-tasks-calendar](0002-tasks-calendar/spec.md) | "Today": tasks + calendar                                                        | Draft                           |
+| [0012-today-refined](0012-today-refined/spec.md)   | Today refined: done dates, smarter quick add, meetings in list, ClickUp hub, PRs | Delivered                       |
+| [0013-money-brain](0013-money-brain/spec.md)       | Money brain: smart fill, auto-filing from history, insights, merchant sheet      | Delivered                       |

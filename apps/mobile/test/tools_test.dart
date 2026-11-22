@@ -45,6 +45,24 @@ void main() {
         },
       ],
     );
+    h.server.on(
+      'GET /connections/github/prs',
+      (_) => [
+        {
+          'id': 'asha/app#50',
+          'connectionId': 'gh1',
+          'repo': 'asha/app',
+          'number': 50,
+          'title': 'Ship the new nav',
+          'url': 'https://github.com/asha/app/pull/50',
+          'state': 'open',
+          'draft': false,
+          'review': 'approved',
+          'checks': 'passing',
+          'updatedAt': '2026-11-16T08:00:00Z',
+        },
+      ],
+    );
     h.server.on('POST /connections/github/issues/close', (r) {
       closed.add(r.body);
       return {'ok': true};
@@ -53,8 +71,12 @@ void main() {
     tester.view.physicalSize = const Size(1170, 4000);
     await tester.tap(find.bySemanticsLabel('Today'));
     await settle(tester, 20);
-    expect(find.text('FROM YOUR TOOLS'), findsOneWidget);
-    expect(find.text('Review requested · asha/app #40'), findsOneWidget);
+    expect(find.text('GITHUB'), findsOneWidget);
+    // my PRs as one line that opens Pull requests (spec 0012 G)
+    expect(find.text('1 open · 1 approved'), findsOneWidget);
+    // a review waiting for me, marked as mine to review
+    expect(find.text('Add dark mode'), findsOneWidget);
+    expect(find.text('Your review'), findsOneWidget);
     expect(find.byTooltip('Close issue: Add dark mode'), findsNothing, reason: 'reviews are not closed from here');
     await tapIt(tester, find.byTooltip('Close issue: Login breaks on Safari'));
     expect(closed, [

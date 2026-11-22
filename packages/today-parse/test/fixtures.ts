@@ -12,6 +12,9 @@ export interface Expect {
   p?: number;
   tags?: string[];
   project?: string;
+  /** deadline (spec 0012) */
+  dl?: string;
+  notes?: string;
 }
 export const NOW = '2026-11-16T09:30:00+05:30';
 export const PROJECTS = [
@@ -61,7 +64,7 @@ export const CASES: [string, Expect][] = [
   ['pay rent this friday', { title: 'Pay rent', d: '2026-11-20' }],
   ['gym next wednesday', { title: 'Gym', d: '2026-11-18' }],
   ['visit nani coming saturday', { title: 'Visit nani', d: '2026-11-21' }],
-  ['by friday send the deck', { title: 'Send the deck', d: '2026-11-20' }],
+  ['by friday send the deck', { title: 'Send the deck', dl: '2026-11-20' }], // spec 0012: by = deadline
 
   // ---------------------------------------------------------------- dates (dd/mm, month names)
   ['pay rent 1 dec', { title: 'Pay rent', d: '2026-12-01' }],
@@ -254,8 +257,8 @@ export const CASES: [string, Expect][] = [
   ['Call Mom Tomorrow 6PM', { title: 'Call Mom', at: '2026-11-17 18:00' }],
   ['  buy   eggs   tomorrow  ', { title: 'Buy eggs', d: '2026-11-17' }],
   ['buy milk.', { title: 'Buy milk.' }],
-  ['send deck to Anil by tomorrow', { title: 'Send deck to Anil', d: '2026-11-17' }],
-  ['submit form before friday', { title: 'Submit form before', d: '2026-11-20' }],
+  ['send deck to Anil by tomorrow', { title: 'Send deck to Anil', dl: '2026-11-17' }],
+  ['submit form before friday', { title: 'Submit form', dl: '2026-11-20' }],
   ['meet Sam at Starbucks at 5', { title: 'Meet Sam at Starbucks', at: '2026-11-16 17:00' }],
   ['book tickets for Friday show', { title: 'Book tickets for show', d: '2026-11-20' }],
   ['dinner at 8 with family', { title: 'Dinner with family', at: '2026-11-16 20:00' }],
@@ -279,7 +282,7 @@ export const CASES: [string, Expect][] = [
   ],
   ['pay school fees for Aarav on 10 dec', { title: 'Pay school fees for Aarav', d: '2026-12-10' }],
   ['order cake for 3rd birthday party sat', { title: 'Order cake for 3rd birthday party', d: '2026-11-21' }],
-  ['renew domain dubey.app before 5 jan', { title: 'Renew domain dubey.app before', d: '2027-01-05' }],
+  ['renew domain dubey.app before 5 jan', { title: 'Renew domain dubey.app', dl: '2027-01-05' }],
   ['book cab for airport tomorrow 4am', { title: 'Book cab for airport', at: '2026-11-17 04:00' }],
   ['ask HR about leave policy next week', { title: 'Ask HR about leave policy', d: '2026-11-23' }],
   ['upload 2 docs to portal today', { title: 'Upload 2 docs to portal', d: '2026-11-16' }],
@@ -287,7 +290,7 @@ export const CASES: [string, Expect][] = [
     'research mutual funds this weekend for 2h',
     { title: 'Research mutual funds', d: '2026-11-21', dur: 120 },
   ],
-  ['pay property tax by 31 march', { title: 'Pay property tax', d: '2027-03-31' }],
+  ['pay property tax by 31 march', { title: 'Pay property tax', dl: '2027-03-31' }],
   [
     'prepare for interview thursday 2pm for 1h #career',
     { title: 'Prepare for interview', at: '2026-11-19 14:00', dur: 60, tags: ['career'] },
