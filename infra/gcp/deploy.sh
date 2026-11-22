@@ -50,7 +50,7 @@ g compute ssh $VM --zone "$ZONE" --command "
   set -e; cd /opt/orvyn; chmod 600 .env.prod
   printf 'IMAGE=$IMAGE\nAPI_HOST=$API_HOST\n' > .env.deploy
   cat .env.prod .env.deploy > .env.compose
-  TOKEN=\$(curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token | sed 's/.*\"access_token\":\"\([^\"]*\)\".*//')
+  TOKEN=\$(curl -s -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token | grep -o '\"access_token\":\"[^\"]*\"' | cut -d'\"' -f4)
   echo \$TOKEN | sudo docker login -u oauth2accesstoken --password-stdin https://$REGION-docker.pkg.dev
   sudo docker compose --env-file .env.compose pull api
   sudo docker compose --env-file .env.compose run --rm migrate
