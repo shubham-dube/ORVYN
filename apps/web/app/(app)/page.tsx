@@ -1,7 +1,6 @@
 'use client';
 
-import { BriefCard } from '@/components/brief';
-import { MailCard } from '@/components/tools';
+import { HomeHero, InboxPreview, LiveCard, NeedsYou, NowNext, useHome } from '@/components/home';
 
 import { MODULE_KEYS } from '@orvyn/contracts';
 import { useTodayMaybe } from '@/lib/today';
@@ -12,6 +11,7 @@ import {
   CircleDollarSign,
   Inbox,
   KeyRound,
+  Mail,
   ListTodo,
   type LucideIcon,
   MessagesSquare,
@@ -21,33 +21,10 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import {
-  DropCard,
-  ExpiringCard,
-  MoneyCard,
-  NeedsYouCard,
-  QuickAddCard,
-  TodayCard,
-  WeekCard,
-} from '@/components/dashboard';
-import { useTheme } from '@/components/theme-provider';
-import { Badge, Label } from '@/components/ui/bits';
+import { MoneyCard, QuickAddCard, TodayCard, WeekCard } from '@/components/dashboard';
+import { Label } from '@/components/ui/bits';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
-
-/** By the clock, not the light — someone who pins Night at noon still gets "Good afternoon". */
-function greeting(d: Date): string {
-  const h = d.getHours();
-  return h < 5
-    ? 'Good night'
-    : h < 12
-      ? 'Good morning'
-      : h < 17
-        ? 'Good afternoon'
-        : h < 22
-          ? 'Good evening'
-          : 'Good night';
-}
 
 const MODULE_INFO: Record<string, { name: string; line: string; icon: LucideIcon; href: string }> = {
   today: { name: 'Today', line: 'Tasks and calendar on one river of time', icon: ListTodo, href: '/today' },
@@ -106,98 +83,84 @@ const BUILT = new Set([
   'split',
 ]);
 
+/**
+ * Home (spec 0017 A), mission control: the hero, now & next, what needs me across everything, today, money, the mail
+ * that matters, the week and what's live — then everything else as a compact grid.
+ */
 export default function Home() {
   const { me } = useSession();
-  const { phase } = useTheme();
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
   }, []);
-  const first = (me?.name || '').split(' ')[0];
+  const { home, reload } = useHome();
+  const first = (me?.name || '').split(' ')[0] ?? '';
   const mine = MODULE_KEYS.filter((k) => me?.role === 'owner' || me?.entitlements.includes(k));
   const hasToday = !!useTodayMaybe();
 
   return (
-    <div className="flex flex-col gap-5">
-      <header className="flex flex-wrap items-end justify-between gap-3 px-1 pt-2">
-        <div className="flex flex-col gap-1">
-          <span className="text-small text-orv-muted">
-            {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-          </span>
-          <h1 className="text-title font-semibold">
-            {greeting(now)}
-            {first ? `, ${first}` : ''}
-          </h1>
-        </div>
-        <div className="flex items-center gap-2 text-small text-orv-muted">
-          <span
-            aria-hidden
-            className="h-2 w-2 rounded-full bg-orv-accent"
-            style={{ animation: 'orv-dot 2.4s ease-in-out infinite' }}
-          />
-          <span className="tabular-nums">
-            {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-          </span>
-          <span>· {phase}</span>
-        </div>
-      </header>
-
+    <div className="flex flex-col gap-4">
+      <HomeHero now={now} first={first} home={home} />
+      {hasToday ? <NowNext now={now} /> : null}
       <QuickAddCard />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {me?.role === 'owner' || me?.entitlements.includes('brief') ? <BriefCard /> : null}
-        {hasToday ? <TodayCard now={now} /> : null}
-        <NeedsYouCard />
-        <MoneyCard now={now} />
-        <WeekCard now={now} />
-        <DropCard />
-        <ExpiringCard now={now} />
-        <MailCard />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">
+          <NeedsYou home={home} reload={() => void reload()} />
+          {hasToday ? <TodayCard now={now} /> : null}
+          <InboxPreview home={home} reload={() => void reload()} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-4">
+          <MoneyCard now={now} />
+          <LiveCard home={home} />
+          {hasToday ? <WeekCard now={now} /> : null}
+        </div>
       </div>
 
-      <section aria-label="Your ORVYN">
-        <Label className="mb-3 block px-1">Your ORVYN</Label>
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <section aria-label="Your ORVYN" className="pt-2">
+        <Label className="mb-3 block px-1">Everything else</Label>
+        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {mine.map((k) => {
             const info = MODULE_INFO[k];
-            if (!info) return null;
-            const built = BUILT.has(k);
+            if (!info || !BUILT.has(k)) return null;
             const Icon = info.icon;
-            const body = (
-              <>
-                <span
-                  aria-hidden
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] text-white [background:var(--orv-accent-grad)]"
-                >
-                  <Icon size={19} />
-                </span>
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-[14px] font-semibold">
-                    {info.name}
-                    {built ? null : <Badge>soon</Badge>}
-                  </span>
-                  <span className="block text-small text-orv-muted">{info.line}</span>
-                </span>
-              </>
-            );
             return (
               <li key={k} data-module={k}>
-                {built ? (
-                  <Link
-                    href={info.href}
-                    className={cn(
-                      'glass-pane flex items-start gap-3 p-3 transition-transform hover:-translate-y-0.5',
-                    )}
+                <Link
+                  href={info.href}
+                  title={info.line}
+                  className={cn(
+                    'glass-pane flex flex-col items-center gap-2 px-2 py-4 text-center transition-transform hover:-translate-y-0.5',
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className="grid h-11 w-11 place-items-center rounded-[14px] text-white [background:var(--orv-accent-grad)]"
                   >
-                    {body}
-                  </Link>
-                ) : (
-                  <div className="glass-pane flex items-start gap-3 p-3 opacity-80">{body}</div>
-                )}
+                    <Icon size={20} />
+                  </span>
+                  <span className="text-[13px] font-semibold">{info.name}</span>
+                </Link>
               </li>
             );
           })}
+          {mine.includes('today') ? (
+            <li>
+              <Link
+                href="/mail"
+                className="glass-pane flex flex-col items-center gap-2 px-2 py-4 text-center transition-transform hover:-translate-y-0.5"
+              >
+                <span
+                  aria-hidden
+                  className="grid h-11 w-11 place-items-center rounded-[14px] text-white [background:var(--orv-accent-grad)]"
+                >
+                  <Mail size={20} />
+                </span>
+                <span className="text-[13px] font-semibold">Mail</span>
+              </Link>
+            </li>
+          ) : null}
         </ul>
       </section>
     </div>

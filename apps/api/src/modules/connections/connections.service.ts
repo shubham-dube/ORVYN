@@ -504,8 +504,8 @@ export class ConnectionsService {
     return { id: row.id, account: row.label, host };
   }
 
-  /** Unread mail from every mailbox: Google accounts with Gmail added and IMAP accounts. */
-  async mail(ownerId: string) {
+  /** Unread mail from every mailbox: Google accounts with Gmail added and IMAP accounts (`max` a box). */
+  async mail(ownerId: string, max = 10) {
     const boxes: {
       connectionId: string;
       account: string;
@@ -517,7 +517,7 @@ export class ConnectionsService {
     for (const g of await this.calendar.accounts(ownerId)) {
       if (!g.gmail) continue;
       try {
-        const r = await this.calendar.inbox(ownerId, g.id);
+        const r = await this.calendar.inbox(ownerId, g.id, max);
         if (r) boxes.push({ connectionId: g.id, account: g.email, provider: 'gmail', ...r });
       } catch (e) {
         boxes.push({
@@ -536,7 +536,7 @@ export class ConnectionsService {
       try {
         const res = await this.mailbox.unread(
           { host: meta.host, port: meta.port, user: r.label, password: await this.box.open(r.secretEnc) },
-          10,
+          max,
         );
         boxes.push({
           connectionId: r.id,
@@ -560,6 +560,15 @@ export class ConnectionsService {
       }
     }
     return boxes;
+  }
+
+  /** People with a mailbox to read: a mail connection, or a Google account with Gmail added (spec 0017). */
+  async mailOwners(): Promise<string[]> {
+    const imap = await this.db
+      .selectDistinct({ id: connections.ownerId })
+      .from(connections)
+      .where(eq(connections.provider, 'mail'));
+    return [...new Set([...imap.map((r) => r.id), ...(await this.calendar.gmailOwners())])];
   }
 
   /**

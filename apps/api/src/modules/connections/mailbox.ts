@@ -107,7 +107,8 @@ export class ImapMailbox extends Mailbox {
       if (pick.length) {
         for await (const m of c.fetch(
           pick.join(','),
-          { uid: true, envelope: true, internalDate: true },
+          // the first few KB of the message, for a preview (nothing is marked as read: the box is opened read-only)
+          { uid: true, envelope: true, internalDate: true, source: { start: 0, maxLength: 6000 } },
           { uid: true },
         )) {
           const f = m.envelope?.from?.[0];
@@ -115,7 +116,7 @@ export class ImapMailbox extends Mailbox {
             id: String(m.uid),
             from: f ? (f.name ? `${f.name} <${f.address ?? ''}>` : (f.address ?? '')) : '',
             subject: m.envelope?.subject || '(no subject)',
-            snippet: '',
+            snippet: previewOf(m.source ? m.source.toString('utf8') : ''),
             at: m.internalDate ? new Date(m.internalDate).toISOString() : null,
             url: null,
           });
@@ -128,4 +129,29 @@ export class ImapMailbox extends Mailbox {
       await c.logout().catch((e: Error) => this.log.warn(e.message));
     }
   }
+}
+
+/** The readable start of a raw message: past the headers, tags and encoding noise, about 300 characters. */
+export function previewOf(raw: string): string {
+  const body = raw
+    .split(/\r?\n\r?\n/)
+    .slice(1)
+    .join('\n');
+  return body
+    .replace(/^--[^\n]*$/gm, ' ')
+    .replace(/^content-[a-z-]+:[^\n]*$/gim, ' ')
+    .replace(/=\r?\n/g, '')
+    .replace(/=([0-9A-F]{2})/g, (_m, h: string) => {
+      const c = parseInt(h, 16);
+      return c >= 32 && c < 127 ? String.fromCharCode(c) : ' ';
+    })
+    .replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&[a-z]+;/g, ' ')
+    .replace(/[A-Za-z0-9+/]{60,}={0,2}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 300);
 }

@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
+  type AttentionItem,
   type BriefAgenda,
   type BriefFocus,
   type BriefMoney,
@@ -9,6 +10,7 @@ import {
   type BriefSection,
   type BriefView,
   formatMoney,
+  type HomeView,
   type NudgeKind,
   TODAY_TASK,
 } from '@orvyn/contracts';
@@ -24,6 +26,7 @@ import { badRequest, notFound } from '../../common/errors';
 import { AccessService } from '../access/access.service';
 import { AiService } from '../ai/ai.service';
 import { users } from '../auth/auth.schema';
+import { InboxService } from '../inbox/inbox.service';
 import { IpoService } from '../ipo/ipo.service';
 import type { AuthContext } from '../auth/auth.decorators';
 import { ConnectionsService } from '../connections/connections.service';
@@ -130,6 +133,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
     private readonly ai: AiService,
     private readonly ipo: IpoService,
     private readonly outside: BriefOutside,
+    private readonly inbox: InboxService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -595,6 +599,218 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
       done: yesterday,
       spentMinor: money ? await this.spent(ownerId, c.yesterdayStart, c.dayStart) : 0,
       streak,
+    };
+  }
+
+  // ------------------------------------------------------------------ Home (spec 0017 A)
+
+  /**
+   * Home in one call: what needs me across every module, in order of urgency (D-0017-1), the Brief's line and the
+   * weather, the important mail, live IPOs and the markets. Each part only for modules I have; a slow outside source is
+   * left out.
+   */
+  async home(ownerId: string): Promise<HomeView> {
+    const p = await this.access.principal(ownerId);
+    const has = (m: string) => !!p?.entitlements.has(m as never);
+    const c = this.clock(await this.tz(ownerId));
+    const items: AttentionItem[] = [];
+    const [stored] = await this.db
+      .select({ content: briefs.content })
+      .from(briefs)
+      .where(and(eq(briefs.ownerId, ownerId), eq(briefs.day, c.today)));
+    const b = stored?.content ?? null;
+    const weather = b?.sections.find((x) => x.kind === 'weather');
+
+    let inbox: HomeView['inbox'] = null;
+    if (has('today')) {
+      const m = await within(this.inbox.important(ownerId, 3), null);
+      if (m && (m.count || m.top.length)) inbox = { important: m.count, top: m.top, catchUp: m.catchUp };
+      for (const x of m?.top ?? [])
+        items.push({
+          id: `mail:${x.id}`,
+          kind: 'mail',
+          title:
+            x.category === 'needs_reply'
+              ? `${x.fromName || x.fromEmail} needs a reply`
+              : x.fromName || x.fromEmail,
+          line: x.summary || x.subject,
+          urgency:
+            x.category === 'security' || (x.dueDate && x.dueDate <= addDays(c.today, 1))
+              ? 0
+              : x.category === 'needs_reply' || x.category === 'bill'
+                ? 1
+                : 2,
+          href: '/mail',
+          url: x.url,
+          act: { label: 'Done', kind: 'done' },
+        });
+      const [gh] = await Promise.all([within(this.connections.githubWork(ownerId), [])]);
+      const reviews = gh.filter((w) => w.kind === 'review');
+      if (reviews.length)
+        items.push({
+          id: 'reviews',
+          kind: 'review',
+          title:
+            reviews.length === 1
+              ? `Review: ${reviews[0]!.title}`
+              : `${reviews.length} pull requests wait for your review`,
+          line:
+            reviews.length === 1
+              ? `${reviews[0]!.repo} #${reviews[0]!.number}`
+              : reviews
+                  .slice(0, 3)
+                  .map((r) => r.repo)
+                  .join(', '),
+          urgency: 1,
+          href: '/prs',
+          url: reviews.length === 1 ? reviews[0]!.url : null,
+          act: { label: 'Open', kind: 'open' },
+        });
+      const overdue = (await this.overdue(ownerId, c)).length;
+      if (overdue)
+        items.push({
+          id: 'overdue',
+          kind: 'overdue',
+          title: `${overdue} ${overdue === 1 ? 'task is' : 'tasks are'} overdue`,
+          line: 'Move them to today, or let them go',
+          urgency: 0,
+          href: '/today',
+          act: { label: 'Open', kind: 'open' },
+        });
+    }
+    let ipos: HomeView['ipos'] = [];
+    if (has('ipo')) {
+      const t = await this.ipo.today(ownerId, c.today).catch(() => []);
+      for (const i of t)
+        if (i.today === 'closes' && i.decision !== 'skipped' && i.decision !== 'applied')
+          items.push({
+            id: `ipo:${i.id}`,
+            kind: 'ipo',
+            title: `Last day: ${i.name} IPO`,
+            line: [
+              i.gmpPct !== null ? `GMP ${i.gmpPct.toFixed(0)}%` : null,
+              i.lotAmount ? `1 lot ${formatMoney(Math.round(i.lotAmount * 100))}` : null,
+              'bids close at 5 pm',
+            ]
+              .filter(Boolean)
+              .join(' · '),
+            urgency: 0,
+            href: `/ipo/${i.id}`,
+            act:
+              i.decision === 'applying'
+                ? { label: 'Applied ✓', kind: 'done' }
+                : { label: 'I’ll apply', kind: 'apply' },
+          });
+      ipos = (await this.ipo.open(ownerId).catch(() => [])).slice(0, 4).map((i) => ({
+        id: i.id,
+        name: i.name,
+        logo: null,
+        closeDate: i.closeDate,
+        gmpPct: null,
+        decision: null,
+        status: 'open',
+      }));
+      for (const x of ipos) {
+        const full = t.find((y) => y.id === x.id);
+        if (full) Object.assign(x, { logo: full.logo, gmpPct: full.gmpPct, decision: full.decision });
+      }
+    }
+    if (has('money')) {
+      const m = await this.moneyMore(ownerId, c);
+      for (const d of m.dues.filter((d) => d.on <= addDays(c.today, 2)))
+        items.push({
+          id: `due:${d.title}:${d.on}`,
+          kind: 'due',
+          title: d.kind === 'pay' ? `Pay: ${d.title}` : d.title,
+          line: `${formatMoney(d.amountMinor)} · ${d.on === c.today ? 'today' : d.on === addDays(c.today, 1) ? 'tomorrow' : d.on}`,
+          urgency: d.on <= addDays(c.today, 1) ? 0 : 1,
+          href: '/money',
+        });
+      const review = await this.toReview(ownerId);
+      if (review)
+        items.push({
+          id: 'payments',
+          kind: 'payments',
+          title: `${review} ${review === 1 ? 'payment' : 'payments'} to look at`,
+          line: 'Confirm what they were for, in a tap each',
+          urgency: 2,
+          href: '/money',
+          act: { label: 'Open', kind: 'open' },
+        });
+    }
+    if (has('library')) {
+      const docs = await this.db
+        .select({ id: libraryDocs.id, title: libraryDocs.title, expiresOn: libraryDocs.expiresOn })
+        .from(libraryDocs)
+        .where(
+          and(
+            eq(libraryDocs.ownerId, ownerId),
+            isNull(libraryDocs.deletedAt),
+            gte(libraryDocs.expiresOn, c.today),
+            lte(libraryDocs.expiresOn, addDays(c.today, 7)),
+          ),
+        )
+        .limit(3);
+      for (const d of docs)
+        items.push({
+          id: `doc:${d.id}`,
+          kind: 'expiring',
+          title: `${d.title || 'A document'} runs out`,
+          line: d.expiresOn === c.today ? 'today' : `on ${d.expiresOn}`,
+          urgency: d.expiresOn! <= addDays(c.today, 2) ? 1 : 2,
+          href: '/library',
+        });
+    }
+    if (has('drop')) {
+      const waiting = await this.dropWaiting(ownerId);
+      if (waiting)
+        items.push({
+          id: 'drop',
+          kind: 'drop',
+          title: `${waiting} ${waiting === 1 ? 'thing waits' : 'things wait'} in Drop`,
+          line: 'Each one is a suggestion to confirm',
+          urgency: 2,
+          href: '/drop',
+          act: { label: 'Open', kind: 'open' },
+        });
+    }
+    // urgent first; within the same urgency, mail and money before the rest
+    const order: AttentionItem['kind'][] = [
+      'ipo',
+      'due',
+      'mail',
+      'overdue',
+      'review',
+      'expiring',
+      'payments',
+      'drop',
+    ];
+    items.sort((x, y) => x.urgency - y.urgency || order.indexOf(x.kind) - order.indexOf(y.kind));
+    const markets =
+      has('brief') || has('ipo') ? ((await within(this.outside.markets(), null))?.items ?? []) : [];
+    return {
+      needsYou: items.slice(0, 8),
+      more: Math.max(0, items.length - 8),
+      brief: b
+        ? {
+            greeting: b.greeting ?? null,
+            line: b.story ? (/^.*?[.!?](\s|$)/.exec(b.story)?.[0]?.trim() ?? b.story) : b.headline,
+            weather:
+              weather?.kind === 'weather'
+                ? {
+                    now: weather.now,
+                    sky: weather.sky,
+                    code: weather.code,
+                    high: weather.high,
+                    low: weather.low,
+                    place: weather.place,
+                  }
+                : null,
+          }
+        : null,
+      inbox,
+      ipos,
+      markets,
     };
   }
 

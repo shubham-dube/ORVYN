@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpen,
   CheckCircle2,
+  Mail,
   Home,
   KeyRound,
   Settings,
@@ -146,7 +147,10 @@ function Shell({ children }: { children: ReactNode }) {
       ? [{ href: '/brief', label: 'Brief', icon: Sunrise }]
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('today')
-      ? [{ href: '/today', label: 'Today', icon: CheckCircle2 }]
+      ? [
+          { href: '/today', label: 'Today', icon: CheckCircle2 },
+          { href: '/mail', label: 'Mail', icon: Mail },
+        ]
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('drop')
       ? [{ href: '/drop', label: 'Drop', icon: ArrowDownToLine }]

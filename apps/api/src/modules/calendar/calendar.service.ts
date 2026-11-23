@@ -251,10 +251,18 @@ export class CalendarService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Unread mail on an account that has Gmail added; null when it doesn't. */
-  async inbox(ownerId: string, accountId: string) {
+  async inbox(ownerId: string, accountId: string, max = 10) {
     const a = await this.account(ownerId, accountId);
     if (!a || !a.scopes.includes(GMAIL_SCOPE)) return null;
-    return this.google.inbox(await this.accessToken(a));
+    return this.google.inbox(await this.accessToken(a), max);
+  }
+
+  /** People with Gmail added to a Google account (the smart inbox reads them, spec 0017). */
+  async gmailOwners(): Promise<string[]> {
+    const rows = await this.db
+      .select({ ownerId: calendarAccounts.ownerId, scopes: calendarAccounts.scopes })
+      .from(calendarAccounts);
+    return [...new Set(rows.filter((r) => r.scopes.includes(GMAIL_SCOPE)).map((r) => r.ownerId))];
   }
 
   private async account(ownerId: string, accountId: string): Promise<Account | null> {

@@ -12,8 +12,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import 'common.dart';
 import 'dashboard_widgets.dart';
-import 'brief_screen.dart';
-import 'tools.dart';
+import 'home_cards.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -39,14 +38,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
-    final now = ref.watch(clockProvider)();
     final session = ref.watch(sessionProvider);
     final me = session is SignedIn ? session.me : null;
     final first = (me?.name ?? '').split(' ').first;
-    final items = ref.watch(notificationsProvider);
-    final unread = items.where((n) => n.readAt == null).length;
     final modules = moduleKeys.where((k) => me?.can(k) ?? false).toList();
-    final loc = MaterialLocalizations.of(context);
     final modesFor = [
       if (me?.can('today') ?? false) 'task',
       if (me?.can('money') ?? false) 'expense',
@@ -56,58 +51,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return RefreshIndicator(
       color: l.accent,
       onRefresh: () async {
+        ref.invalidate(homeProvider);
         await ref.read(notificationsProvider.notifier).load();
         await ref.read(sessionProvider.notifier).refreshMe();
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 56, 16, 120),
         children: [
-          PageTitle(first.isEmpty ? greetingAt(now) : '${greetingAt(now)}, $first', overline: loc.formatFullDate(now)),
+          // mission control (spec 0017 A): hero → now & next → needs you → today → money → mail → live → week
+          HomeHero(first: first),
+          if (me?.can('today') ?? false) const NowNext(),
           if (modesFor.isNotEmpty) QuickAddCard(key: ValueKey(modesFor.join()), modes: modesFor),
-          if (me?.can('brief') ?? false) const BriefCard(),
+          const NeedsYouCard(),
           if (me?.can('today') ?? false) const TodayCard(),
-          if (me?.can('today') ?? false) const MailSection(),
-          Glass(
-            level: GlassLevel.float,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(child: SectionLabel('Needs you')),
-                    if (unread > 0) OrvBadge('$unread new', tone: l.accent),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                if (items.isEmpty) Text('Nothing needs you. Enjoy the quiet.', style: OrvText.muted(l)),
-                for (final n in items.take(3))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Glass(
-                      blur: false,
-                      padding: const EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(n.title, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
-                            if (n.body.isNotEmpty)
-                              Text(n.body, maxLines: 2, overflow: TextOverflow.ellipsis, style: OrvText.muted(l)),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           if (me?.can('money') ?? false) const MoneyCard(),
+          if (me?.can('today') ?? false) const InboxPreview(),
+          const LiveCard(),
           if (me?.can('today') ?? false) const WeekCard(),
-          if (me?.can('drop') ?? false) const DropCard(),
-          if (me?.can('library') ?? false) const ExpiringCard(),
+          const SizedBox(height: 14),
           Glass(
             padding: const EdgeInsets.all(20),
             child: Column(

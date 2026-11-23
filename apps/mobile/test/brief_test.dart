@@ -110,9 +110,9 @@ void main() {
     tester.view.physicalSize = const Size(1170, 4000);
     addTearDown(tester.view.reset);
     await settle(tester, 20);
-    // the Home card: the greeting with the weather, and the AI's opening
-    expect(find.text('Good morning, Asha · 24°'), findsOneWidget);
-    await tester.tap(find.bySemanticsLabel('Open your Brief'));
+    await tester.tap(find.bySemanticsLabel('More'));
+    await settle(tester);
+    await tester.tap(find.bySemanticsLabel('Open Brief'));
     await settle(tester, 20);
     expect(find.text('Good morning, Asha'), findsOneWidget);
     expect(find.text('Two meetings today, and the release notes come first.'), findsOneWidget);

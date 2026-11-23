@@ -18,3 +18,4 @@ export * from '../modules/brief/brief.schema';
 export * from '../modules/ipo/ipo.schema';
 export * from '../modules/chat/chat.schema';
 export * from '../modules/split/split.schema';
+export * from '../modules/inbox/inbox.schema';

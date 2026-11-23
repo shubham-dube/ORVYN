@@ -49,3 +49,14 @@ export class BriefController {
     return this.brief.saveSettings(a.userId, body);
   }
 }
+
+/** Home in one call (spec 0017 A): each part checks its own module. */
+@Controller('home')
+export class HomeController {
+  constructor(private readonly brief: BriefService) {}
+
+  @Get()
+  home(@Auth() a: AuthContext) {
+    return this.brief.home(a.userId);
+  }
+}

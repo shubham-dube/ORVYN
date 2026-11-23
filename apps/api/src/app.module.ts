@@ -13,6 +13,7 @@ import { IpoModule } from './modules/ipo/ipo.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { SplitModule } from './modules/split/split.module';
 import { CalendarModule } from './modules/calendar/calendar.module';
+import { InboxModule } from './modules/inbox/inbox.module';
 import { ConnectionsModule } from './modules/connections/connections.module';
 import { AiModule } from './modules/ai/ai.module';
 import { MoneyModule } from './modules/money/money.module';
@@ -68,6 +69,7 @@ export class AppModule {
         ChatModule,
         SplitModule,
         ConnectionsModule,
+        InboxModule,
         MoneyModule,
         DropModule,
         LibraryModule,

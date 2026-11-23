@@ -1,9 +1,13 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:orvyn/design/orb.dart';
 import 'package:orvyn/sync/db.dart';
 
 import 'support/fake_server.dart';
+
+import 'package:orvyn/app/notifications.dart';
+
 import 'support/harness.dart';
 
 void main() {
@@ -96,10 +100,12 @@ void main() {
       },
     );
     await h.pump(tester);
-    expect(find.text('Pay rent'), findsOneWidget);
+    final c = ProviderScope.containerOf(tester.element(find.byType(Scaffold).first));
+    await settle(tester);
+    expect(c.read(notificationsProvider).map((n) => n.title), ['Pay rent']);
     h.sockets.push({'type': 'notify.dismissed', 'id': 'n2'});
     await settle(tester);
-    expect(find.text('Pay rent'), findsNothing);
+    expect(c.read(notificationsProvider).map((n) => n.title), isEmpty);
     expect(h.pusher.cleared, ['n2']);
   });
 

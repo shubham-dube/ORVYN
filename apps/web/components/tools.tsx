@@ -156,7 +156,7 @@ const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pa
 
 // ------------------------------------------------------------------ mail (dashboard), and mail into tasks
 
-interface MailItem {
+export interface MailItem {
   id: string;
   from: string;
   subject: string;
@@ -246,7 +246,7 @@ interface Proposal {
 }
 
 /** A mail as a task: ORVYN fills it (rules first), the person edits and saves. Nothing is created without Save. */
-function MailTaskSheet({ mail, onClose }: { mail: MailItem; onClose(): void }) {
+export function MailTaskSheet({ mail, onClose }: { mail: MailItem; onClose(): void }) {
   const today = useTodayMaybe()!;
   const toast = useToast();
   const [p, setP] = useState<Proposal | null>(null);

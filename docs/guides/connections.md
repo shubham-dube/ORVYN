@@ -51,6 +51,30 @@ mail — the subject without "Re:", a date if it names one ("by Friday"), the se
 saving. _Read it smarter_ asks the cheapest model (counts toward the daily AI budget) for a clearer to-do; the mail is
 treated as data only.
 
+## The smart inbox
+
+**Mail** (sidebar on the web, the launcher on the phone) puts every connected mailbox in one place.
+
+- **Sorting:** every 15 minutes the AI reads the week's unread mail and sorts it. **Important** holds people waiting
+  on you, bills, money and security alerts. **Updates** holds deliveries, travel and invites. **Everything else**
+  holds newsletters, promotions and social, folded away.
+- **One-liners:** each mail gets a line saying what's in it for you, plus any amount and due date. A **Catch up**
+  paragraph sums up the important ones.
+- **Acting on a mail:**
+  - open it in the mailbox;
+  - make a task;
+  - **remind me tomorrow** (a task at 9:00);
+  - **done** (swipe left on the phone);
+  - pin it;
+  - mark the sender **Always important** (VIP) or **Mute** them.
+- **Notifications:** an important new mail pings once (at most 5 a day), with **Make a task** and **Done**. Turn it
+  off in the inbox settings.
+- **Read-only:** nothing is marked read or moved in your mailboxes. One-time codes are cut before anything is kept.
+  Mail is kept for 14 days.
+
+Home shows the same picture in one place. **Needs you** ranks what waits on you across modules, and **Mail that
+matters** shows the top three mails.
+
 ## Notifications
 
 Every 15 minutes the worker looks for new GitHub issues assigned to you, new review requests and new ClickUp tasks

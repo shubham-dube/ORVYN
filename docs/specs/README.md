@@ -9,3 +9,4 @@
 | [0014-money-hand](0014-money-hand/spec.md)                       | What's in my hand, who owes whom, company PRs, holidays once                         | Delivered                       |
 | [0015-vault-quick-chat-live](0015-vault-quick-chat-live/spec.md) | Vault in a second (fingerprint, quick find, smart add, codes); chat that follows you | Delivered                       |
 | [0016-ipo-desk-and-brief-v2](0016-ipo-desk-and-brief-v2/spec.md) | The IPO desk sharper (mainboard first, will-you-apply tasks); a Brief with a brain   | Delivered                       |
+| [0017-home-and-smart-inbox](0017-home-and-smart-inbox/spec.md)   | Home as mission control; a smart inbox across every mailbox                          | Delivered                       |

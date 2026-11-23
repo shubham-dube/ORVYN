@@ -2,6 +2,18 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-24 (spec 0017, Home and the smart inbox — chosen for you; change any)
+
+| #        | Topic                 | Decision                                                                                                                                            |
+| -------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0017-1 | Needs you, ordered    | Due today or overdue and money-related first, then replies people wait for, then the rest by importance; at most 8 on Home with "and N more".       |
+| D-0017-2 | Which mail            | Unread from the last 7 days, up to 25 a mailbox, every 15 minutes; kept 14 days; still read-only (nothing is marked or moved in the mailbox).       |
+| D-0017-3 | Triage                | By the AI in batches (cheap model, budgets apply), with rules when AI is off or failing. OTP codes are cut from previews before anything is stored. |
+| D-0017-4 | Mail pings            | Only important new mail (needs reply, bill due within 3 days, security, VIP); at most 5 a day; on by default; switchable.                           |
+| D-0017-5 | Senders               | VIP and Mute are taught by the person, per sender address, and win over the AI.                                                                     |
+| D-0017-6 | Home layout           | Mission control: hero → now & next → needs you → today → money → mail → week → live → quick actions → modules. Empty blocks hide.                   |
+| D-0017-7 | Mail is personal data | Like the Library (D4): on ORVYN's server, readable by the AI for triage only; the AI never acts on mail.                                            |
+
 ## Decided — 2026-11-24 (spec 0016, the IPO desk sharper and a Brief with a brain — chosen for you; change any)
 
 | #        | Topic           | Decision                                                                                                                                                        |
