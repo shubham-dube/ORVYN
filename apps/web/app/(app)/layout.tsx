@@ -34,7 +34,7 @@ import { VaultProvider } from '@/lib/vault';
 import { MoneyProvider } from '@/lib/money';
 import { SyncProvider } from '@/lib/sync';
 import { TodayProvider } from '@/lib/today';
-import { deviceKeys } from '@/lib/chat';
+import { useChatDelivery } from '@/lib/chat';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { status } = useSession();
@@ -117,13 +117,10 @@ function Splash() {
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  const { me: who, deviceId } = useSession();
-  // a device that can chat gets its keys at once, so messages sent before Chat is first opened reach it (ADR-0014)
-  useEffect(() => {
-    if (deviceId && (who?.role === 'owner' || who?.entitlements.includes('chat')))
-      void deviceKeys(deviceId).catch(() => undefined);
-  }, [deviceId, who]);
+  const { me: who } = useSession();
   const { me } = useSession();
+  // a message from someone else counts as delivered while ORVYN is open anywhere (spec 0015)
+  useChatDelivery(me?.id, !!(who?.role === 'owner' || who?.entitlements.includes('chat')));
   const pathname = usePathname();
   const n = useNotifications();
   const [command, setCommand] = useState(false);

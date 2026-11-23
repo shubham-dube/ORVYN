@@ -29,7 +29,7 @@ export class FilesController {
     } catch {
       /* keep the default */
     }
-    const allowed = ['money', 'library', 'drop', 'voice', 'chat', 'split'];
+    const allowed = ['money', 'library', 'drop', 'voice', 'chat', 'chat-file', 'split'];
     return this.files.put(a.userId, {
       name: decoded,
       mime: (type ?? '').split(';')[0]!.trim().toLowerCase(),

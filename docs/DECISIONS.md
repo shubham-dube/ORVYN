@@ -2,6 +2,18 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-23 (spec 0015, Vault in a second and chat that follows you — chosen for you; change any)
+
+| #        | Topic              | Decision                                                                                                                                                |
+| -------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0015-1 | Chat storage       | **Kept on the server, encrypted at rest** (ADR-0016), so every device has the whole history. End-to-end sealing (ADR-0014) is retired for new messages. |
+| D-0015-2 | Old chats          | Carried over automatically by any device that can still read them; the server checks the sender's signature first.                                      |
+| D-0015-3 | Chat pushes        | Show the sender and the text (last four unread lines), with Reply and Mark as read. Muted chats stay silent.                                            |
+| D-0015-4 | Reactions          | One per person per message (tap yours again to remove it).                                                                                              |
+| D-0015-5 | Vault fingerprint  | Android only, opt-in after a passphrase unlock; the vault key sits in keystore-backed secure storage behind the system prompt, never on a server.       |
+| D-0015-6 | Vault smart add    | Recognised on the device by patterns (Luhn, otpauth, key prefixes) — never by the AI.                                                                   |
+| D-0015-7 | Per-device choices | Theme, app lock, Vault fingerprint and auto-lock stay per device; everything else follows the person.                                                   |
+
 ## Decided — 2026-11-23 (spec 0014, What's in my hand — chosen for you; change any)
 
 | #        | Topic           | Decision                                                                                                                                            |

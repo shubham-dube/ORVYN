@@ -2,16 +2,16 @@
 
 ## Threat model (what we defend against)
 
-| Threat                                   | Defence                                                                                                                                                        |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stolen phone / laptop                    | device sessions revocable; app lock (biometric/PIN) optional per app, required for Vault; vault keys only in OS keystore                                       |
-| Stolen password / phishing               | passkeys preferred; no SMS codes; new-device sign-in notifies all other devices                                                                                |
-| Server or database breach                | Vault and chat are end-to-end encrypted (attacker gets ciphertext). Other data encrypted at rest (disk + per-file keys for objects); secrets in env, not in DB |
-| Malicious backup access                  | backups encrypted with a key that is not stored on the server                                                                                                  |
-| A friend reading another friend's data   | every query scoped by `owner_id`; tests per module; sharing only through explicit share objects                                                                |
-| A friend using hidden features           | entitlements checked on the server for every request and websocket topic                                                                                       |
-| Prompt injection via documents/web pages | content is passed to the AI as data; the AI cannot act without the person's confirmation on anything consequential; vault is never in AI context               |
-| Over-collection                          | Money's SMS parsing runs on the phone; only parsed transactions are uploaded unless the person opts in                                                         |
+| Threat                                   | Defence                                                                                                                                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stolen phone / laptop                    | device sessions revocable; app lock (biometric/PIN) optional per app, required for Vault; vault keys only in OS keystore                                                                   |
+| Stolen password / phishing               | passkeys preferred; no SMS codes; new-device sign-in notifies all other devices                                                                                                            |
+| Server or database breach                | Vault is end-to-end encrypted (attacker gets ciphertext); chat is encrypted at rest (ADR-0016). Other data encrypted at rest (disk + per-file keys for objects); secrets in env, not in DB |
+| Malicious backup access                  | backups encrypted with a key that is not stored on the server                                                                                                                              |
+| A friend reading another friend's data   | every query scoped by `owner_id`; tests per module; sharing only through explicit share objects                                                                                            |
+| A friend using hidden features           | entitlements checked on the server for every request and websocket topic                                                                                                                   |
+| Prompt injection via documents/web pages | content is passed to the AI as data; the AI cannot act without the person's confirmation on anything consequential; vault is never in AI context                                           |
+| Over-collection                          | Money's SMS parsing runs on the phone; only parsed transactions are uploaded unless the person opts in                                                                                     |
 
 ## Sign-in (ADR-0003)
 
@@ -24,8 +24,9 @@
 
 - Library: **libsodium** (via `libsodium-wrappers-sumo` on web/extension/desktop); in Flutter the pure-Dart
   `cryptography` package with the same algorithms, checked against shared test vectors (D24, ADR-0014).
-- Chat: per-message XChaCha20-Poly1305 keys sealed to every device with X25519 + BLAKE2b and signed with Ed25519
-  (ADR-0014).
+- Chat: kept on the server and encrypted at rest with a key derived from `FILES_MASTER_KEY` (ADR-0016). Older
+  messages were sealed to devices with X25519 + BLAKE2b and signed with Ed25519 (ADR-0014). They are carried over
+  only after their signature is checked.
   No custom primitives.
 - **Vault passphrase** (separate from the account login) → **Argon2id** (moderate profile, tuned per device)
   → key-encryption key (KEK). A random 256-bit **vault key** encrypts items with **XChaCha20-Poly1305**; the

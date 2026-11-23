@@ -7,6 +7,7 @@ import {
   CirclePlus,
   Home,
   KeyRound,
+  LockKeyhole,
   LogOut,
   Moon,
   Settings,
@@ -32,6 +33,9 @@ import { chipLabel, smartParse, taskFields } from '@/lib/smart-task';
 import { useDropMaybe } from '@/lib/drop';
 import { localDay, useTodayMaybe } from '@/lib/today';
 import { Logo } from '@/components/logo';
+import { useVaultMaybe } from '@/lib/vault';
+import { subtitle } from '@/lib/vault-items';
+import { primary } from '@/lib/vault-smart';
 import { openMeeting } from '@/components/connections';
 
 interface Command {
@@ -40,6 +44,8 @@ interface Command {
   hint?: string;
   icon: ReactNode;
   run(): void | Promise<void>;
+  /** keep the bar open (e.g. to ask for the Vault passphrase) */
+  stay?: boolean;
 }
 
 /**
@@ -54,6 +60,11 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
+  const vault = useVaultMaybe();
+  const [unlocking, setUnlocking] = useState(false);
+  const [pass, setPass] = useState('');
+  const [passError, setPassError] = useState('');
+  const [opening, setOpening] = useState(false);
 
   const commands = useMemo<Command[]>(() => {
     const go = (path: string) => () => router.push(path);
@@ -193,18 +204,71 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
           ...dropCmd,
         ]
       : [...matches, ...dropCmd];
-  const filtered: Command[] = question ? [...askCmd, ...base] : [...base, ...askCmd];
+  // the Vault, searched as you type (spec 0015 A3): Enter copies the password; locked, it asks for the passphrase here
+  const vaultWords = typed.replace(/^(vault|password|pass|pwd)\s*/i, '').toLowerCase();
+  const wantsVault = /^(vault|password|pass|pwd)\b/i.test(typed);
+  const vaultCmd: Command[] = !vault
+    ? []
+    : vault.status === 'unlocked' && (vaultWords.length >= 2 || wantsVault)
+      ? vault.items
+          .filter((i) =>
+            `${i.payload.title} ${subtitle(i.payload)} ${i.payload.fields.url ?? ''}`
+              .toLowerCase()
+              .includes(vaultWords),
+          )
+          .slice(0, 5)
+          .flatMap((i) => {
+            const p = primary(i.payload);
+            return p
+              ? [
+                  {
+                    id: `vault-${i.id}`,
+                    label: `Copy ${p.label.toLowerCase()} · ${i.payload.title}`,
+                    hint: subtitle(i.payload) || 'Vault',
+                    icon: <KeyRound size={16} />,
+                    run: async () => {
+                      await vault.copySecret(p.value);
+                      toast({ title: `${p.label} copied`, body: 'The clipboard clears in 30 seconds.' });
+                    },
+                  },
+                ]
+              : [];
+          })
+      : vault.status === 'locked' && (wantsVault || typed.length >= 3)
+        ? [
+            {
+              id: 'vault-unlock',
+              label:
+                wantsVault || !typed ? 'Unlock the Vault to search it' : `Search the Vault for “${typed}”`,
+              hint: 'Vault',
+              icon: <LockKeyhole size={16} />,
+              stay: true,
+              run: () => {
+                setUnlocking(true);
+                setPass('');
+                setPassError('');
+              },
+            },
+          ]
+        : [];
+  const filtered: Command[] = wantsVault
+    ? [...vaultCmd, ...base, ...askCmd]
+    : question
+      ? [...askCmd, ...base, ...vaultCmd]
+      : [...vaultCmd.slice(0, 3), ...base, ...askCmd];
 
   useEffect(() => {
     if (open) {
       setQ('');
       setActive(0);
+      setUnlocking(false);
       setTimeout(() => input.current?.focus(), 30);
     }
   }, [open]);
 
   const exec = async (c: Command | undefined) => {
     if (!c) return;
+    if (c.stay) return void c.run();
     onClose();
     try {
       await c.run();
@@ -264,7 +328,52 @@ export function CommandBar({ open, onClose }: { open: boolean; onClose(): void }
                 Esc
               </kbd>
             </div>
+            {unlocking && vault ? (
+              <form
+                className="flex flex-col gap-2 p-4"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  setOpening(true);
+                  setPassError('');
+                  try {
+                    await vault.unlock(pass);
+                    setPass('');
+                    setUnlocking(false);
+                    setTimeout(() => input.current?.focus(), 30);
+                  } catch {
+                    setPassError('That passphrase isn’t right.');
+                  } finally {
+                    setOpening(false);
+                  }
+                }}
+              >
+                <label className="flex items-center gap-2 text-[13px] font-medium">
+                  <LockKeyhole size={15} className="text-orv-accent" /> Vault passphrase
+                </label>
+                <input
+                  autoFocus
+                  type="password"
+                  aria-label="Vault passphrase"
+                  value={pass}
+                  onChange={(e) => setPass(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && setUnlocking(false)}
+                  className="h-11 rounded-orv-md field-ring px-3 text-[15px] outline-none"
+                />
+                {passError ? <p className="text-[12.5px] text-orv-danger">{passError}</p> : null}
+                <p className="text-[11.5px] text-orv-faint">
+                  Opened on this device only; the Vault locks itself again after a while.
+                </p>
+                <button
+                  type="submit"
+                  disabled={!pass || opening}
+                  className="h-10 rounded-orv-md bg-[image:var(--orv-accent-grad)] text-[14px] font-semibold text-white disabled:opacity-50"
+                >
+                  {opening ? 'Opening…' : 'Unlock and search'}
+                </button>
+              </form>
+            ) : null}
             <ul
+              hidden={unlocking}
               id="orv-commands"
               role="listbox"
               aria-label="Commands"

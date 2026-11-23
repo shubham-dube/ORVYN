@@ -83,7 +83,26 @@ export const ServerMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('notify.dismissed'), id: z.string() }),
   z.object({ type: z.literal('session.revoked') }),
   z.object({ type: z.literal('entitlements.changed'), entitlements: z.array(z.string()) }),
-  z.object({ type: z.literal('chat.message'), conversationId: z.string(), messageId: z.string() }),
+  z.object({
+    type: z.literal('chat.message'),
+    conversationId: z.string(),
+    messageId: z.string(),
+    /** the message itself (spec 0015), so a client adds or updates it without asking again */
+    message: z.any().optional(),
+  }),
+  z.object({
+    type: z.literal('chat.delivered'),
+    conversationId: z.string(),
+    userId: z.string(),
+    at: z.string(),
+  }),
+  z.object({
+    type: z.literal('chat.presence'),
+    userId: z.string(),
+    online: z.boolean(),
+    lastSeenAt: z.string().nullable(),
+  }),
+  z.object({ type: z.literal('chat.hidden'), conversationId: z.string(), messageId: z.string() }),
   z.object({ type: z.literal('chat.changed'), conversationId: z.string() }),
   z.object({ type: z.literal('chat.typing'), conversationId: z.string(), userId: z.string() }),
   z.object({ type: z.literal('chat.read'), conversationId: z.string(), userId: z.string(), at: z.string() }),

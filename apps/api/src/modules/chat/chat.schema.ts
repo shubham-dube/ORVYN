@@ -1,4 +1,14 @@
-import { boolean, index, jsonb, pgTable, primaryKey, text, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  smallint,
+  text,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { createdAt, ts, updatedAt } from '../../db/columns';
 
 /** Chat (spec 0011, ADR-0014): who talks to whom and ciphertext — never what. */
@@ -27,6 +37,8 @@ export const chatConversations = pgTable(
     /** direct chats: "<smaller id>:<larger id>", so there is one per pair */
     pairKey: text('pair_key'),
     splitGroupId: uuid('split_group_id'),
+    /** one message pinned to the top of the chat (spec 0015) */
+    pinnedMessageId: uuid('pinned_message_id'),
     lastAt: ts('last_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -42,6 +54,10 @@ export const chatMembers = pgTable(
     ownerId: uuid('owner_id').notNull(),
     muted: boolean('muted').notNull().default(false),
     lastReadAt: ts('last_read_at'),
+    /** the newest moment this person's app had everything (✓✓ delivered) */
+    lastDeliveredAt: ts('last_delivered_at'),
+    /** pinned to the top of their list */
+    pinned: boolean('pinned').notNull().default(false),
     joinedAt: createdAt(),
     leftAt: ts('left_at'),
   },
@@ -67,6 +83,15 @@ export const chatMessages = pgTable(
     /** system lines only (not encrypted, marked so) */
     text: text('text'),
     files: jsonb('files').$type<string[]>().notNull().default([]),
+    /** 1: sealed per device (ADR-0014). 2: kept here, encrypted at rest (ADR-0016) */
+    v: smallint('v').notNull().default(1),
+    /** v2: text, attachments and share as one sealed JSON object (never readable from the database alone) */
+    body: text('body'),
+    replyToId: uuid('reply_to_id'),
+    forwarded: boolean('forwarded').notNull().default(false),
+    /** whose uploads the attachments are (a forward keeps the original sender's); null = the sender */
+    filesOwnerId: uuid('files_owner_id'),
+    editedAt: ts('edited_at'),
     deletedAt: ts('deleted_at'),
     createdAt: createdAt(),
   },
@@ -82,4 +107,27 @@ export const chatKeys = pgTable(
     sealed: text('sealed').notNull(),
   },
   (t) => [primaryKey({ columns: [t.messageId, t.deviceId] })],
+);
+
+/** One reaction per person per message (D-0015-4). */
+export const chatReactions = pgTable(
+  'chat_reactions',
+  {
+    messageId: uuid('message_id').notNull(),
+    ownerId: uuid('owner_id').notNull(),
+    emoji: text('emoji').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.messageId, t.ownerId] })],
+);
+
+/** "Delete for me": hidden for this person only. */
+export const chatHidden = pgTable(
+  'chat_hidden',
+  {
+    messageId: uuid('message_id').notNull(),
+    ownerId: uuid('owner_id').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.messageId, t.ownerId] }), index('chat_hidden_owner_idx').on(t.ownerId)],
 );

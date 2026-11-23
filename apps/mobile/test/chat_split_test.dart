@@ -12,139 +12,182 @@ const ashaId = '00000000-0000-4000-8000-0000000000a5';
 const ashaDevice = '00000000-0000-4000-8000-0000000000d5';
 
 void main() {
-  testWidgets('Chat on the phone: it opens what Asha sealed for it, and what it sends opens with her key (AC1, AC2)', (
-    tester,
-  ) async {
-    final h = AppHarness()..signedInAs(userJson(ent: ['chat']));
-    late DeviceKeys me, asha;
-    late Sealed fromAsha;
-    await tester.runAsync(() async {
-      me = await newDeviceKeys();
-      asha = await newDeviceKeys();
-      fromAsha = await encryptMessage(
-        {'t': 'text', 'text': 'Dinner at 8? 🍕'},
-        conversationId: conv,
-        messageId: '0193f000-0000-7000-8000-0000000000a1',
-        deviceId: ashaDevice,
-        signSecret: asha.signSecret,
-        recipients: [Recipient(deviceId, me.boxPublic)],
-      );
-    });
-    h.store.values['orvyn.chat.$deviceId'] = jsonEncode(me.toJson());
-    final registered = <dynamic>[];
-    final sent = <dynamic>[];
-    final c = {
-      'id': conv,
-      'kind': 'direct',
-      'title': 'Asha',
-      'adminId': null,
-      'members': [
-        {'id': ownerId, 'name': 'Asha Rao', 'email': 'me@example.test', 'lastReadAt': null},
-        {'id': ashaId, 'name': 'Asha', 'email': 'asha@example.test', 'lastReadAt': '2030-01-01T00:00:00Z'},
-      ],
-      'muted': false,
-      'unread': 1,
-      'lastAt': '2026-11-19T10:00:00Z',
-      'splitGroupId': null,
-    };
-    h.server.on('PUT /chat/devices', (r) {
-      registered.add(r.body);
-      return {'ok': true, 'changed': false};
-    });
-    h.server.on('GET /chat/conversations', (_) => [c]);
-    h.server.on('GET /chat/conversations/$conv', (_) => c);
-    h.server.on('POST /chat/conversations/$conv/read', (_) => {'ok': true});
-    h.server.on(
-      'GET /chat/keys',
-      (_) => [
-        {
-          'userId': ownerId,
-          'deviceId': deviceId,
-          'boxPublic': me.boxPublic,
-          'signPublic': me.signPublic,
-          'active': true,
-        },
-        {
-          'userId': ashaId,
-          'deviceId': ashaDevice,
-          'boxPublic': asha.boxPublic,
-          'signPublic': asha.signPublic,
-          'active': true,
-        },
-      ],
-    );
-    h.server.on(
-      'GET /chat/conversations/$conv/messages',
-      (_) => [
-        {
-          'id': '0193f000-0000-7000-8000-0000000000a1',
-          'conversationId': conv,
+  testWidgets(
+    'Chat that follows you: history on any phone, old sealed messages carried over, live, send, react (spec 0015 C)',
+    (tester) async {
+      final h = AppHarness()..signedInAs(userJson(ent: ['chat']));
+      late DeviceKeys me, asha;
+      late Sealed old;
+      late String oldKey;
+      const oldId = '0193f000-0000-7000-8000-0000000000a0';
+      await tester.runAsync(() async {
+        me = await newDeviceKeys();
+        asha = await newDeviceKeys();
+        old = await encryptMessage(
+          {'t': 'text', 'text': 'From the old phone'},
+          conversationId: conv,
+          messageId: oldId,
+          deviceId: ashaDevice,
+          signSecret: asha.signSecret,
+          recipients: [Recipient(deviceId, me.boxPublic)],
+        );
+        oldKey = b64(await openKey(old.keys.single.sealed, me.boxSecret));
+      });
+      // this phone once had end-to-end keys (ADR-0014): it can hand the old message's key over
+      h.store.values['orvyn.chat.$deviceId'] = jsonEncode(me.toJson());
+      final sent = <Map<String, dynamic>>[];
+      final carried = <dynamic>[];
+      final reacted = <dynamic>[];
+      var isCarried = false;
+      Map<String, dynamic> msg(String id, String from, String text, String at, {int v = 2}) => {
+        'id': id,
+        'conversationId': conv,
+        'senderId': from,
+        'kind': 'msg',
+        'v': v,
+        'text': v == 2 ? text : null,
+        'attachments': <dynamic>[],
+        'share': null,
+        'replyTo': null,
+        'reactions': <dynamic>[],
+        'forwarded': false,
+        'editedAt': null,
+        'deletedAt': null,
+        'createdAt': at,
+        'senderDeviceId': v == 1 ? ashaDevice : null,
+        'ciphertext': v == 1 ? old.ciphertext : null,
+        'nonce': v == 1 ? old.nonce : null,
+        'signature': v == 1 ? old.signature : null,
+        'sealedForMe': v == 1 ? old.keys.single.sealed : null,
+        'files': <String>[],
+      };
+      final c = {
+        'id': conv,
+        'kind': 'direct',
+        'title': 'Asha',
+        'adminId': null,
+        'members': [
+          {
+            'id': ownerId,
+            'name': 'Me',
+            'email': 'me@example.test',
+            'lastReadAt': null,
+            'lastDeliveredAt': null,
+            'online': true,
+            'lastSeenAt': null,
+          },
+          {
+            'id': ashaId,
+            'name': 'Asha',
+            'email': 'asha@example.test',
+            'lastReadAt': null,
+            'lastDeliveredAt': null,
+            'online': true,
+            'lastSeenAt': null,
+          },
+        ],
+        'muted': false,
+        'pinned': false,
+        'unread': 1,
+        'lastAt': '2026-11-19T10:00:00Z',
+        'splitGroupId': null,
+        'last': {
+          'id': 'a1',
           'senderId': ashaId,
-          'senderDeviceId': ashaDevice,
           'kind': 'msg',
-          'ciphertext': fromAsha.ciphertext,
-          'nonce': fromAsha.nonce,
-          'signature': fromAsha.signature,
-          'sealedForMe': fromAsha.keys.single.sealed,
-          'text': null,
-          'files': <String>[],
-          'deletedAt': null,
-          'createdAt': '2026-11-19T10:00:00Z',
+          'text': 'Dinner at 8? 🍕',
+          'attachment': null,
+          'deleted': false,
+          'at': '2026-11-19T10:00:00Z',
         },
-      ],
-    );
-    h.server.on('POST /chat/conversations/$conv/messages', (r) {
-      sent.add(r.body);
-      return {'id': (r.body as Map)['id']};
-    });
-    await h.pump(tester);
-    tester.view.physicalSize = const Size(1170, 2532);
-    addTearDown(tester.view.reset);
-    await tester.tap(find.bySemanticsLabel('More'));
-    await settle(tester);
-    await tester.tap(find.bySemanticsLabel('Open Chat'));
-    await settle(tester, 20);
-    expect(registered, isNotEmpty);
-    expect((registered.first as Map)['boxPublic'], me.boxPublic, reason: 'this phone’s keys, kept on it');
-    await tester.runAsync(() async {
-      await tester.tap(find.text('Asha'));
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    });
-    await settle(tester, 30);
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
-    await settle(tester, 10);
-    expect(find.text('Dinner at 8? 🍕'), findsOneWidget);
+        'pinnedMessage': null,
+      };
+      h.server.on('GET /chat/conversations', (_) => [c]);
+      h.server.on('GET /chat/conversations/$conv', (_) => c);
+      h.server.on('POST /chat/conversations/$conv/read', (_) => {'ok': true});
+      h.server.on('POST /chat/conversations/$conv/delivered', (_) => {'ok': true});
+      h.server.on(
+        'GET /chat/conversations/$conv/messages',
+        (_) => [
+          msg('0193f000-0000-7000-8000-0000000000a1', ashaId, 'Dinner at 8? 🍕', '2026-11-19T10:00:00Z'),
+          msg(oldId, ashaId, 'From the old phone', '2026-11-18T10:00:00Z', v: isCarried ? 2 : 1),
+        ],
+      );
+      h.server.on('POST /chat/conversations/$conv/carry', (r) {
+        carried.add(r.body);
+        isCarried = true;
+        return {'carried': 1, 'refused': 0};
+      });
+      h.server.on('POST /chat/conversations/$conv/messages', (r) {
+        final b = Map<String, dynamic>.from(r.body as Map);
+        sent.add(b);
+        return msg(b['id'] as String, ownerId, b['text'] as String, '2026-11-19T10:05:00Z');
+      });
+      h.server.on('PUT /chat/messages/0193f000-0000-7000-8000-0000000000a1/reaction', (r) {
+        reacted.add(r.body);
+        return {'ok': true};
+      });
+      await h.pump(tester);
+      tester.view.physicalSize = const Size(1170, 2532);
+      addTearDown(tester.view.reset);
+      await tester.tap(find.bySemanticsLabel('More'));
+      await settle(tester);
+      await tester.tap(find.bySemanticsLabel('Open Chat'));
+      await settle(tester, 20);
+      // the list says what was said last, with the unread count
+      expect(find.text('Dinner at 8? 🍕'), findsOneWidget);
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Asha'));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await settle(tester, 30);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await settle(tester, 10);
+      expect(find.text('Dinner at 8? 🍕'), findsOneWidget);
+      // the old sealed message was opened here and handed over with its key, so every device has it now
+      expect(carried, hasLength(1));
+      expect((carried.single as Map)['items'], [
+        {'id': oldId, 'key': oldKey},
+      ]);
+      expect(find.text('From the old phone'), findsOneWidget);
+      expect(find.text('online'), findsOneWidget);
 
-    await tester.enterText(find.byKey(const Key('chat-text')), 'Yes!');
-    await settle(tester);
-    await tester.runAsync(() async {
-      await tester.tap(find.byTooltip('Send'));
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-    });
-    await settle(tester, 20);
-    expect(sent, hasLength(1));
-    final body = sent.single as Map;
-    expect((body['keys'] as List).map((k) => (k as Map)['deviceId']).toSet(), {deviceId, ashaDevice});
-    expect(jsonEncode(body), isNot(contains('Yes!')));
-    final forAsha =
-        (body['keys'] as List).cast<Map<String, dynamic>>().firstWhere((k) => k['deviceId'] == ashaDevice)['sealed']
-            as String;
-    final opened = await tester.runAsync(
-      () => decryptMessage(
-        conversationId: conv,
-        id: body['id'] as String,
-        senderDeviceId: deviceId,
-        ciphertext: body['ciphertext'] as String,
-        nonce: body['nonce'] as String,
-        signature: body['signature'] as String,
-        sealedForMe: forAsha,
-        myBoxSecret: asha.boxSecret,
-        senderSignPublic: me.signPublic,
-      ),
-    );
-    expect(opened, {'t': 'text', 'text': 'Yes!', 'replyTo': null});
-    await finish(tester);
-  });
+      // live: Asha's next line arrives on the socket, whole
+      h.sockets.push({
+        'type': 'chat.message',
+        'conversationId': conv,
+        'messageId': 'live-1',
+        'message': msg('0193f000-0000-7000-8000-0000000000a2', ashaId, 'Bring the speaker', '2026-11-19T10:01:00Z'),
+      });
+      await settle(tester, 10);
+      expect(find.text('Bring the speaker'), findsOneWidget);
+
+      // send: shown at once, then confirmed
+      await tester.enterText(find.byKey(const Key('chat-text')), 'Yes!');
+      await settle(tester);
+      await tester.runAsync(() async {
+        await tester.tap(find.bySemanticsLabel('Send'));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      });
+      await settle(tester, 20);
+      expect(sent, hasLength(1));
+      expect(sent.single, containsPair('text', 'Yes!'));
+      expect(find.text('Yes!'), findsOneWidget);
+
+      // double-tap a message: ❤️
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Dinner at 8? 🍕'));
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        await tester.tap(find.text('Dinner at 8? 🍕'));
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+      });
+      await settle(tester, 10);
+      expect(reacted, [
+        {'emoji': '❤️'},
+      ]);
+      await finish(tester);
+    },
+  );
 
   testWidgets('Split on the phone: who owes whom, and a new expense split equally', (tester) async {
     final h = AppHarness()..signedInAs(userJson(ent: ['split']));

@@ -120,15 +120,22 @@ void main() {
         findsOneWidget,
       );
 
-      // a login, with a generated password
+      // a login: pasted as one line and understood on the phone (spec 0015 A4), then a generated password
       await tapIt(tester, find.byKey(const Key('vault-new')));
-      // the sheet's own fields (the page's search box sits behind it)
-      final sheetFields = find.descendant(of: find.byType(BottomSheet), matching: find.byType(TextField));
-      await tester.enterText(sheetFields.at(0), 'Bank of Example');
-      await tester.enterText(sheetFields.at(1), 'me@example.test');
+      await tester.enterText(find.byKey(const Key('vault-paste')), 'bank me@example.test Hunter2!x');
+      await settle(tester);
+      expect(find.text('Looks like: Login for Bank'), findsOneWidget);
+      await tapIt(tester, find.text('Fill it in'));
+      await tester.enterText(find.byKey(const Key('vault-title')), 'Bank of Example');
       await tapIt(tester, find.byTooltip('Generate a password'));
+      expect(find.text('New password'), findsOneWidget);
+      await tapIt(tester, find.text('Use this password'));
       await tapIt(tester, find.text('Save'));
-      expect(find.text('Bank of Example'), findsOneWidget);
+      expect(find.text('Bank of Example'), findsWidgets);
+
+      // quick find: the password is copied straight from the row
+      await tapIt(tester, find.byTooltip('Copy password for Bank of Example'));
+      expect(find.text('Password copied'), findsOneWidget);
 
       // the server holds only ciphertext
       final sent = b.rows.values.map((r) => '$r').join('\n');
@@ -139,7 +146,7 @@ void main() {
       expect(b.rows.keys.where((k) => k.startsWith('vault.keys/')), hasLength(1));
 
       // open it: hidden until shown
-      await tapIt(tester, find.text('Bank of Example'));
+      await tapIt(tester, find.text('Bank of Example').last); // the list row (the Recent tile copies)
       expect(tester.widget<Text>(find.byKey(const Key('secret-Password'))).data, '••••••••••');
       await tapIt(tester, find.byTooltip('Show Password'));
       expect(tester.widget<Text>(find.byKey(const Key('secret-Password'))).data, hasLength(20));
@@ -157,7 +164,7 @@ void main() {
       await tester.enterText(find.byKey(const Key('vault-unlock')), 'correct horse battery staple');
       await settle(tester);
       await tapIt(tester, find.text('Unlock'));
-      expect(find.text('Bank of Example'), findsOneWidget);
+      expect(find.text('Bank of Example'), findsWidgets);
 
       // forgot the passphrase: the recovery key gets back in and sets a new one
       await tapIt(tester, find.text('Lock now'));
@@ -166,12 +173,31 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, 'At least 10 characters').first, 'a brand new passphrase');
       await settle(tester);
       await tapIt(tester, find.text('Open and set the passphrase'));
-      expect(find.text('Bank of Example'), findsOneWidget);
+      expect(find.text('Bank of Example'), findsWidgets);
       await tapIt(tester, find.text('Lock now'));
       await tester.enterText(find.byKey(const Key('vault-unlock')), 'a brand new passphrase');
       await settle(tester);
       await tapIt(tester, find.text('Unlock'));
-      expect(find.text('Bank of Example'), findsOneWidget);
+      expect(find.text('Bank of Example'), findsWidgets);
+
+      // fingerprint (spec 0015 A1): turned on once, then the Vault opens without the passphrase
+      await tapIt(tester, find.byKey(const Key('vault-finger-on')));
+      expect(h.store.values['orvyn.vault.bio'], isNotNull, reason: 'kept in this phone’s secure storage');
+      final sentNow = b.rows.values.map((r) => '$r').join('\n');
+      expect(sentNow, isNot(contains(h.store.values['orvyn.vault.bio']!)), reason: 'never sent anywhere');
+      await tapIt(tester, find.text('Lock now'));
+      await settle(tester, 20);
+      expect(find.text('Bank of Example'), findsWidgets, reason: 'asked for the fingerprint at once, and it matched');
+      // a fingerprint that fails leaves it locked, with the passphrase offered
+      h.auth.ok = false;
+      await tapIt(tester, find.text('Lock now'));
+      await settle(tester, 20);
+      expect(find.text('Vault is locked'), findsOneWidget);
+      h.auth.ok = true;
+      await tapIt(tester, find.byKey(const Key('vault-finger')));
+      expect(find.text('Bank of Example'), findsWidgets);
+      // the copied password leaves the clipboard after 30 seconds
+      await tester.pump(const Duration(seconds: 31));
       await finish(tester);
     },
   );

@@ -8,4 +8,9 @@
     <string name="widget_plus" translatable="false">+</string>
     <string name="widget_more">+%1$d more</string>
     <string name="capture_label">ORVYN Money: read bank and UPI payment messages</string>
+    <string name="shortcut_vault_find">Find in Vault</string>
+    <string name="shortcut_vault_find_long">Find a password in your Vault</string>
+    <string name="shortcut_vault_add">Add to Vault</string>
+    <string name="shortcut_vault_add_long">Add a password or card to your Vault</string>
+    <string name="shortcut_chats">Chats</string>
 </resources>

@@ -2,15 +2,24 @@
 
 ## Chat
 
-- Give a friend **Chat** in People. Their device makes its own keys the first time they open ORVYN; from then on,
-  everything you send them is encrypted on your device for each of their devices.
+- Give a friend **Chat** in People. Chats are kept on ORVYN's server, encrypted at rest (ADR-0016), so **every
+  phone and browser you sign in to has the whole history**. A new phone starts with everything.
 - **Chat → New**: one person for a direct chat, several for a group (you are its admin: rename, add, remove).
-- Hover a message on the web (long-press on the phone) to **react**, **reply**, **edit** or **delete for everyone**.
-  The paperclip sends photos and files, encrypted before they leave your device.
-- ✓ Sent, ✓✓ Read; "is typing…"; **mute** per chat in its details.
-- Details (ⓘ) show each person's **device codes**. Compare them in person once to be sure nobody is in between.
-- A new phone or browser can't read messages from before it joined — that is the price of the server never holding
-  your keys.
+- Messages show at once. A clock means sending; ✓ sent; ✓✓ delivered; bold ✓✓ read. A failed one has **Retry**,
+  and the phone keeps unsent messages until they go.
+- **Reply**: swipe right on the phone, or the reply button on the web. Tap a quote to jump to the original.
+- **React**: double-tap for ❤️; long-press (phone) or hover (web) for more. One reaction each; tap yours to remove
+  it.
+- In the same menu: **copy**, **forward** to other chats, **pin** to the top of the chat, **edit** your own,
+  **delete for me** or **for everyone**.
+- **Photos and files**: + on the phone, the paperclip on the web. You can also drop or paste them on the web.
+  Photos show inline; tap for full screen.
+- **Search** (🔍 in a chat) finds words and file names; tap a result to jump there.
+- The header shows **typing…**, **online** or **last seen**.
+- **Notifications** say who wrote and what. Answer with **Reply** right in the notification, or **Mark as read**.
+  Reading a chat anywhere clears it everywhere. **Mute** and **Pin** are in the chat's details.
+- **Older private messages** (sent before 2026-11-23, sealed per device) come over by themselves the first time you
+  open the chat on a phone or browser that could read them. Until then they show as "An older private message".
 
 ## Split
 

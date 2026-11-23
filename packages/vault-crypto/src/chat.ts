@@ -185,6 +185,40 @@ export async function decryptMessage<T = unknown>(
   ) as T;
 }
 
+/**
+ * Open a sealed message with its message key `K` handed over by a device that could unseal it (carrying old chats over,
+ * ADR-0016). The sender's signature is checked first, so a key can't be used to plant words in someone's mouth.
+ */
+export async function openMessageWithKey<T = unknown>(
+  m: {
+    conversationId: string;
+    id: string;
+    senderDeviceId: string;
+    ciphertext: string;
+    nonce: string;
+    signature: string;
+  },
+  key: Uint8Array,
+  senderSignPublic: string,
+): Promise<T> {
+  const s = await chatReady();
+  const ct = unb64(m.ciphertext);
+  const nonce = unb64(m.nonce);
+  const ok = s.crypto_sign_verify_detached(
+    unb64(m.signature),
+    await digest(m.conversationId, m.id, m.senderDeviceId, nonce, ct),
+    unb64(senderSignPublic),
+  );
+  if (!ok) throw new BadChatData('bad signature');
+  try {
+    return JSON.parse(
+      dec.decode(unaead(key, ct, contentAad(m.conversationId, m.id, m.senderDeviceId), nonce)),
+    ) as T;
+  } catch {
+    throw new BadChatData('wrong key');
+  }
+}
+
 /** A file, encrypted before upload: the key and nonce go inside the message. */
 export async function encryptFile(bytes: Uint8Array, fixed?: { key: Uint8Array; nonce: Uint8Array }) {
   const s = await chatReady();

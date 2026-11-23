@@ -125,8 +125,16 @@ class SessionController extends Notifier<SessionState> {
     rt.start();
     unawaited(_registerPush());
     unawaited(ref.read(syncProvider).sync().catchError((_) {}));
-    // a phone that can chat gets its keys at once, so messages sent before Chat is opened reach it (ADR-0014)
-    if (s.user.can('chat')) unawaited(ref.read(chatClientProvider).keys(s.deviceId).then((_) {}, onError: (_) {}));
+  }
+
+  /// A message from someone else counts as delivered (✓✓) while ORVYN is open — the chat needn't be (spec 0015).
+  final _delivering = <String, Timer>{};
+  void _delivered(String conversationId) {
+    _delivering[conversationId]?.cancel();
+    _delivering[conversationId] = Timer(const Duration(milliseconds: 400), () {
+      _delivering.remove(conversationId);
+      unawaited(_api.post<dynamic>('/chat/conversations/$conversationId/delivered').then((_) {}, onError: (_) {}));
+    });
   }
 
   void _onMessage(Map<String, dynamic> m) {
@@ -141,6 +149,11 @@ class SessionController extends Notifier<SessionState> {
         unawaited(_ended('revoked'));
       case 'sync.changed':
         unawaited(ref.read(syncProvider).sync().catchError((_) {}));
+      case 'chat.message' when s is SignedIn:
+        final msg = m['message'];
+        if (msg is Map && msg['senderId'] != s.me.id && msg['kind'] == 'msg') {
+          _delivered(m['conversationId'] as String);
+        }
     }
   }
 
@@ -192,6 +205,7 @@ class SessionController extends Notifier<SessionState> {
     final store = ref.read(storeProvider);
     await store.write('orvyn.me', null);
     await store.write('orvyn.device', null);
+    await store.write('orvyn.vault.bio', null); // the Vault's fingerprint key goes with the session (spec 0015 A1)
     if (_api.accessToken != null) await _api.setSession(null);
     await store.writeRefreshToken(null);
     await ref.read(dbProvider).wipe();

@@ -7,20 +7,30 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Patch,
   Put,
   Query,
   Res,
 } from '@nestjs/common';
-import { NewConversation, RegisterChatDevice, SendMessage } from '@orvyn/contracts';
+import {
+  CarryChatMessages,
+  ChatReaction,
+  EditChatMessage,
+  NewConversation,
+  RegisterChatDevice,
+  SendChatMessage,
+  SendMessage,
+} from '@orvyn/contracts';
 import type { FastifyReply } from 'fastify';
 import { z } from 'zod';
+import { badRequest } from '../../common/errors';
 import { ZodPipe } from '../../common/zod.pipe';
 import { Auth, type AuthContext, RequireEntitlement } from '../auth/auth.decorators';
 import { ChatService } from './chat.service';
 
 const id = new ParseUUIDPipe();
 
-/** Chat (spec 0011 part A). Every call is checked against membership; content is never readable here. */
+/** Chat (spec 0011 part A, spec 0015 C). Every call is checked against membership (rule 5). */
 @Controller('chat')
 @RequireEntitlement('chat')
 export class ChatController {
@@ -119,9 +129,79 @@ export class ChatController {
     });
   }
 
+  /** A message (spec 0015); the old sealed form (ADR-0014) still comes from apps that aren't updated yet. */
   @Post('conversations/:id/messages')
-  send(@Auth() a: AuthContext, @Param('id', id) cid: string, @Body(new ZodPipe(SendMessage)) b: SendMessage) {
-    return this.chat.send(a.userId, a.deviceId, cid, b);
+  send(@Auth() a: AuthContext, @Param('id', id) cid: string, @Body() raw: unknown) {
+    const sealed = !!raw && typeof raw === 'object' && 'ciphertext' in raw;
+    const r = (sealed ? SendMessage : SendChatMessage).safeParse(raw);
+    if (!r.success)
+      throw badRequest('invalid_request', r.error.issues[0]?.message ?? 'That message is not valid.');
+    return sealed
+      ? this.chat.sendSealed(a.userId, a.deviceId, cid, r.data as SendMessage)
+      : this.chat.send(a.userId, a.deviceId, cid, r.data as SendChatMessage);
+  }
+
+  @Get('conversations/:id/search')
+  search(@Auth() a: AuthContext, @Param('id', id) cid: string, @Query('q') q?: string) {
+    return this.chat.search(a.userId, cid, (q ?? '').slice(0, 100));
+  }
+
+  @Post('conversations/:id/delivered')
+  @HttpCode(200)
+  delivered(@Auth() a: AuthContext, @Param('id', id) cid: string) {
+    return this.chat.delivered(a.userId, cid);
+  }
+
+  @Put('conversations/:id/pin')
+  pin(
+    @Auth() a: AuthContext,
+    @Param('id', id) cid: string,
+    @Body(new ZodPipe(z.object({ messageId: z.string().uuid().nullable() }))) b: { messageId: string | null },
+  ) {
+    return this.chat.pinMessage(a.userId, cid, b.messageId);
+  }
+
+  @Put('conversations/:id/pinned')
+  pinned(
+    @Auth() a: AuthContext,
+    @Param('id', id) cid: string,
+    @Body(new ZodPipe(z.object({ pinned: z.boolean() }))) b: { pinned: boolean },
+  ) {
+    return this.chat.pinConversation(a.userId, cid, b.pinned);
+  }
+
+  @Post('conversations/:id/carry')
+  @HttpCode(200)
+  carry(
+    @Auth() a: AuthContext,
+    @Param('id', id) cid: string,
+    @Body(new ZodPipe(CarryChatMessages)) b: CarryChatMessages,
+  ) {
+    return this.chat.carry(a.userId, cid, b);
+  }
+
+  @Patch('messages/:id')
+  edit(
+    @Auth() a: AuthContext,
+    @Param('id', id) mid: string,
+    @Body(new ZodPipe(EditChatMessage)) b: { text: string },
+  ) {
+    return this.chat.edit(a.userId, mid, b.text);
+  }
+
+  @Put('messages/:id/reaction')
+  react(
+    @Auth() a: AuthContext,
+    @Param('id', id) mid: string,
+    @Body(new ZodPipe(ChatReaction)) b: { emoji: string | null },
+  ) {
+    return this.chat.react(a.userId, mid, b.emoji);
+  }
+
+  @Post('messages/:id/hide')
+  @HttpCode(200)
+  hide(@Auth() a: AuthContext, @Param('id', id) mid: string) {
+    return this.chat.hide(a.userId, mid);
   }
 
   @Delete('messages/:id')
@@ -139,6 +219,7 @@ export class ChatController {
     const f = await this.chat.file(a.userId, cid, fid);
     return res
       .header('content-type', 'application/octet-stream')
+      .header('x-file-type', f.mime)
       .header('x-content-type-options', 'nosniff')
       .header('cache-control', 'private, max-age=86400')
       .send(Buffer.from(f.bytes));

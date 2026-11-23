@@ -23,8 +23,12 @@ import {
   Trash2,
   Unlock,
   Paperclip,
+  Sparkles,
+  Timer,
+  User,
 } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { guess, parseTotp, primary, strength as pwStrength, totpCode, totpLeft } from '@/lib/vault-smart';
 import { Glass, Label, Segmented, Sheet, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
@@ -56,6 +60,91 @@ const ICON: Record<VaultKind, ReactNode> = {
   note: <StickyNote size={17} aria-hidden />,
 };
 const MAX_ATTACH = 200 * 1024;
+const RECENT = 'orvyn.vault.recent';
+
+/** Items used recently come first (spec 0015 A2): their ids, on this device only. */
+function recent(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT) ?? '[]') as string[];
+  } catch {
+    return [];
+  }
+}
+function touchRecent(id: string) {
+  try {
+    localStorage.setItem(RECENT, JSON.stringify([id, ...recent().filter((x) => x !== id)].slice(0, 30)));
+  } catch {
+    /* storage blocked: no order */
+  }
+}
+
+/** A live one-time code with its countdown; a tap copies it. */
+function TotpCode({ secret, compact }: { secret: string; compact?: boolean }) {
+  const v = useVault();
+  const toast = useToast();
+  const [code, setCode] = useState('');
+  const [left, setLeft] = useState(30);
+  const t = parseTotp(secret);
+  const period = t?.period ?? 30;
+  useEffect(() => {
+    const tt = parseTotp(secret);
+    if (!tt) return;
+    let live = true;
+    const tick = () => {
+      setLeft(totpLeft(tt));
+      void totpCode(tt).then((c) => live && setCode(c));
+    };
+    tick();
+    const i = setInterval(tick, 1000);
+    return () => {
+      live = false;
+      clearInterval(i);
+    };
+  }, [secret]);
+  if (!t) return null;
+  const pretty = code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+  const frac = left / period;
+  return (
+    <button
+      type="button"
+      aria-label={`Copy one-time code ${code}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        void v
+          .copySecret(code)
+          .then(() => toast({ title: 'Code copied', body: `${left} seconds left on it.` }));
+      }}
+      className={cn(
+        'inline-flex items-center gap-2 rounded-full font-mono tabular-nums',
+        compact
+          ? 'bg-orv-track px-2 py-0.5 text-[12.5px]'
+          : 'bg-orv-track px-3 py-1.5 text-[20px] font-semibold tracking-wider',
+        left <= 5 && 'text-orv-danger',
+      )}
+    >
+      <svg
+        width={compact ? 12 : 16}
+        height={compact ? 12 : 16}
+        viewBox="0 0 20 20"
+        aria-hidden
+        className="-rotate-90"
+      >
+        <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" />
+        <circle
+          cx="10"
+          cy="10"
+          r="8"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeDasharray={`${frac * 50.3} 50.3`}
+          className="transition-[stroke-dasharray] duration-1000 ease-linear"
+        />
+      </svg>
+      {pretty}
+    </button>
+  );
+}
 
 function VaultView() {
   const v = useVault();
@@ -327,14 +416,26 @@ function Open() {
   const [editing, setEditing] = useState<{ id: string | null; payload: VaultPayload } | null>(null);
   const [settings, setSettings] = useState(false);
   const csv = useRef<HTMLInputElement>(null);
-  const shown = v.items.filter(
-    (i) =>
-      (!kind || i.payload.kind === kind) &&
-      (!q.trim() ||
-        `${i.payload.title} ${subtitle(i.payload)} ${i.payload.fields.url ?? ''}`
-          .toLowerCase()
-          .includes(q.trim().toLowerCase())),
-  );
+  const order = recent();
+  const rank = (id: string) => {
+    const r = order.indexOf(id);
+    return r < 0 ? 999 : r;
+  };
+  const shown = v.items
+    .filter(
+      (i) =>
+        (!kind || i.payload.kind === kind) &&
+        (!q.trim() ||
+          `${i.payload.title} ${subtitle(i.payload)} ${i.payload.fields.url ?? ''}`
+            .toLowerCase()
+            .includes(q.trim().toLowerCase())),
+    )
+    .sort((a, b) => rank(a.id) - rank(b.id));
+  const copy = async (id: string, label: string, value: string) => {
+    touchRecent(id);
+    await v.copySecret(value);
+    toast({ title: `${label} copied`, body: 'The clipboard clears in 30 seconds.' });
+  };
   const blank = (k: VaultKind): VaultPayload => ({
     kind: k,
     title: '',
@@ -366,7 +467,14 @@ function Open() {
             aria-label="Search the Vault"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search titles, usernames, websites"
+            onKeyDown={(e) => {
+              // Enter copies the first match's main secret: find and go in one step
+              const first = shown[0];
+              const p = first && primary(first.payload);
+              if (e.key === 'Enter' && first && p) void copy(first.id, p.label, p.value);
+            }}
+            autoFocus
+            placeholder="Search — Enter copies the first password"
             className="h-9 flex-1 bg-transparent text-[15px] outline-none placeholder:text-orv-faint"
           />
         </Glass>
@@ -399,30 +507,65 @@ function Open() {
       ) : null}
       {shown.length ? (
         <ul className="grid gap-3 md:grid-cols-2" aria-label="Vault items">
-          {shown.map((i) => (
-            <li key={i.id}>
-              <button
-                onClick={() => setEditing({ id: i.id, payload: i.payload })}
-                className="glass-pane flex w-full items-center gap-3 p-3 text-left transition-transform hover:-translate-y-0.5"
+          {shown.map((i) => {
+            const p = primary(i.payload);
+            const user = i.payload.fields.username;
+            return (
+              <li
+                key={i.id}
+                className="glass-pane flex items-center gap-3 p-3 transition-transform hover:-translate-y-0.5"
               >
-                <span
-                  aria-hidden
-                  className="grid size-10 shrink-0 place-items-center rounded-[12px] text-white [background:var(--orv-accent-grad)]"
+                <button
+                  onClick={() => {
+                    touchRecent(i.id);
+                    setEditing({ id: i.id, payload: i.payload });
+                  }}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
                 >
-                  {ICON[i.payload.kind]}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-semibold">
-                    {i.payload.title || KIND_LABEL[i.payload.kind]}
+                  <span
+                    aria-hidden
+                    className="grid size-10 shrink-0 place-items-center rounded-[12px] text-[15px] font-semibold text-white [background:var(--orv-accent-grad)]"
+                  >
+                    {i.payload.kind === 'login' && i.payload.title
+                      ? i.payload.title.slice(0, 1).toUpperCase()
+                      : ICON[i.payload.kind]}
                   </span>
-                  <span className="block truncate text-[12px] text-orv-muted">
-                    {KIND_LABEL[i.payload.kind]}
-                    {subtitle(i.payload) ? ` · ${subtitle(i.payload)}` : ''}
+                  <span className="min-w-0">
+                    <span className="block truncate text-[15px] font-semibold">
+                      {i.payload.title || KIND_LABEL[i.payload.kind]}
+                    </span>
+                    <span className="block truncate text-[12px] text-orv-muted">
+                      {KIND_LABEL[i.payload.kind]}
+                      {subtitle(i.payload) ? ` · ${subtitle(i.payload)}` : ''}
+                    </span>
                   </span>
+                </button>
+                {i.payload.fields.totp ? <TotpCode secret={i.payload.fields.totp} compact /> : null}
+                <span className="flex shrink-0 gap-0.5">
+                  {user ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Copy username for ${i.payload.title}`}
+                      onClick={() => void copy(i.id, 'Username', user)}
+                    >
+                      <User size={14} />
+                    </Button>
+                  ) : null}
+                  {p ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Copy ${p.label.toLowerCase()} for ${i.payload.title}`}
+                      onClick={() => void copy(i.id, p.label, p.value)}
+                    >
+                      <Copy size={14} />
+                    </Button>
+                  ) : null}
                 </span>
-              </button>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <Glass className="p-8 text-center">
@@ -563,9 +706,27 @@ function ItemSheet({
       {!editing && state.id ? (
         <div className="flex flex-col gap-2">
           <p className="text-small text-orv-muted">{KIND_LABEL[d.kind]}</p>
+          {d.fields.totp && parseTotp(d.fields.totp) ? (
+            <div className="flex items-center justify-between rounded-orv-md bg-orv-track px-3 py-2">
+              <span className="flex items-center gap-2 text-[12px] uppercase text-orv-muted">
+                <Timer size={14} /> One-time code
+              </span>
+              <TotpCode secret={d.fields.totp} />
+            </div>
+          ) : null}
           {fields.map((f) => (
             <SecretRow key={f.key} label={f.label} value={d.fields[f.key] ?? ''} secret={f.secret} />
           ))}
+          {d.updatedAt ? (
+            <p className="pt-1 text-[11.5px] text-orv-faint">
+              Last changed{' '}
+              {new Date(d.updatedAt).toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              })}
+            </p>
+          ) : null}
           {d.notes ? <SecretRow label="Notes" value={d.notes} secret /> : null}
           {(d.attachments ?? []).map((a) => (
             <a
@@ -604,18 +765,29 @@ function ItemSheet({
           }}
         >
           {!state.id ? (
-            <select
-              aria-label="Kind"
-              className="h-11 w-full rounded-orv-md field-ring px-3 text-[14px]"
-              value={d.kind}
-              onChange={(e) => setD({ ...d, kind: e.target.value as VaultKind, fields: {} })}
-            >
+            <PasteAnything onGuess={(g) => setD({ ...d, kind: g.kind, title: g.title, fields: g.fields })} />
+          ) : null}
+          {!state.id ? (
+            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Kind">
               {VAULT_KINDS.map((k) => (
-                <option key={k} value={k}>
+                <button
+                  key={k}
+                  type="button"
+                  role="radio"
+                  aria-checked={d.kind === k}
+                  onClick={() => setD({ ...d, kind: k, fields: {} })}
+                  className={cn(
+                    'flex flex-col items-center gap-1 rounded-orv-md border px-2 py-2.5 text-[12.5px] transition-colors',
+                    d.kind === k
+                      ? 'border-orv-accent bg-[color-mix(in_srgb,var(--orv-accent)_12%,transparent)] text-orv-accent'
+                      : 'border-orv-edge text-orv-muted hover:bg-orv-track',
+                  )}
+                >
+                  {ICON[k]}
                   {KIND_LABEL[k]}
-                </option>
+                </button>
               ))}
-            </select>
+            </div>
           ) : null}
           <Field label="Title">
             {(id) => (
@@ -663,6 +835,7 @@ function ItemSheet({
               }
             </Field>
           ))}
+          {d.kind === 'login' && d.fields.password ? <StrengthMeter value={d.fields.password} /> : null}
           {d.kind !== 'note' ? (
             <Field label="Notes">
               {(id) => (
@@ -704,6 +877,72 @@ function ItemSheet({
         </form>
       )}
     </Sheet>
+  );
+}
+
+function StrengthMeter({ value }: { value: string }) {
+  const s = pwStrength(value);
+  return (
+    <div className="-mt-1 flex items-center gap-2" aria-label={`Password strength: ${s.label}`}>
+      <div className="flex flex-1 gap-1">
+        {[1, 2, 3, 4].map((n) => (
+          <span
+            key={n}
+            className={cn(
+              'h-1.5 flex-1 rounded-full',
+              n <= s.score
+                ? s.score <= 1
+                  ? 'bg-orv-danger'
+                  : s.score === 2
+                    ? 'bg-orv-warning'
+                    : 'bg-orv-success'
+                : 'bg-orv-track',
+            )}
+          />
+        ))}
+      </div>
+      <span className="text-[12px] text-orv-muted">{s.label}</span>
+    </div>
+  );
+}
+
+/** Paste a card, a login, a key, codes or an otpauth link: the form fills itself (on this device only). */
+function PasteAnything({ onGuess }: { onGuess(g: NonNullable<ReturnType<typeof guess>>): void }) {
+  const [text, setText] = useState('');
+  const g = text.trim() ? guess(text) : null;
+  return (
+    <div className="rounded-orv-md border border-dashed border-orv-accent/50 bg-[color-mix(in_srgb,var(--orv-accent)_5%,transparent)] p-2.5">
+      <label className="flex items-center gap-1.5 text-[12.5px] font-semibold text-orv-accent">
+        <Sparkles size={13} /> Paste anything
+      </label>
+      <textarea
+        aria-label="Paste anything"
+        rows={2}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="A card, netflix me@mail.com p4ss, an API key, backup codes, an otpauth:// link"
+        className="mt-1 w-full resize-none bg-transparent font-mono text-[13px] outline-none placeholder:font-sans placeholder:text-orv-faint"
+      />
+      {g ? (
+        <div className="flex items-center gap-2">
+          <span className="flex-1 truncate text-[12.5px] text-orv-muted">Looks like: {g.found}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              onGuess(g);
+              setText('');
+            }}
+          >
+            Fill it in
+          </Button>
+        </div>
+      ) : null}
+      <p className="mt-1 text-[11px] text-orv-faint">
+        Understood on this device. Never sent anywhere, never to the AI.
+      </p>
+    </div>
   );
 }
 

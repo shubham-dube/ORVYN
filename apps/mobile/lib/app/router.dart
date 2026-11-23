@@ -112,7 +112,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/vault',
-            pageBuilder: (_, _) => const NoTransitionPage(child: VaultScreen()),
+            // ?do=find / ?do=add: the app icon's shortcuts (spec 0015 A3)
+            pageBuilder: (_, s) => NoTransitionPage(child: VaultScreen(quick: s.uri.queryParameters['do'])),
           ),
           GoRoute(
             path: '/settings',

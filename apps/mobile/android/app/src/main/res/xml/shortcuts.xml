@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the ORVYN icon (spec 0015 A3): straight into the Vault, or a chat. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="vault_find"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_vault_find"
+        android:shortcutLongLabel="@string/shortcut_vault_find_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.dubey.orvyn"
+            android:targetClass="app.dubey.orvyn.MainActivity"
+            android:data="orvyn://app/vault?do=find" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="vault_add"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_vault_add"
+        android:shortcutLongLabel="@string/shortcut_vault_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.dubey.orvyn"
+            android:targetClass="app.dubey.orvyn.MainActivity"
+            android:data="orvyn://app/vault?do=add" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="chats"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_chats">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.dubey.orvyn"
+            android:targetClass="app.dubey.orvyn.MainActivity"
+            android:data="orvyn://app/chat" />
+    </shortcut>
+</shortcuts>

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../app/lock.dart' show authenticatorProvider;
 import '../app/state.dart';
 import '../sync/sync_client.dart';
 import 'vault_crypto.dart';
@@ -89,18 +91,40 @@ class VaultState {
     this.items = const [],
     this.unreadable = 0,
     this.autoLockMin = 5,
+    this.fingerprint = false,
+    this.recent = const [],
   });
   final VaultStatus status;
   final List<OpenItem> items;
   final int unreadable;
   final int autoLockMin;
-  VaultState copy({VaultStatus? status, List<OpenItem>? items, int? unreadable, int? autoLockMin}) => VaultState(
+
+  /// this phone keeps the vault key behind the fingerprint (spec 0015 A1)
+  final bool fingerprint;
+
+  /// ids of the items used last, newest first (this phone only)
+  final List<String> recent;
+  VaultState copy({
+    VaultStatus? status,
+    List<OpenItem>? items,
+    int? unreadable,
+    int? autoLockMin,
+    bool? fingerprint,
+    List<String>? recent,
+  }) => VaultState(
     status: status ?? this.status,
     items: items ?? this.items,
     unreadable: unreadable ?? this.unreadable,
     autoLockMin: autoLockMin ?? this.autoLockMin,
+    fingerprint: fingerprint ?? this.fingerprint,
+    recent: recent ?? this.recent,
   );
 }
+
+/// Where this phone keeps its Vault choices (secure storage: keystore-backed on Android).
+const vaultBioKey = 'orvyn.vault.bio';
+const _autoLockKey = 'orvyn.vault.autolock';
+const _recentKey = 'orvyn.vault.recent';
 
 /// Runs the slow key derivation off the UI thread (an isolate in the app; inline in tests).
 typedef VaultRunner = Future<T> Function<T>(FutureOr<T> Function() job);
@@ -144,6 +168,7 @@ class VaultController extends Notifier<VaultState> with WidgetsBindingObserver {
       _blobs = [for (final r in rows) (id: r.id, blob: r.data['blob'] as String? ?? '')];
       unawaited(_decryptAll());
     });
+    unawaited(_loadPrefs());
     ref.onDispose(() {
       WidgetsBinding.instance.removeObserver(this);
       _kSub?.cancel();
@@ -152,6 +177,68 @@ class VaultController extends Notifier<VaultState> with WidgetsBindingObserver {
       _wipe();
     });
     return const VaultState();
+  }
+
+  Future<void> _loadPrefs() async {
+    final store = ref.read(storeProvider);
+    final bio = await store.read(vaultBioKey);
+    final lock = int.tryParse(await store.read(_autoLockKey) ?? '');
+    final recent = await store.read(_recentKey);
+    state = state.copy(
+      fingerprint: bio != null,
+      autoLockMin: lock != null && const [1, 5, 15, 30, 0].contains(lock) ? lock : null,
+      recent: recent == null ? null : [for (final x in jsonDecode(recent) as List) '$x'],
+    );
+  }
+
+  /// Keep the vault key behind the fingerprint on this phone (spec 0015 A1, D-0015-5). Only while open; the system
+  /// prompt confirms it is the owner first. The key never leaves the phone.
+  Future<bool> enableFingerprint() async {
+    final vk = _key;
+    if (vk == null) return false;
+    final auth = ref.read(authenticatorProvider);
+    if (!await auth.available() || !await auth.authenticate('Use your fingerprint to open the Vault')) return false;
+    await ref.read(storeProvider).write(vaultBioKey, base64Encode(vk));
+    state = state.copy(fingerprint: true);
+    return true;
+  }
+
+  Future<void> forgetFingerprint() async {
+    await ref.read(storeProvider).write(vaultBioKey, null);
+    state = state.copy(fingerprint: false);
+  }
+
+  /// Open with the fingerprint (or the phone's screen lock). False when it isn't set up, was cancelled, or the kept
+  /// key no longer opens this Vault (then it is forgotten).
+  Future<bool> unlockWithFingerprint() async {
+    final store = ref.read(storeProvider);
+    final kept = await store.read(vaultBioKey);
+    if (kept == null || _keys == null) return false;
+    if (!await ref.read(authenticatorProvider).authenticate('Open your Vault')) return false;
+    final key = Uint8List.fromList(base64Decode(kept));
+    if (_blobs.isNotEmpty) {
+      var ok = false;
+      for (final b in _blobs.take(3)) {
+        try {
+          await decryptItem(key, b.id, b.blob);
+          ok = true;
+          break;
+        } catch (_) {}
+      }
+      if (!ok) {
+        await forgetFingerprint();
+        return false;
+      }
+    }
+    _opened(key);
+    return true;
+  }
+
+  /// Remember an item as just used (it moves to the top of quick find).
+  void used(String id) {
+    final next = [id, ...state.recent.where((x) => x != id)].take(30).toList();
+    state = state.copy(recent: next);
+    unawaited(ref.read(storeProvider).write(_recentKey, jsonEncode(next)));
   }
 
   void _wipe() {
@@ -192,13 +279,19 @@ class VaultController extends Notifier<VaultState> with WidgetsBindingObserver {
 
   void setAutoLock(int minutes) {
     state = state.copy(autoLockMin: minutes);
+    unawaited(ref.read(storeProvider).write(_autoLockKey, '$minutes'));
     touch();
   }
 
   void lock() {
     _timer?.cancel();
     _wipe();
-    state = VaultState(status: _keys == null ? VaultStatus.none : VaultStatus.locked, autoLockMin: state.autoLockMin);
+    state = VaultState(
+      status: _keys == null ? VaultStatus.none : VaultStatus.locked,
+      autoLockMin: state.autoLockMin,
+      fingerprint: state.fingerprint,
+      recent: state.recent,
+    );
   }
 
   @override
@@ -246,6 +339,7 @@ class VaultController extends Notifier<VaultState> with WidgetsBindingObserver {
     });
     await _sync.upsert(vaultKeysEntity, {'pass': r.pass}, id: _ownerId());
     _keys = VaultKeys(pass: r.pass, recovery: k.recovery);
+    await forgetFingerprint(); // after a recovery, the fingerprint is set up again on purpose
     _opened(r.vk);
     unawaited(_sync.sync().catchError((Object _) {}));
   }
