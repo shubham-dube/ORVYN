@@ -12,16 +12,37 @@ import { api } from '@/lib/api';
 
 type When = 'current' | 'closed' | 'listed';
 
+type Show = 'mainboard' | 'sme' | 'all';
+
 function Desk() {
   const [when, setWhen] = useState<When>('current');
-  const [data, setData] = useState<{ issues: IpoIssueView[]; feed: FeedInfo } | null>(null);
+  // null until the server says what this person chose last (mainboard first — spec 0016 A1)
+  const [show, setShow] = useState<Show | null>(null);
+  const [data, setData] = useState<{ issues: IpoIssueView[]; feed: FeedInfo; show: Show } | null>(null);
   const [settings, setSettings] = useState(false);
   const [adding, setAdding] = useState(false);
   const load = useCallback(
-    () => api<{ issues: IpoIssueView[]; feed: FeedInfo }>(`/ipo/issues?when=${when}`).then(setData),
-    [when],
+    () =>
+      api<{ issues: IpoIssueView[]; feed: FeedInfo; show: Show }>(
+        `/ipo/issues?when=${when}${show ? `&type=${show}` : ''}`,
+      ).then((r) => {
+        setData(r);
+        setShow((s) => s ?? r.show);
+      }),
+    [when, show],
   );
   useEffect(() => void load().catch(() => undefined), [load]);
+  const pick = async (v: Show) => {
+    setShow(v);
+    // remembered on every device: SME on or off
+    const s = await api<Record<string, unknown>>('/ipo/settings');
+    if (Boolean(s.showSme) !== (v !== 'mainboard'))
+      await api('/ipo/settings', { method: 'PUT', body: { ...s, showSme: v !== 'mainboard' } });
+  };
+  const closingToday =
+    data?.issues.filter(
+      (i) => i.status === 'open' && i.closeDate === new Date().toLocaleDateString('en-CA'),
+    ) ?? [];
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -33,6 +54,16 @@ function Desk() {
             { value: 'current', label: 'Open & upcoming' },
             { value: 'closed', label: 'Awaiting listing' },
             { value: 'listed', label: 'Listed' },
+          ]}
+        />
+        <Segmented
+          label="Mainboard or SME"
+          value={show ?? 'mainboard'}
+          onChange={(v) => void pick(v as Show)}
+          options={[
+            { value: 'mainboard', label: 'Mainboard' },
+            { value: 'sme', label: 'SME' },
+            { value: 'all', label: 'All' },
           ]}
         />
         <div className="flex-1" />
@@ -47,6 +78,13 @@ function Desk() {
           and <code>IPO_FEED_KEY</code> on the server for the calendar and GMP to arrive on their own.
         </Glass>
       ) : null}
+      {closingToday.length ? (
+        <div className="flex items-center gap-2 rounded-orv-md bg-[color-mix(in_srgb,var(--orv-danger)_10%,transparent)] px-4 py-2.5 text-[13.5px]">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-orv-danger" />
+          <span className="font-semibold">Last day:</span> {closingToday.map((i) => i.name).join(', ')} — bids
+          close at 5 pm.
+        </div>
+      ) : null}
       {data === null ? (
         <SkeletonCards count={4} label="Loading IPOs" />
       ) : !data.issues.length ? (
@@ -54,7 +92,7 @@ function Desk() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {data.issues.map((i) => (
-            <IssueCard key={i.id} i={i} onStar={() => void load()} />
+            <IssueCard key={i.id} i={i} onChange={() => void load()} />
           ))}
         </div>
       )}
@@ -67,7 +105,14 @@ function Desk() {
           · GMP is unofficial · not investment advice
         </p>
       ) : null}
-      <IpoSettingsSheet open={settings} onClose={() => setSettings(false)} />
+      <IpoSettingsSheet
+        open={settings}
+        onClose={() => setSettings(false)}
+        onSaved={() => {
+          setShow(null);
+          void load();
+        }}
+      />
       <AddIssueSheet open={adding} onClose={() => setAdding(false)} onAdded={() => void load()} />
     </div>
   );
@@ -81,7 +126,7 @@ function Inner() {
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3 px-1 pt-2">
         <div>
-          <span className="text-small text-orv-muted">India · mainboard and SME</span>
+          <span className="text-small text-orv-muted">India · GMP, demand, odds — and what you’ll do</span>
           <h1 className="text-title font-semibold">IPO desk</h1>
         </div>
         <Segmented

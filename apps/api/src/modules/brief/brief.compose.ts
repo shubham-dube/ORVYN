@@ -28,6 +28,10 @@ export function wordsFor(
   if (money?.yesterdayMinor) line.push(`${formatMoney(money.yesterdayMinor)} yesterday`);
   if (money?.budgets.length) line.push(n(money.budgets.length, 'budget') + ' near the limit');
   for (const s of sections) {
+    if (s.kind === 'ipo')
+      for (const i of s.items.filter((x) => x.today === 'closes' || x.today === 'listing'))
+        line.unshift(i.today === 'closes' ? `Last day: ${i.name} IPO` : `${i.name} lists today`);
+    if (s.kind === 'weather' && s.sky) line.push(`${s.sky}${s.high !== null ? ` ${s.high}°` : ''}`);
     if (s.kind === 'drop' && s.waiting) line.push(`${s.waiting} in Drop`);
     if (s.kind === 'library' && s.expiring.length) line.push(n(s.expiring.length, 'document') + ' expiring');
     if (s.kind === 'work' && s.reviews) line.push(n(s.reviews, 'review') + ' waiting');

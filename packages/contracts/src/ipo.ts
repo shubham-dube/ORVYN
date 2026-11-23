@@ -15,8 +15,15 @@ export const IPO_EVENTS = [
   'subscription',
   'allotment',
   'listing',
+  /** ask "Will you apply?" and follow up on the close, allotment and listing days (spec 0016 A5) */
+  'decide',
 ] as const;
 export type IpoEvent = (typeof IPO_EVENTS)[number];
+
+/** What I decided about an IPO, and how it went (spec 0016 A5). */
+export const IPO_DECISIONS = ['applying', 'skipped', 'applied', 'allotted', 'not_allotted'] as const;
+export type IpoDecision = (typeof IPO_DECISIONS)[number];
+export const IpoDecisionBody = z.object({ decision: z.enum(IPO_DECISIONS).nullable() });
 
 export const IpoSettings = z.object({
   /** only IPOs at least this big (₹ crore); 0 = any */
@@ -29,6 +36,13 @@ export const IpoSettings = z.object({
   /** GMP moved by at least this many percentage points since the last ping */
   gmpMovePct: z.number().min(1).max(100).default(5),
   maxPerDay: z.number().int().min(1).max(20).default(6),
+  /** the desk shows SME IPOs too (spec 0016 A1); the desk is mainboard-only otherwise */
+  showSme: z.boolean().default(false),
+  /** "I'll apply" makes a task due on the close day at this time (D-0016-3) */
+  applyBy: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+    .default('14:00'),
 });
 export type IpoSettings = z.infer<typeof IpoSettings>;
 
@@ -81,6 +95,22 @@ export interface IpoIssueView {
   estListingPrice: number | null;
   subscription: IpoSubscription | null;
   listingPrice: number | null;
+  /** spec 0016: what one lot costs, the logo and the rest of the calendar's facts */
+  minInvestment: number | null;
+  logo: string | null;
+  faceValue: number | null;
+  listingOn: string | null;
+  saleType: string | null;
+  listingGainPct: number | null;
+  cmp: number | null;
+  kostak: number | null;
+  sauda: number | null;
+  /** GMP × lot size: what one lot gains at today's GMP */
+  gainPerLot: number | null;
+  /** the detail endpoint's extras (paid plans add company, financials, lead managers…) */
+  details: IpoDetails | null;
+  decision: IpoDecision | null;
+  taskId: string | null;
   source: string;
   sourceUrl: string | null;
   manual: string[];
@@ -95,6 +125,22 @@ export interface IpoIssueView {
     cardCost: number;
   } | null;
   verdict: string;
+}
+
+export interface IpoDetails {
+  creditToDematDate?: string | null;
+  employeeDiscount?: string | null;
+  about?: string | null;
+  strengths?: string[];
+  risks?: string[];
+  objects?: string[];
+  financials?: { headers: string[]; rows: { metric: string; data: (string | number | null)[] }[]; unit?: string } | null;
+  leadManagers?: string[];
+  registrar?: { name: string; statusPage?: string | null } | null;
+  lotTable?: { label: string; lots: number | null; shares: number | null; amount: number | null }[];
+  documents?: { label: string; url: string }[];
+  /** what the plan left out */
+  locked?: string[];
 }
 
 export const ManualFigures = z.object({

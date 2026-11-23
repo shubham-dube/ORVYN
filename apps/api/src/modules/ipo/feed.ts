@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import type { IpoSubscription } from '@orvyn/contracts';
+import type { IpoDetails, IpoSubscription } from '@orvyn/contracts';
 import { ENV, type Env } from '../../config/env';
 
 /** One IPO as a feed sees it; missing fields are null. */
@@ -22,6 +22,18 @@ export interface FeedIssue {
   subscription: IpoSubscription | null;
   listingPrice: number | null;
   url: string | null;
+  // spec 0016: the calendar's other facts
+  logo?: string | null;
+  minInvestment?: number | null;
+  faceValue?: number | null;
+  listingOn?: string | null;
+  saleType?: string | null;
+  listingGainPct?: number | null;
+  cmp?: number | null;
+  kostak?: number | null;
+  sauda?: number | null;
+  /** only from the detail call */
+  details?: IpoDetails | null;
 }
 
 /** Market data for the IPO desk (ADR-0013); replaced in tests. */
@@ -33,7 +45,7 @@ export abstract class IpoFeed {
   abstract ready(): boolean;
   /** live subscription is in the plan */
   abstract hasSubscription(): boolean;
-  /** open and upcoming IPOs with GMP (one call) */
+  /** the calendar: open, upcoming, closed and recently listed IPOs with every card figure and GMP (one call) */
   abstract current(): Promise<FeedIssue[]>;
   /** recently closed and listed IPOs (one call) */
   abstract recent(): Promise<FeedIssue[]>;
@@ -159,12 +171,92 @@ export class IpoGuruFeed extends IpoFeed {
     return Object.values(out).some((v) => v !== null) ? out : null;
   }
 
+  /** "163-172" → [163, 172] */
+  static band(v: unknown): [number | null, number | null] {
+    if (typeof v !== 'string') return [null, null];
+    const m = /([\d.]+)\s*[-–]\s*([\d.]+)/.exec(v);
+    if (m) return [num(m[1]), num(m[2])];
+    const one = num(v);
+    return [one, one];
+  }
+
+  static strings(v: unknown): string[] {
+    if (!Array.isArray(v)) return typeof v === 'string' && v.trim() ? [v.trim()] : [];
+    return v
+      .map((x) =>
+        typeof x === 'string'
+          ? x
+          : x && typeof x === 'object'
+            ? String((x as Raw).name ?? (x as Raw).text ?? (x as Raw).title ?? '')
+            : '',
+      )
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+  }
+
+  /** The detail call's extras; paid plans add company, contacts, documents and the lot table. */
+  static details(r: Raw): IpoDetails | null {
+    const t = (r.timeline ?? {}) as Raw;
+    const i = (r.issue ?? {}) as Raw;
+    const c = (r.company ?? {}) as Raw;
+    const k = (r.contacts ?? {}) as Raw;
+    const fin = (c.financials ?? null) as Raw | null;
+    const reg = (k.registrar ?? null) as Raw | null;
+    const docs = r.documents && typeof r.documents === 'object' ? (r.documents as Raw) : {};
+    const out: IpoDetails = {
+      creditToDematDate: day(t.credit_to_demat_date),
+      employeeDiscount: typeof i.employee_discount === 'string' ? i.employee_discount : null,
+      about: typeof c.about === 'string' ? c.about : typeof c.description === 'string' ? c.description : null,
+      strengths: IpoGuruFeed.strings(c.strengths),
+      risks: IpoGuruFeed.strings(c.risks),
+      objects: IpoGuruFeed.strings(c.objects ?? c.objects_of_issue ?? c.objectives),
+      financials:
+        fin && Array.isArray(fin.rows)
+          ? {
+              headers: Array.isArray(fin.headers) ? (fin.headers as unknown[]).map(String) : [],
+              rows: (fin.rows as Raw[]).slice(0, 15).map((row) => ({
+                metric: String(row.metric ?? ''),
+                data: Array.isArray(row.data) ? (row.data as (string | number | null)[]) : [],
+              })),
+              unit: typeof fin.unit === 'string' ? fin.unit : undefined,
+            }
+          : null,
+      leadManagers: IpoGuruFeed.strings(k.lead_managers ?? k.book_running_lead_managers ?? k.brlm),
+      registrar:
+        reg && reg.name
+          ? {
+              name: String(reg.name),
+              statusPage: typeof reg.status_page === 'string' ? reg.status_page : null,
+            }
+          : null,
+      lotTable: Array.isArray(r.lot_calculator)
+        ? (r.lot_calculator as Raw[]).map((l) => ({
+            label: String(l.label ?? ''),
+            lots: num(l.lots),
+            shares: num(l.shares),
+            amount: num(l.amount),
+          }))
+        : [],
+      documents: Object.entries(docs)
+        .filter(([, v]) => typeof v === 'string' && /^https?:\/\//.test(v))
+        .map(([label, url]) => ({ label: label.replace(/_/g, ' ').toUpperCase(), url: url as string })),
+      locked: Array.isArray((r.locked as Raw | undefined)?.fields)
+        ? ((r.locked as Raw).fields as unknown[]).map(String)
+        : [],
+    };
+    return out;
+  }
+
   static issue(r: Raw): FeedIssue {
     const t = (r.timeline ?? {}) as Raw;
     const i = (r.issue ?? {}) as Raw;
     const g = (r.gmp ?? {}) as Raw;
+    const l = (r.listing ?? {}) as Raw;
     const status = String(r.status ?? '').toLowerCase();
     const listed = r.is_listed === true || status === 'listed';
+    const [bandMin, bandMax] = IpoGuruFeed.band(i.price_band ?? r.price_band);
+    const logo = (r.images as Raw | undefined)?.logo ?? r.logo;
     return {
       slug: String(r.slug),
       name: String(r.display_name ?? r.name ?? r.slug),
@@ -175,8 +267,8 @@ export class IpoGuruFeed extends IpoFeed {
       allotmentDate: day(t.allotment_date ?? r.allotment_date),
       refundDate: day(t.refund_date ?? r.refund_date),
       listingDate: day(t.listing_date ?? r.listing_date),
-      priceMin: num(i.price_min ?? r.price_min),
-      priceMax: num(i.price_max ?? r.price_max ?? i.issue_price ?? r.issue_price),
+      priceMin: num(i.price_min ?? r.price_min) ?? bandMin,
+      priceMax: num(i.price_max ?? r.price_max) ?? bandMax ?? num(i.issue_price ?? r.issue_price),
       lotSize: num(i.lot_size ?? r.lot_size),
       issueSizeCr: num(i.issue_size ?? r.issue_size),
       gmp: num(g.price),
@@ -186,8 +278,19 @@ export class IpoGuruFeed extends IpoFeed {
         (num(r.subscription_total) !== null
           ? { ...IpoGuruFeed.empty(), total: num(r.subscription_total) }
           : null),
-      listingPrice: num((r.listing as Raw | undefined)?.listing_price ?? r.listing_price),
+      listingPrice: num(l.listing_price ?? r.listing_price),
       url: typeof r.web_url === 'string' ? r.web_url : null,
+      logo: typeof logo === 'string' && /^https:\/\//.test(logo) ? logo : null,
+      minInvestment: num(i.min_investment ?? r.min_investment),
+      faceValue: num(i.face_value ?? r.face_value),
+      listingOn:
+        typeof (i.listing_on ?? r.listing_on) === 'string' ? String(i.listing_on ?? r.listing_on) : null,
+      saleType: typeof (i.sale_type ?? r.sale_type) === 'string' ? String(i.sale_type ?? r.sale_type) : null,
+      listingGainPct: num(l.listing_gain_percent ?? r.listing_gain_percent),
+      cmp: num(l.cmp ?? r.cmp),
+      kostak: num(g.kostak),
+      // "1400,,19600": the first figure is the rate per application
+      sauda: num(String(g.subject_to_sauda ?? '').split(',')[0]),
     };
   }
 
@@ -207,7 +310,7 @@ export class IpoGuruFeed extends IpoFeed {
   }
 
   async current() {
-    return IpoGuruFeed.list(await this.get('/gmp')).map(IpoGuruFeed.issue);
+    return IpoGuruFeed.list(await this.get('/ipos?months=2&limit=100')).map(IpoGuruFeed.issue);
   }
 
   async recent() {
@@ -219,6 +322,7 @@ export class IpoGuruFeed extends IpoFeed {
     const r = ((body.data as Raw | undefined) ?? body) as Raw;
     if (!r?.slug) return null;
     const issue = IpoGuruFeed.issue(r);
+    issue.details = IpoGuruFeed.details(r);
     if (this.hasSubscription() && issue.status === 'open') {
       try {
         const sub = await this.get<Raw>(`/ipos/${encodeURIComponent(slug)}/subscription`);

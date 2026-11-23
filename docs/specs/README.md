@@ -8,3 +8,4 @@
 | [0013-money-brain](0013-money-brain/spec.md)                     | Money brain: smart fill, auto-filing from history, insights, merchant sheet          | Delivered                       |
 | [0014-money-hand](0014-money-hand/spec.md)                       | What's in my hand, who owes whom, company PRs, holidays once                         | Delivered                       |
 | [0015-vault-quick-chat-live](0015-vault-quick-chat-live/spec.md) | Vault in a second (fingerprint, quick find, smart add, codes); chat that follows you | Delivered                       |
+| [0016-ipo-desk-and-brief-v2](0016-ipo-desk-and-brief-v2/spec.md) | The IPO desk sharper (mainboard first, will-you-apply tasks); a Brief with a brain   | Delivered                       |

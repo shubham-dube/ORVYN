@@ -36,6 +36,11 @@ Map<String, dynamic> _issue({bool starred = false}) => {
     'updatedAt': null,
   },
   'listingPrice': null,
+  'minInvestment': 14948,
+  'gainPerLot': 4040,
+  'logo': null,
+  'decision': null,
+  'taskId': null,
   'source': 'IPO Guru',
   'sourceUrl': 'https://www.ipoguru.in',
   'manual': <String>[],
@@ -140,6 +145,11 @@ void main() {
         ],
       },
     );
+    final decided = <dynamic>[];
+    h.server.on('PUT /ipo/issues/i1/decision', (r) {
+      decided.add(r.body);
+      return {'decision': 'applying', 'taskId': 't1'};
+    });
     h.server.on('PUT /ipo/pool/applications/a1', (r) {
       updates.add(r.body);
       return {'ok': true};
@@ -152,17 +162,25 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Open IPO'));
     await settle(tester, 20);
     expect(find.text('Mega Power Ltd'), findsOneWidget);
-    expect(find.text('GMP ₹40 · 27%'), findsOneWidget);
-    expect(find.text('Odds 8%'), findsOneWidget);
-    expect(find.text('3 accounts'), findsOneWidget);
+    // the four numbers that decide it (spec 0016 A3)
+    expect(find.text('₹1,000 cr'), findsOneWidget);
+    expect(find.text('+₹40'), findsOneWidget);
+    expect(find.text('₹14,948'), findsOneWidget);
+    expect(find.text('+₹4,040 a lot'), findsOneWidget);
+    // will you apply? — straight from the card
+    await tapIt(tester, find.byKey(const Key('ipo-apply-i1')));
+    expect(decided.single, {'decision': 'applying'});
+    expect(find.text('Added to Today'), findsOneWidget);
 
     await tester.tap(find.text('Mega Power Ltd'));
     await settle(tester, 20);
     expect(find.text('With your 3 accounts'), findsOneWidget);
     expect(find.text('22%'), findsOneWidget);
-    expect(find.text('₹969'), findsOneWidget);
-    expect(find.text('Trend: ₹32 → ₹40'), findsOneWidget);
+    expect(find.text('+₹969'), findsOneWidget);
+    expect(find.text('GREY-MARKET PREMIUM'), findsOneWidget);
+    expect(find.text('HOW HOT IS IT'), findsOneWidget);
 
+    await tester.scrollUntilVisible(find.text('Open your round'), 300, scrollable: find.byType(Scrollable).first);
     await tapIt(tester, find.text('Open your round'));
     expect(find.text('Already holds enough — nothing to send.'), findsOneWidget);
     expect(find.text('Needs ₹14,948 — cheapest: HDFC card cash'), findsOneWidget);

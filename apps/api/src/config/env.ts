@@ -71,6 +71,8 @@ export const EnvSchema = z.object({
   /** calls a day the plan allows (free: 10) */
   IPO_FEED_DAILY_CALLS: z.coerce.number().int().min(1).max(100_000).default(10),
   /** the plan includes live subscription (IPO Guru Standard and up) */
+  /** the plan's calls per minute (IPO Guru free: 1) */
+  IPO_FEED_PER_MIN: z.coerce.number().int().min(1).max(1000).default(1),
   IPO_FEED_SUBSCRIPTION: z
     .enum(['true', 'false'])
     .default('false')

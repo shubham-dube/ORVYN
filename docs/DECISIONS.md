@@ -2,6 +2,19 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-24 (spec 0016, the IPO desk sharper and a Brief with a brain — chosen for you; change any)
+
+| #        | Topic           | Decision                                                                                                                                                        |
+| -------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0016-1 | IPO data        | The IPO Guru **calendar** call is the workhorse (every 3 h); spare calls fetch details; never more than one call a minute on the free plan.                     |
+| D-0016-2 | Will you apply? | Asked on the "announced" and "opens" notifications and on the card. **I'll apply** makes one Today task; follow-ups on the close, allotment and listing days.   |
+| D-0016-3 | Apply-by time   | **14:00** on the close day by default (bids close at 5 pm; UPI mandates slow down late), with a 09:30 reminder that morning. Changeable.                        |
+| D-0016-4 | Mainboard first | The desk shows mainboard only until SME is switched on; the choice is synced in IPO settings.                                                                   |
+| D-0016-5 | AI in the Brief | On by default when AI is set up: it writes the opening from the Brief's facts only (through the `ai` module, budgets apply). Off = rules' words. It never acts. |
+| D-0016-6 | Weather         | Open-Meteo (free, no key) for the place chosen in Brief settings; no device location is sent.                                                                   |
+| D-0016-7 | Markets         | Nifty 50 and Sensex from Yahoo's public chart endpoint, best effort; left out quietly when unavailable.                                                         |
+| D-0016-8 | Credits         | "Data: IPO Guru" with a link stays visible wherever its data shows (their terms).                                                                               |
+
 ## Decided — 2026-11-23 (spec 0015, Vault in a second and chat that follows you — chosen for you; change any)
 
 | #        | Topic              | Decision                                                                                                                                                |

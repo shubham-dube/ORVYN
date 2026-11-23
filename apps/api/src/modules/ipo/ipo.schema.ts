@@ -1,4 +1,4 @@
-import type { IpoSettings, IpoSubscription, ShareRule } from '@orvyn/contracts';
+import type { IpoDecision, IpoDetails, IpoSettings, IpoSubscription, ShareRule } from '@orvyn/contracts';
 import {
   bigint,
   boolean,
@@ -37,6 +37,17 @@ export const ipoIssues = pgTable(
     gmpUpdatedAt: ts('gmp_updated_at'),
     subscription: jsonb('subscription').$type<IpoSubscription>(),
     listingPrice: doublePrecision('listing_price'),
+    // spec 0016: the calendar's other facts, and the detail endpoint's extras
+    logo: text('logo'),
+    minInvestment: doublePrecision('min_investment'),
+    faceValue: doublePrecision('face_value'),
+    listingOn: text('listing_on'),
+    saleType: text('sale_type'),
+    listingGainPct: doublePrecision('listing_gain_pct'),
+    cmp: doublePrecision('cmp'),
+    kostak: doublePrecision('kostak'),
+    sauda: doublePrecision('sauda'),
+    details: jsonb('details').$type<IpoDetails>(),
     source: text('source').notNull(),
     sourceUrl: text('source_url'),
     /** fields typed in by hand, which the feed must not overwrite */
@@ -92,6 +103,21 @@ export const ipoAlerts = pgTable(
     uniqueIndex('ipo_alerts_reason_uq').on(t.ownerId, t.reason),
     index('ipo_alerts_day_idx').on(t.ownerId, t.day),
   ],
+);
+
+/** "Will you apply?" and how it went, per person and IPO (spec 0016 A5). */
+export const ipoDecisions = pgTable(
+  'ipo_decisions',
+  {
+    ownerId: uuid('owner_id').notNull(),
+    issueId: uuid('issue_id').notNull(),
+    decision: text('decision').$type<IpoDecision>().notNull(),
+    /** the Today task "Apply for …" */
+    taskId: uuid('task_id'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [primaryKey({ columns: [t.ownerId, t.issueId] })],
 );
 
 // ------------------------------------------------------------------ the Pool (owner's own)

@@ -14,6 +14,8 @@ import {
   ApplicationUpdate,
   IpoSettings,
   LedgerEntryInput,
+  IpoDecisionBody,
+  type IpoDecision,
   ManualFigures,
   NewIssue,
   NewRound,
@@ -42,8 +44,22 @@ export class IpoController {
   ) {}
 
   @Get('issues')
-  list(@Auth() a: AuthContext, @Query('when') when?: string) {
-    return this.ipo.list(a.userId, when === 'closed' || when === 'listed' ? when : 'current');
+  list(@Auth() a: AuthContext, @Query('when') when?: string, @Query('type') type?: string) {
+    return this.ipo.list(
+      a.userId,
+      when === 'closed' || when === 'listed' ? when : 'current',
+      type === 'mainboard' || type === 'sme' || type === 'all' ? type : undefined,
+    );
+  }
+
+  /** I'll apply · Skip · Applied · Allotted · Not allotted (spec 0016 A5); null takes it back. */
+  @Put('issues/:id/decision')
+  decide(
+    @Auth() a: AuthContext,
+    @Param('id', id) issueId: string,
+    @Body(new ZodPipe(IpoDecisionBody)) b: { decision: IpoDecision | null },
+  ) {
+    return this.ipo.decide(a.userId, issueId, b.decision);
   }
 
   @Get('issues/:id')

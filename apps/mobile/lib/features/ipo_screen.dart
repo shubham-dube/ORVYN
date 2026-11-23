@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +15,7 @@ import '../design/theme.dart';
 import '../design/toast.dart';
 import '../money/money.dart' show formatMoney;
 import 'common.dart';
+import 'money_ui.dart' show Segment, SheetCard, SheetRule;
 import 'sheets.dart';
 
 // ------------------------------------------------------------------ data (spec 0010)
@@ -29,7 +31,8 @@ class IpoWhen extends Notifier<String> {
 final ipoWhenProvider = NotifierProvider<IpoWhen, String>(IpoWhen.new);
 final ipoIssuesProvider = FutureProvider.autoDispose<J>((ref) {
   final when = ref.watch(ipoWhenProvider);
-  return ref.read(apiProvider).get<J>('/ipo/issues', query: {'when': when});
+  final show = ref.watch(ipoShowProvider);
+  return ref.read(apiProvider).get<J>('/ipo/issues', query: {'when': when, 'type': ?show});
 });
 final ipoIssueProvider = FutureProvider.autoDispose.family<J, String>(
   (ref, id) => ref.read(apiProvider).get<J>('/ipo/issues/$id'),
@@ -122,12 +125,12 @@ class _IpoScreenState extends ConsumerState<IpoScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Expanded(child: PageTitle('IPO desk', overline: 'India · mainboard and SME')),
+                    const Expanded(child: PageTitle('IPO desk', overline: 'GMP, demand, odds — and what you’ll do')),
                     if (!_pool)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 14),
                         child: IconButton(
-                          tooltip: 'IPO notifications',
+                          tooltip: 'IPO desk & notifications',
                           icon: Icon(LucideIcons.bellRing, color: l.c.muted),
                           onPressed: () => showGlassSheet<void>(context, (_) => const IpoSettingsSheet()),
                         ),
@@ -152,6 +155,365 @@ class _IpoScreenState extends ConsumerState<IpoScreen> {
   }
 }
 
+// ------------------------------------------------------------------ the desk (spec 0016 A)
+
+String _crore(num? n) => n == null ? '—' : '₹${_group(n.round())} cr';
+String _signed(num? n) => n == null ? '—' : '${n >= 0 ? '+' : '−'}₹${_group(n.abs().round())}';
+String _today() {
+  final n = DateTime.now();
+  return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
+}
+
+int _daysTo(String d) => DateTime.parse('${d}T00:00:00').difference(DateTime.parse('${_today()}T00:00:00')).inDays;
+String _weekday(String d) => const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][DateTime.parse(d).weekday - 1];
+
+/// "Closes today · 5 pm", "Opens Mon", "Lists Thu"… and how urgent it is (0 hot, 1 live, 2 soon, 3 quiet).
+(String, int) ipoMoment(J i) {
+  final status = i['status'] as String;
+  final open = i['openDate'] as String?;
+  final close = i['closeDate'] as String?;
+  final allot = i['allotmentDate'] as String?;
+  final list = i['listingDate'] as String?;
+  if (status == 'open' && close != null) {
+    final n = _daysTo(close);
+    if (n <= 0) return ('Closes today · 5 pm', 0);
+    if (n == 1) return ('Closes tomorrow', 1);
+    return ('Open · closes ${_weekday(close)}', 1);
+  }
+  if (status == 'upcoming') {
+    if (open == null) return ('Dates soon', 3);
+    final n = _daysTo(open);
+    if (n <= 0) return ('Opens today', 0);
+    if (n == 1) return ('Opens tomorrow', 2);
+    return (n < 7 ? 'Opens ${_weekday(open)}' : 'Opens ${_day(open)}', 2);
+  }
+  if (status == 'closed') {
+    if (allot != null && _daysTo(allot) == 0) return ('Allotment today', 0);
+    if (list != null) return (_daysTo(list) == 0 ? 'Lists today' : 'Lists ${_weekday(list)}', 2);
+    return ('Closed', 3);
+  }
+  final g = i['listingGainPct'] as num?;
+  return (g == null ? 'Listed' : 'Listed ${g >= 0 ? '+' : ''}${g.toStringAsFixed(1)}%', 3);
+}
+
+class _MomentPill extends StatelessWidget {
+  const _MomentPill({required this.i});
+  final J i;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final (text, tone) = ipoMoment(i);
+    final c = switch (tone) {
+      0 => l.c.danger,
+      1 => l.c.success,
+      2 => l.accent,
+      _ => l.c.muted,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: tone == 3 ? 0.1 : 0.14),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (tone <= 1) ...[
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            text,
+            style: OrvText.body(l).copyWith(fontSize: 11.5, fontWeight: FontWeight.w700, color: c),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The company's logo, or its first letter on the accent.
+class IpoLogo extends StatelessWidget {
+  const IpoLogo({super.key, required this.i, this.size = 44});
+  final J i;
+  final double size;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final logo = i['logo'] as String?;
+    final letter = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(gradient: l.accentGradient, borderRadius: BorderRadius.circular(size * 0.3)),
+      child: Text(
+        (i['name'] as String? ?? '?').characters.first,
+        style: TextStyle(
+          fontFamily: fontFamily,
+          color: Colors.white,
+          fontSize: size * 0.42,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+    if (logo == null) return letter;
+    return Container(
+      width: size,
+      height: size,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(size * 0.3),
+        border: Border.all(color: l.c.edge),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(size * 0.25),
+        child: Image.network(logo, fit: BoxFit.contain, errorBuilder: (_, _, _) => letter),
+      ),
+    );
+  }
+}
+
+class _Tile extends StatelessWidget {
+  const _Tile({required this.k, required this.v, this.sub, this.tone});
+  final String k;
+  final String v;
+  final String? sub;
+  final Color? tone;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(color: l.c.track.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(k.toUpperCase(), style: OrvText.label(l).copyWith(fontSize: 9.5, color: l.c.muted, letterSpacing: 0.8)),
+          const SizedBox(height: 2),
+          Text(
+            v,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: OrvText.body(l).copyWith(
+              fontSize: 16.5,
+              fontWeight: FontWeight.w700,
+              color: tone,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          if (sub != null && sub!.isNotEmpty)
+            Text(sub!, maxLines: 1, overflow: TextOverflow.ellipsis, style: OrvText.muted(l).copyWith(fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
+/// How many times a category is subscribed: a bar on a log scale with 1× marked.
+class _DemandBar extends StatelessWidget {
+  const _DemandBar({required this.label, required this.x, this.strong = false});
+  final String label;
+  final num? x;
+  final bool strong;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final v = x;
+    if (v == null) return const SizedBox.shrink();
+    final w = ((math.log(math.max(v.toDouble(), 0.1)) / math.ln10 + 1) / 3).clamp(0.02, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 68,
+            child: Text(
+              label,
+              style: OrvText.muted(l)
+                  .copyWith(fontSize: 12, fontWeight: strong ? FontWeight.w700 : null, color: strong ? l.c.text : null),
+            ),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (_, c) => Stack(
+                children: [
+                  Container(
+                    height: 7,
+                    decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(4)),
+                  ),
+                  AnimatedContainer(
+                    duration: OrvTokens.durationBase,
+                    height: 7,
+                    width: c.maxWidth * w,
+                    decoration: BoxDecoration(
+                      color: v >= 1 ? l.c.success : l.c.warning,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Positioned(
+                    left: c.maxWidth / 3,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(width: 1, color: l.c.edge),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 58,
+            child: Text(
+              _times(v),
+              textAlign: TextAlign.right,
+              style: OrvText.body(l).copyWith(fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+const _decisionLabel = {
+  'applying': 'You’ll apply',
+  'skipped': 'Skipped',
+  'applied': 'Applied',
+  'allotted': 'Allotted 🎉',
+  'not_allotted': 'Not allotted',
+};
+
+/// I'll apply · Skip; then what was decided, and the next step (Applied ✓, Got it, Not this time).
+class _DecisionBar extends ConsumerStatefulWidget {
+  const _DecisionBar({required this.i, this.big = false});
+  final J i;
+  final bool big;
+  @override
+  ConsumerState<_DecisionBar> createState() => _DecisionBarState();
+}
+
+class _DecisionBarState extends ConsumerState<_DecisionBar> {
+  bool _busy = false;
+
+  Future<void> _go(String? d) async {
+    final toaster = Toaster.of(context);
+    final id = widget.i['id'] as String;
+    setState(() => _busy = true);
+    try {
+      await ref.read(apiProvider).put<dynamic>('/ipo/issues/$id/decision', {'decision': d});
+      unawaited(HapticFeedback.lightImpact());
+      if (d == 'applying') {
+        toaster.show(
+          'Added to Today',
+          body:
+              'Apply for ${widget.i['name']} by ${_day(widget.i['closeDate'] as String?)}. You’ll be reminded that morning.',
+          tone: ToastTone.success,
+        );
+      }
+      ref.invalidate(ipoIssuesProvider);
+      ref.invalidate(ipoIssueProvider(id));
+    } catch (e) {
+      toaster.show('That didn’t work', body: messageFor(e), tone: ToastTone.danger);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final i = widget.i;
+    final d = i['decision'] as String?;
+    final live = i['status'] == 'open' || i['status'] == 'upcoming';
+    if (d == null) {
+      if (!live) return const SizedBox.shrink();
+      return Row(
+        children: [
+          if (widget.big)
+            Expanded(
+              child: Text('Will you apply?', style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
+            ),
+          OrvButton(
+            key: Key('ipo-apply-${i['id']}'),
+            label: 'I’ll apply',
+            small: true,
+            icon: LucideIcons.hand,
+            variant: ButtonVariant.primary,
+            loading: _busy,
+            onPressed: () => _go('applying'),
+          ),
+          const SizedBox(width: 6),
+          OrvButton(
+            label: 'Skip',
+            small: true,
+            variant: ButtonVariant.ghost,
+            onPressed: _busy ? null : () => _go('skipped'),
+          ),
+        ],
+      );
+    }
+    final quiet = d == 'skipped' || d == 'not_allotted';
+    final next = d == 'applying'
+        ? [('applied', 'Applied ✓')]
+        : d == 'applied' && (i['status'] == 'closed' || i['status'] == 'listed')
+        ? [('allotted', 'Got it 🎉'), ('not_allotted', 'Not this time')]
+        : <(String, String)>[];
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: (quiet ? l.c.muted : l.accent).withValues(alpha: 0.13),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                d == 'applying' ? LucideIcons.calendarCheck : (quiet ? LucideIcons.circleX : LucideIcons.circleCheck),
+                size: 14,
+                color: quiet ? l.c.muted : l.accent,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '${_decisionLabel[d] ?? d}${d == 'applying' && i['closeDate'] != null ? ' · by ${_day(i['closeDate'] as String?)}' : ''}',
+                style: OrvText.body(l)
+                    .copyWith(fontSize: 12, fontWeight: FontWeight.w700, color: quiet ? l.c.muted : l.accent),
+              ),
+            ],
+          ),
+        ),
+        for (final (v, label) in next)
+          OrvButton(
+            label: label,
+            small: true,
+            variant: v == 'not_allotted' ? ButtonVariant.ghost : ButtonVariant.primary,
+            loading: _busy,
+            onPressed: () => _go(v),
+          ),
+        if (widget.big) TextButton(onPressed: _busy ? null : () => _go(null), child: const Text('Undo')),
+      ],
+    );
+  }
+}
+
+class IpoShow extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void set(String? v) => state = v;
+}
+
+/// mainboard | sme | all; null until the server says what this person chose last (spec 0016 A1)
+final ipoShowProvider = NotifierProvider<IpoShow, String?>(IpoShow.new);
+
 class _DeskBody extends ConsumerWidget {
   const _DeskBody();
   @override
@@ -161,26 +523,72 @@ class _DeskBody extends ConsumerWidget {
     final data = ref.watch(ipoIssuesProvider);
     final issues = [for (final x in (data.value?['issues'] as List? ?? const [])) x as J];
     final feed = data.value?['feed'] as J?;
+    final show = ref.watch(ipoShowProvider) ?? data.value?['show'] as String? ?? 'mainboard';
+    final today = _today();
+    final last = issues.where((i) => i['status'] == 'open' && i['closeDate'] == today).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 40,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              for (final (k, label) in const [
-                ('current', 'Open & upcoming'),
-                ('closed', 'Awaiting listing'),
-                ('listed', 'Listed'),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: _chip(context, label, when == k, () => ref.read(ipoWhenProvider.notifier).set(k)),
-                ),
-            ],
-          ),
+        Segment<String>(
+          value: when,
+          dense: true,
+          options: const [
+            ('current', 'Open & soon', null, null),
+            ('closed', 'Awaiting', null, null),
+            ('listed', 'Listed', null, null),
+          ],
+          onChanged: (v) => ref.read(ipoWhenProvider.notifier).set(v),
         ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Segment<String>(
+                value: show,
+                dense: true,
+                options: const [
+                  ('mainboard', 'Mainboard', null, null),
+                  ('sme', 'SME', null, null),
+                  ('all', 'All', null, null),
+                ],
+                onChanged: (v) async {
+                  ref.read(ipoShowProvider.notifier).set(v);
+                  // remembered on every device: SME on or off
+                  final api = ref.read(apiProvider);
+                  final s = await api.get<J>('/ipo/settings');
+                  if ((s['showSme'] == true) != (v != 'mainboard')) {
+                    await api.put<dynamic>('/ipo/settings', {...s, 'showSme': v != 'mainboard'});
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+        if (last.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: l.c.danger.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(color: l.c.danger, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Last day: ${last.map((i) => i['name']).join(', ')} — bids close at 5 pm.',
+                    style: OrvText.body(l).copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (feed != null && feed['ready'] != true)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -199,7 +607,7 @@ class _DeskBody extends ConsumerWidget {
         for (final i in issues) _IssueCard(i: i),
         if (feed?['credit'] != null)
           Padding(
-            padding: const EdgeInsets.only(top: 10),
+            padding: const EdgeInsets.only(top: 12),
             child: GestureDetector(
               onTap: () => ref.read(urlOpenerProvider)(Uri.parse(feed['credit'] as String)),
               child: Text(
@@ -213,16 +621,21 @@ class _DeskBody extends ConsumerWidget {
   }
 }
 
-class _IssueCard extends StatelessWidget {
+/// One IPO as a card: the four numbers that decide it, when, how hot, and what you'll do.
+class _IssueCard extends ConsumerWidget {
   const _IssueCard({required this.i});
   final J i;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = context.orv;
-    final odds = (i['odds'] as List).cast<J>();
-    final retail = odds.where((o) => o['category'] == 'retail').firstOrNull;
     final sub = i['subscription'] as J?;
-    final gmpPct = i['gmpPct'] as num?;
+    final gmp = i['gmp'] as num?;
+    final lot =
+        (i['minInvestment'] as num?) ??
+        (i['priceMax'] != null && i['lotSize'] != null ? (i['priceMax'] as num) * (i['lotSize'] as num) : null);
+    final gain = i['gainPerLot'] as num?;
+    final size = i['issueSizeCr'] as num?;
+    final status = i['status'] as String;
     return Padding(
       padding: const EdgeInsets.only(top: 10),
       child: Semantics(
@@ -234,51 +647,126 @@ class _IssueCard extends StatelessWidget {
             blur: false,
             padding: const EdgeInsets.all(14),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Row(
                   children: [
+                    IpoLogo(i: i, size: 42),
+                    const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        i['name'] as String,
-                        style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            i['name'] as String,
+                            style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700, fontSize: 15.5),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            [
+                              i['type'] == 'sme' ? 'SME' : 'Mainboard',
+                              if (i['priceMax'] != null)
+                                '₹${i['priceMin'] != null && i['priceMin'] != i['priceMax'] ? '${i['priceMin']}–' : ''}${i['priceMax']}',
+                            ].join(' · '),
+                            style: OrvText.muted(l)
+                                .copyWith(fontSize: 12, color: i['type'] == 'sme' ? l.c.warning : null),
+                          ),
+                        ],
                       ),
                     ),
-                    if (i['starred'] == true) Icon(LucideIcons.star, size: 15, color: l.c.warning),
-                    const SizedBox(width: 6),
-                    OrvBadge(i['type'] == 'sme' ? 'SME' : i['status'] as String),
+                    if (i['starred'] == true)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Icon(LucideIcons.star, size: 15, color: l.c.warning),
+                      ),
+                    _MomentPill(i: i),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${i['issueSizeCr'] == null ? 'Size —' : '₹${_group((i['issueSizeCr'] as num).round())} cr'} · '
-                  '${_rs(i['priceMax'] as num?)} · ${retail == null ? '' : '${_rs(retail['minAmount'] as num)} a lot · '}'
-                  '${_day(i['openDate'] as String?)}–${_day(i['closeDate'] as String?)}',
-                  style: OrvText.muted(l).copyWith(fontSize: 12.5),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                const SizedBox(height: 10),
+                Row(
                   children: [
-                    OrvBadge(
-                      i['gmp'] == null ? 'GMP —' : 'GMP ₹${i['gmp']} · ${gmpPct?.toStringAsFixed(0)}%',
-                      tone: (gmpPct ?? 0) >= 25
-                          ? l.c.success
-                          : (gmpPct ?? 0) <= 0 && i['gmp'] != null
-                          ? l.c.danger
-                          : null,
+                    Expanded(
+                      child: _Tile(
+                        k: 'Issue size',
+                        v: _crore(size),
+                        sub: size == null ? null : (size >= 5000 ? 'Large' : (size >= 1000 ? 'Mid-size' : 'Small')),
+                      ),
                     ),
-                    if (sub?['retail'] != null) OrvBadge('Retail ${_times(sub!['retail'] as num)}'),
-                    if (retail?['chance'] != null)
-                      OrvBadge('Odds ${_chance(retail!['chance'] as num)}', tone: l.accent),
-                    if (i['pool'] != null) OrvBadge('${(i['pool'] as J)['accounts']} accounts', tone: l.accent),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _Tile(
+                        k: 'GMP',
+                        v: gmp == null ? '—' : '${gmp > 0 ? '+' : (gmp < 0 ? '−' : '')}₹${gmp.abs()}',
+                        sub: gmp == null ? 'not reported' : '${(i['gmpPct'] as num?)?.toStringAsFixed(1)}%',
+                        tone: gmp == null ? null : (gmp > 0 ? l.c.success : (gmp < 0 ? l.c.danger : null)),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _Tile(
+                        k: '1 lot',
+                        v: _rs(lot),
+                        sub: i['lotSize'] == null ? null : '${i['lotSize']} shares',
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _Tile(
+                        k: status == 'listed' ? 'Listed' : 'Dates',
+                        v: status == 'listed'
+                            ? _day(i['listingDate'] as String?)
+                            : i['openDate'] == null
+                            ? 'Soon'
+                            : '${_day(i['openDate'] as String?)}–${i['closeDate'] == null ? '' : int.parse((i['closeDate'] as String).substring(8))}',
+                        sub: status == 'listed'
+                            ? _rs(i['listingPrice'] as num?)
+                            : (i['listingDate'] == null ? null : 'lists ${_day(i['listingDate'] as String?)}'),
+                      ),
+                    ),
+                  ],
+                ),
+                if (sub != null && status != 'upcoming' && (sub['retail'] != null || sub['total'] != null)) ...[
+                  const SizedBox(height: 8),
+                  _DemandBar(label: 'Retail', x: sub['retail'] as num?, strong: true),
+                  _DemandBar(label: 'Total', x: sub['total'] as num?),
+                ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (gain != null && status != 'listed') ...[
+                      Icon(
+                        gain >= 0 ? LucideIcons.trendingUp : LucideIcons.trendingDown,
+                        size: 15,
+                        color: gain >= 0 ? l.c.success : l.c.danger,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_signed(gain)} a lot',
+                        style: OrvText.body(l).copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: gain >= 0 ? l.c.success : l.c.danger,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                    ],
+                    Expanded(
+                      child: Text(
+                        i['verdict'] as String? ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text(i['verdict'] as String, style: OrvText.muted(l).copyWith(fontSize: 13)),
+                _DecisionBar(i: i),
               ],
             ),
           ),
@@ -289,6 +777,52 @@ class _IssueCard extends StatelessWidget {
 }
 
 // ------------------------------------------------------------------ one IPO
+
+class _Sparkline extends CustomPainter {
+  _Sparkline(this.points, this.color);
+  final List<double> points;
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.length < 2) return;
+    final lo = points.reduce(math.min);
+    final hi = points.reduce(math.max);
+    Offset at(int n) => Offset(
+      n / (points.length - 1) * size.width,
+      size.height - ((points[n] - lo) / (hi - lo == 0 ? 1 : hi - lo)) * (size.height - 10) - 5,
+    );
+    final line = Path()..moveTo(at(0).dx, at(0).dy);
+    for (var n = 1; n < points.length; n++) {
+      line.lineTo(at(n).dx, at(n).dy);
+    }
+    final area = Path.from(line)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(
+      area,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [color.withValues(alpha: 0.28), color.withValues(alpha: 0)],
+        ).createShader(Offset.zero & size),
+    );
+    canvas.drawPath(
+      line,
+      Paint()
+        ..color = color
+        ..strokeWidth = 2.2
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawCircle(at(points.length - 1), 4, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(_Sparkline o) => o.points != points || o.color != color;
+}
 
 class IpoDetailScreen extends ConsumerWidget {
   const IpoDetailScreen({super.key, required this.id});
@@ -302,77 +836,219 @@ class IpoDetailScreen extends ConsumerWidget {
       child: Builder(
         builder: (context) {
           final l = context.orv;
+          if (d == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          final gmp = d['gmp'] as num?;
+          final up = (gmp ?? 0) >= 0;
+          final lot =
+              (d['minInvestment'] as num?) ??
+              (d['priceMax'] != null && d['lotSize'] != null ? (d['priceMax'] as num) * (d['lotSize'] as num) : null);
+          final gain = d['gainPerLot'] as num?;
+          final x = d['details'] as J?;
           return Scaffold(
             body: SafeArea(
-              child: d == null
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+              child: RefreshIndicator(
+                color: l.accent,
+                onRefresh: () async => ref.invalidate(ipoIssueProvider(id)),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            IconButton(
-                              tooltip: 'Back',
-                              icon: Icon(LucideIcons.arrowLeft, color: l.c.text),
-                              onPressed: () => context.canPop() ? context.pop() : context.go('/ipo'),
-                            ),
-                            Expanded(child: PageTitle(d['name'] as String, overline: d['status'] as String)),
-                            IconButton(
-                              tooltip: d['starred'] == true ? 'Unstar' : 'Star',
-                              icon: Icon(LucideIcons.star, color: d['starred'] == true ? l.c.warning : l.c.muted),
-                              onPressed: () async {
-                                await ref.read(apiProvider).put<dynamic>('/ipo/issues/$id/star', {
-                                  'on': d['starred'] != true,
-                                });
-                                ref.invalidate(ipoIssueProvider(id));
-                                ref.invalidate(ipoIssuesProvider);
-                              },
-                            ),
-                          ],
+                        IconButton(
+                          tooltip: 'Back',
+                          icon: Icon(LucideIcons.arrowLeft, color: l.c.text),
+                          onPressed: () => context.canPop() ? context.pop() : context.go('/ipo'),
                         ),
-                        Text(d['verdict'] as String, style: OrvText.body(l)),
-                        const SizedBox(height: 12),
-                        _Facts(d: d),
-                        const SizedBox(height: 12),
-                        _GmpAndSubscription(d: d),
-                        const SizedBox(height: 12),
-                        _Odds(d: d),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            if (d['roundId'] != null)
-                              OrvButton(
-                                label: 'Open your round',
-                                variant: ButtonVariant.primary,
-                                icon: LucideIcons.users,
-                                onPressed: () => context.push('/ipo/pool/rounds/${d['roundId']}'),
-                              )
-                            else if (d['status'] == 'open' || d['status'] == 'upcoming')
-                              OrvButton(
-                                label: 'Apply from my accounts',
-                                variant: ButtonVariant.primary,
-                                icon: LucideIcons.users,
-                                onPressed: () => showGlassSheet<void>(
-                                  context,
-                                  (_) => StartRoundSheet(issueId: id, issueName: d['name'] as String),
-                                ),
-                              ),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () => showGlassSheet<void>(context, (_) => _FiguresSheet(d: d)),
-                              child: const Text('Type figures'),
-                            ),
-                          ],
+                        const Spacer(),
+                        IconButton(
+                          tooltip: d['starred'] == true ? 'Unstar' : 'Star',
+                          icon: Icon(LucideIcons.star, color: d['starred'] == true ? l.c.warning : l.c.muted),
+                          onPressed: () async {
+                            await ref.read(apiProvider).put<dynamic>('/ipo/issues/$id/star', {
+                              'on': d['starred'] != true,
+                            });
+                            ref.invalidate(ipoIssueProvider(id));
+                            ref.invalidate(ipoIssuesProvider);
+                          },
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          d['sourceUrl'] == null
-                              ? 'Typed in by hand · GMP is unofficial · not investment advice'
-                              : 'Data: ${d['source']} · GMP is unofficial · not investment advice',
-                          style: OrvText.muted(l).copyWith(fontSize: 11.5),
+                        IconButton(
+                          tooltip: 'Type figures',
+                          icon: Icon(LucideIcons.pencilLine, color: l.c.muted),
+                          onPressed: () => showGlassSheet<void>(context, (_) => _FiguresSheet(d: d)),
                         ),
                       ],
                     ),
+                    // the hero
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(OrvTokens.radiusLg),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [l.accent.withValues(alpha: 0.2), l.accent.withValues(alpha: 0.04)],
+                        ),
+                        border: Border.all(color: l.accent.withValues(alpha: 0.22)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              IpoLogo(i: d, size: 56),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _MomentPill(i: d),
+                                    const SizedBox(height: 6),
+                                    Text(d['name'] as String, style: OrvText.heading(l).copyWith(fontSize: 21)),
+                                    Text(
+                                      [
+                                        d['type'] == 'sme' ? 'SME' : 'Mainboard',
+                                        ?d['listingOn'] as String?,
+                                      ].join(' · '),
+                                      style: OrvText.muted(l).copyWith(fontSize: 12.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            d['priceMax'] == null
+                                ? 'Price soon'
+                                : '₹${d['priceMin'] != null && d['priceMin'] != d['priceMax'] ? '${d['priceMin']}–' : ''}${d['priceMax']} a share'
+                                      '${d['lotSize'] != null ? ' · ${d['lotSize']} a lot' : ''}',
+                            style: OrvText.body(l).copyWith(fontSize: 14),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _Tile(k: 'Issue size', v: _crore(d['issueSizeCr'] as num?)),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: _Tile(
+                                  k: '1 lot',
+                                  v: _rs(lot),
+                                  sub: d['lotSize'] == null ? null : '${d['lotSize']} shares',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _Tile(
+                                  k: 'GMP',
+                                  v: gmp == null ? '—' : '${up ? '+' : '−'}₹${gmp.abs()}',
+                                  sub: gmp == null ? 'not reported' : '${(d['gmpPct'] as num?)?.toStringAsFixed(1)}%',
+                                  tone: gmp == null ? null : (up ? l.c.success : l.c.danger),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: _Tile(
+                                  k: 'A lot may make',
+                                  v: _signed(gain),
+                                  sub: 'at today’s GMP',
+                                  tone: gain == null ? null : (gain >= 0 ? l.c.success : l.c.danger),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // your plan
+                    Glass(
+                      blur: false,
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(LucideIcons.sparkles, size: 17, color: l.accent),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  d['verdict'] as String? ?? '',
+                                  style: OrvText.body(l).copyWith(fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          _DecisionBar(i: d, big: true),
+                          if (d['decision'] == 'applying')
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                'A task in Today is due on the last day, with a reminder that morning. Bids close at 5 pm; approve the UPI mandate the same day.',
+                                style: OrvText.muted(l).copyWith(fontSize: 12),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _GmpCard(d: d),
+                    const SizedBox(height: 12),
+                    _DemandCard(d: d),
+                    const SizedBox(height: 12),
+                    _Timeline(d: d),
+                    const SizedBox(height: 12),
+                    _Facts(d: d, lot: lot),
+                    const SizedBox(height: 12),
+                    _Odds(d: d),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (d['roundId'] != null)
+                          OrvButton(
+                            label: 'Open your round',
+                            variant: ButtonVariant.primary,
+                            icon: LucideIcons.users,
+                            onPressed: () => context.push('/ipo/pool/rounds/${d['roundId']}'),
+                          )
+                        else if (d['status'] == 'open' || d['status'] == 'upcoming')
+                          OrvButton(
+                            label: 'Apply from my accounts',
+                            icon: LucideIcons.users,
+                            onPressed: () => showGlassSheet<void>(
+                              context,
+                              (_) => StartRoundSheet(issueId: id, issueName: d['name'] as String),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (x != null) _Company(x: x),
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: d['sourceUrl'] == null
+                          ? null
+                          : () => ref.read(urlOpenerProvider)(Uri.parse(d['sourceUrl'] as String)),
+                      child: Text(
+                        d['sourceUrl'] == null
+                            ? 'Typed in by hand · GMP is unofficial · not investment advice'
+                            : 'Data: ${d['source']} · GMP is unofficial · not investment advice',
+                        style: OrvText.muted(l).copyWith(
+                          fontSize: 11.5,
+                          decoration: d['sourceUrl'] == null ? null : TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
         },
@@ -384,52 +1060,27 @@ class IpoDetailScreen extends ConsumerWidget {
 Widget _fact(OrvLook l, String k, String v) => Column(
   crossAxisAlignment: CrossAxisAlignment.start,
   children: [
-    Text(k.toUpperCase(), style: OrvText.label(l).copyWith(fontSize: 10.5)),
+    Text(k.toUpperCase(), style: OrvText.label(l).copyWith(fontSize: 10, color: l.c.muted)),
     const SizedBox(height: 2),
     Text(v, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600, fontSize: 14)),
   ],
 );
 
-class _Facts extends StatelessWidget {
-  const _Facts({required this.d});
+class _GmpCard extends StatelessWidget {
+  const _GmpCard({required this.d});
   final J d;
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
-    final cells = [
-      ('Issue size', d['issueSizeCr'] == null ? '—' : '₹${_group((d['issueSizeCr'] as num).round())} cr'),
-      ('Price', _rs(d['priceMax'] as num?)),
-      ('Lot', d['lotSize'] == null ? '—' : '${d['lotSize']} shares'),
-      ('Est. listing', _rs(d['estListingPrice'] as num?)),
-      ('Closes', _day(d['closeDate'] as String?)),
-      ('Allotment', _day(d['allotmentDate'] as String?)),
-      ('Refund', _day(d['refundDate'] as String?)),
-      ('Listing', _day(d['listingDate'] as String?)),
+    final gmp = d['gmp'] as num?;
+    final up = (gmp ?? 0) >= 0;
+    final pts = [
+      for (final h in (d['history'] as List? ?? const []))
+        if ((h as J)['gmp'] != null) (h['gmp'] as num).toDouble(),
     ];
+    final updated = d['gmpUpdatedAt'] as String?;
     return Glass(
-      padding: const EdgeInsets.all(14),
-      child: GridView.count(
-        crossAxisCount: 4,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        childAspectRatio: 1.45,
-        children: [for (final (k, v) in cells) _fact(l, k, v)],
-      ),
-    );
-  }
-}
-
-class _GmpAndSubscription extends StatelessWidget {
-  const _GmpAndSubscription({required this.d});
-  final J d;
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    final s = d['subscription'] as J?;
-    final history = [for (final h in (d['history'] as List? ?? const [])) h as J]
-        .where((h) => h['gmp'] != null)
-        .toList();
-    return Glass(
+      blur: false,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -441,40 +1092,219 @@ class _GmpAndSubscription extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Text(
-            d['gmp'] == null ? '—' : '₹${d['gmp']}  ${(d['gmpPct'] as num?)?.toStringAsFixed(1)}%',
-            style: OrvText.heading(l).copyWith(fontSize: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                gmp == null ? '—' : '${up ? '+' : '−'}₹${gmp.abs()}',
+                style: OrvText.heading(l)
+                    .copyWith(fontSize: 28, color: gmp == null ? null : (up ? l.c.success : l.c.danger)),
+              ),
+              const SizedBox(width: 10),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '${(d['gmpPct'] as num?)?.toStringAsFixed(1) ?? '—'}% · est. ${_rs(d['estListingPrice'] as num?)}',
+                  style: OrvText.muted(l).copyWith(fontSize: 13),
+                ),
+              ),
+            ],
           ),
-          if (history.length > 1)
-            Text(
-              'Trend: ${history.map((h) => '₹${h['gmp']}').join(' → ')}',
-              style: OrvText.muted(l).copyWith(fontSize: 12),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          Divider(height: 22, color: l.c.edge),
-          Text('SUBSCRIPTION', style: OrvText.label(l)),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
+          if (pts.length > 1)
+            SizedBox(height: 64, child: CustomPaint(painter: _Sparkline(pts, l.accent)))
+          else
+            Text('The trend shows after a few refreshes.', style: OrvText.muted(l).copyWith(fontSize: 12)),
+          const SizedBox(height: 6),
+          Text(
+            [
+              if (updated != null)
+                'Updated ${_day(updated.substring(0, 10))} ${updated.substring(11, 16)} UTC'
+              else
+                'Not reported yet',
+              if ((d['manual'] as List? ?? const []).contains('gmp')) 'typed in',
+              if (d['sauda'] != null) 'sauda ₹${_group((d['sauda'] as num).round())}',
+            ].join(' · '),
+            style: OrvText.muted(l).copyWith(fontSize: 11.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DemandCard extends StatelessWidget {
+  const _DemandCard({required this.d});
+  final J d;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final s = d['subscription'] as J?;
+    return Glass(
+      blur: false,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('HOW HOT IS IT', style: OrvText.label(l)),
+          const SizedBox(height: 8),
           if (s == null)
             Text('No figures yet — they come once bidding starts.', style: OrvText.muted(l))
-          else
-            for (final (k, v) in [
-              ('QIB', s['qib']),
-              ('NII', s['nii']),
-              ('Small HNI', s['snii']),
-              ('Retail', s['retail']),
-              ('Total', s['total']),
-            ])
-              if (v != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(k, style: OrvText.muted(l))),
-                      Text(_times(v as num), style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600)),
-                    ],
+          else ...[
+            _DemandBar(label: 'Retail', x: s['retail'] as num?, strong: true),
+            _DemandBar(label: 'Small HNI', x: s['snii'] as num?),
+            _DemandBar(label: 'Big HNI', x: s['bnii'] as num?),
+            if (s['snii'] == null) _DemandBar(label: 'NII', x: s['nii'] as num?),
+            _DemandBar(label: 'QIB', x: s['qib'] as num?),
+            _DemandBar(label: 'Employee', x: s['employee'] as num?),
+            _DemandBar(label: 'Total', x: s['total'] as num?, strong: true),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Open → close → allotment → refund → demat → listing, with today marked.
+class _Timeline extends StatelessWidget {
+  const _Timeline({required this.d});
+  final J d;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final steps = [
+      ('Opens', d['openDate'] as String?),
+      ('Closes', d['closeDate'] as String?),
+      ('Allotment', d['allotmentDate'] as String?),
+      ('Refunds', d['refundDate'] as String?),
+      ('In demat', (d['details'] as J?)?['creditToDematDate'] as String?),
+      ('Listing', d['listingDate'] as String?),
+    ].where((s) => s.$2 != null).toList();
+    if (steps.isEmpty) return const SizedBox.shrink();
+    final today = _today();
+    final next = steps.indexWhere((s) => s.$2!.compareTo(today) >= 0);
+    return Glass(
+      blur: false,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('WHEN', style: OrvText.label(l)),
+          const SizedBox(height: 10),
+          for (final (n, (k, v)) in steps.indexed)
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: 22,
+                    child: Column(
+                      children: [
+                        Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: v!.compareTo(today) < 0 ? l.accent : Colors.transparent,
+                            border: Border.all(
+                              color: v.compareTo(today) < 0 || n == next ? l.accent : l.c.edge,
+                              width: 2,
+                            ),
+                          ),
+                          child: v.compareTo(today) < 0
+                              ? const Icon(LucideIcons.check, size: 11, color: Colors.white)
+                              : (n == next
+                                    ? Center(
+                                        child: Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(color: l.accent, shape: BoxShape.circle),
+                                        ),
+                                      )
+                                    : null),
+                        ),
+                        if (n < steps.length - 1)
+                          Expanded(child: Container(width: 2, color: v.compareTo(today) < 0 ? l.accent : l.c.edge)),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              k,
+                              style: OrvText.body(l).copyWith(
+                                fontSize: 14,
+                                fontWeight: n == next ? FontWeight.w700 : FontWeight.w500,
+                                color: n == next ? l.accent : null,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${_weekday(v)}, ${_day(v)}',
+                            style: OrvText.muted(l).copyWith(fontSize: 13, color: n == next ? l.accent : null),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Facts extends StatelessWidget {
+  const _Facts({required this.d, required this.lot});
+  final J d;
+  final num? lot;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final cells = [
+      (
+        'Price band',
+        d['priceMax'] == null
+            ? '—'
+            : '₹${d['priceMin'] != null && d['priceMin'] != d['priceMax'] ? '${d['priceMin']}–' : ''}${d['priceMax']}',
+      ),
+      ('Min. investment', _rs(lot)),
+      ('Face value', d['faceValue'] == null ? '—' : '₹${d['faceValue']}'),
+      ('Est. listing', _rs(d['estListingPrice'] as num?)),
+      ('Listing at', d['listingOn'] as String? ?? '—'),
+      ('Sale', d['saleType'] as String? ?? '—'),
+      if (d['status'] == 'listed')
+        (
+          'Listed at',
+          '${_rs(d['listingPrice'] as num?)} (${(d['listingGainPct'] as num?)?.toStringAsFixed(1) ?? '—'}%)',
+        ),
+      if (d['cmp'] != null) ('Price now', _rs(d['cmp'] as num?)),
+    ];
+    return Glass(
+      blur: false,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('KEY FACTS', style: OrvText.label(l)),
+          const SizedBox(height: 8),
+          Wrap(
+            runSpacing: 12,
+            children: [
+              for (final (k, v) in cells)
+                FractionallySizedBox(
+                  widthFactor: 0.5,
+                  child: Padding(padding: const EdgeInsets.only(right: 8), child: _fact(l, k, v)),
                 ),
+            ],
+          ),
         ],
       ),
     );
@@ -489,6 +1319,7 @@ class _Odds extends StatelessWidget {
     final l = context.orv;
     final pool = d['pool'] as J?;
     return Glass(
+      blur: false,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -514,9 +1345,7 @@ class _Odds extends StatelessWidget {
                       Text(
                         o['basis'] == 'exact'
                             ? 'from applications'
-                            : o['basis'] == 'estimate'
-                            ? 'estimate'
-                            : 'once bidding starts',
+                            : (o['basis'] == 'estimate' ? 'estimate' : 'once bidding starts'),
                         style: OrvText.muted(l).copyWith(fontSize: 11.5),
                       ),
                     ],
@@ -542,11 +1371,98 @@ class _Odds extends StatelessWidget {
                 ),
                 Expanded(child: _fact(l, 'At least one', _chance(pool['chanceAtLeastOne'] as num?))),
                 Expanded(child: _fact(l, 'Card cost', _rs(pool['cardCost'] as num?))),
-                Expanded(child: _fact(l, 'Expected gain', _rs(pool['expectedGain'] as num?))),
+                Expanded(child: _fact(l, 'Expected gain', _signed(pool['expectedGain'] as num?))),
               ],
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// What the company is, when the plan gives it (paid plans); else a line saying so.
+class _Company extends ConsumerWidget {
+  const _Company({required this.x});
+  final J x;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    List<String> list(String k) => [for (final v in (x[k] as List? ?? const [])) '$v'];
+    final about = x['about'] as String?;
+    final strengths = list('strengths');
+    final risks = list('risks');
+    final objects = list('objects');
+    final leads = list('leadManagers');
+    final reg = x['registrar'] as J?;
+    final has = about != null || strengths.isNotEmpty || objects.isNotEmpty || leads.isNotEmpty || reg != null;
+    if (!has) {
+      if ((x['locked'] as List? ?? const []).isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Row(
+          children: [
+            Icon(LucideIcons.lock, size: 13, color: l.c.muted),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Company details, financials and lead managers need IPO Guru’s Basic plan (₹99 a month).',
+                style: OrvText.muted(l).copyWith(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    Widget bullets(String title, List<String> xs) => xs.isEmpty
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title.toUpperCase(), style: OrvText.label(l).copyWith(fontSize: 10.5)),
+                for (final t in xs)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text('•  $t', style: OrvText.body(l).copyWith(fontSize: 13.5)),
+                  ),
+              ],
+            ),
+          );
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Glass(
+        blur: false,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('THE COMPANY', style: OrvText.label(l)),
+            if (about != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(about, style: OrvText.body(l).copyWith(fontSize: 14, height: 1.45)),
+              ),
+            bullets('Strengths', strengths),
+            bullets('Risks', risks),
+            bullets('What the money is for', objects),
+            if (leads.isNotEmpty) bullets('Lead managers', [leads.join(', ')]),
+            if (reg != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: GestureDetector(
+                  onTap: reg['statusPage'] == null
+                      ? null
+                      : () => ref.read(urlOpenerProvider)(Uri.parse(reg['statusPage'] as String)),
+                  child: Text(
+                    'Registrar: ${reg['name']}${reg['statusPage'] != null ? ' — check allotment' : ''}',
+                    style: OrvText.body(l).copyWith(fontSize: 13.5, color: reg['statusPage'] != null ? l.accent : null),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -615,16 +1531,16 @@ class _FiguresSheetState extends ConsumerState<_FiguresSheet> {
   }
 }
 
-// ------------------------------------------------------------------ notifications settings
+// ------------------------------------------------------------------ the desk & notifications settings (spec 0016 A6)
 
 const _events = {
-  'announced': 'A new IPO is announced',
-  'opens': 'It opens today',
-  'closes': 'Last day to apply',
-  'gmp': 'GMP moves a lot',
-  'subscription': 'Retail crosses 1×, 10×, 50×',
-  'allotment': 'Allotment day',
-  'listing': 'Listing day',
+  'announced': ('A new IPO is announced', 'With its size, price, a lot and the GMP.'),
+  'opens': ('It opens today', 'The morning bidding starts.'),
+  'closes': ('Last day to apply', 'In the morning, with retail demand so far.'),
+  'gmp': ('GMP moves a lot', 'Up or down by more than your threshold.'),
+  'subscription': ('Retail demand milestones', 'When retail crosses 1×, 10× and 50×.'),
+  'allotment': ('Allotment day', 'The day results come out.'),
+  'listing': ('Listing day', 'With the gain at the open.'),
 };
 
 class IpoSettingsSheet extends ConsumerStatefulWidget {
@@ -642,6 +1558,11 @@ class _IpoSettingsSheetState extends ConsumerState<IpoSettingsSheet> {
     ref.read(apiProvider).get<J>('/ipo/settings').then((s) => mounted ? setState(() => _s = s) : null);
   }
 
+  Widget _label(OrvLook l, String t) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
+    child: Text(t.toUpperCase(), style: OrvText.label(l)),
+  );
+
   @override
   Widget build(BuildContext context) {
     final l = context.orv;
@@ -649,70 +1570,188 @@ class _IpoSettingsSheetState extends ConsumerState<IpoSettingsSheet> {
     if (s == null) return const SizedBox(height: 160, child: Center(child: CircularProgressIndicator()));
     final types = (s['types'] as List).cast<String>();
     final events = (s['events'] as List).cast<String>();
+    void event(String e, bool on) => setState(() {
+      final next = {...events};
+      on ? next.add(e) : next.remove(e);
+      s['events'] = next.toList();
+    });
+    void type(String t, bool on) => setState(() {
+      final next = {...types};
+      on ? next.add(t) : next.remove(t);
+      if (next.isNotEmpty) s['types'] = next.toList();
+    });
     return StickySheet(
-      title: 'IPO notifications',
-      footer: Align(
-        alignment: Alignment.centerRight,
-        child: OrvButton(
-          label: 'Save',
-          variant: ButtonVariant.primary,
-          onPressed: () async {
-            final toaster = Toaster.of(context);
-            await ref.read(apiProvider).put<dynamic>('/ipo/settings', s);
-            if (context.mounted) Navigator.of(context).pop();
-            toaster.show('Saved', tone: ToastTone.success);
-          },
-        ),
+      title: 'IPO desk & notifications',
+      footer: OrvButton(
+        label: 'Save',
+        variant: ButtonVariant.primary,
+        expand: true,
+        onPressed: () async {
+          final toaster = Toaster.of(context);
+          await ref.read(apiProvider).put<dynamic>('/ipo/settings', s);
+          ref.read(ipoShowProvider.notifier).set(null);
+          ref.invalidate(ipoIssuesProvider);
+          if (context.mounted) Navigator.of(context).pop();
+          toaster.show('Saved', tone: ToastTone.success);
+        },
       ),
       children: [
-        Text('WHICH IPOS', style: OrvText.label(l)),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
+        _label(l, 'On the desk'),
+        SheetCard(
           children: [
-            for (final v in [0, 500, 1000, 2500, 5000])
-              _chip(
-                context,
-                v == 0 ? 'Any size' : '₹${_group(v)} cr+',
-                (s['minIssueSizeCr'] as num) == v,
-                () => setState(() => s['minIssueSizeCr'] = v),
+            OrvSwitchRow(
+              label: 'Show SME IPOs too',
+              value: s['showSme'] == true,
+              onChanged: (v) => setState(() => s['showSme'] = v),
+            ),
+          ],
+        ),
+        _label(l, 'Will you apply?'),
+        SheetCard(
+          children: [
+            OrvSwitchRow(
+              label: 'Ask me and follow up',
+              value: events.contains('decide'),
+              onChanged: (v) => event('decide', v),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(
+                'I’ll apply makes a task; then “applied?” on the last day, “allotted?” that evening, and the listing.',
+                style: OrvText.muted(l).copyWith(fontSize: 12),
               ),
+            ),
+            const SheetRule(),
+            const SizedBox(height: 10),
+            Text('Apply by, on the last day', style: OrvText.body(l).copyWith(fontSize: 14)),
+            const SizedBox(height: 8),
+            Segment<String>(
+              value: s['applyBy'] as String? ?? '14:00',
+              dense: true,
+              options: const [
+                ('11:00', '11 am', null, null),
+                ('13:00', '1 pm', null, null),
+                ('14:00', '2 pm', null, null),
+                ('15:30', '3:30', null, null),
+              ],
+              onChanged: (v) => setState(() => s['applyBy'] = v),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Bids close at 5 pm, and UPI mandates can be slow late in the day.',
+                style: OrvText.muted(l).copyWith(fontSize: 12),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 6,
+        _label(l, 'Which IPOs ping you'),
+        SheetCard(
           children: [
-            for (final t in ['mainboard', 'sme'])
-              _chip(context, t == 'sme' ? 'SME' : 'Mainboard', types.contains(t), () {
-                setState(() {
-                  final next = {...types};
-                  if (!next.remove(t)) next.add(t);
-                  if (next.isNotEmpty) s['types'] = next.toList();
-                });
-              }),
+            const SizedBox(height: 10),
+            Text('Issue size', style: OrvText.body(l).copyWith(fontSize: 14)),
+            const SizedBox(height: 8),
+            Segment<int>(
+              value: (s['minIssueSizeCr'] as num).toInt(),
+              dense: true,
+              options: const [
+                (0, 'Any', null, null),
+                (500, '500+', null, null),
+                (1000, '1k+', null, null),
+                (2500, '2.5k+', null, null),
+                (5000, '5k+', null, null),
+              ],
+              onChanged: (v) => setState(() => s['minIssueSizeCr'] = v),
+            ),
+            const SizedBox(height: 12),
+            Text('GMP of at least', style: OrvText.body(l).copyWith(fontSize: 14)),
+            const SizedBox(height: 8),
+            Segment<int>(
+              value: (s['minGmpPct'] as num?)?.toInt() ?? -1,
+              dense: true,
+              options: const [
+                (-1, 'Any', null, null),
+                (5, '5%', null, null),
+                (10, '10%', null, null),
+                (20, '20%', null, null),
+                (30, '30%', null, null),
+              ],
+              onChanged: (v) => setState(() => s['minGmpPct'] = v < 0 ? null : v),
+            ),
+            const SizedBox(height: 6),
+            OrvSwitchRow(
+              label: 'Mainboard',
+              value: types.contains('mainboard'),
+              onChanged: (v) => type('mainboard', v),
+            ),
+            OrvSwitchRow(label: 'SME', value: types.contains('sme'), onChanged: (v) => type('sme', v)),
+            OrvSwitchRow(
+              label: 'Only IPOs I starred',
+              value: s['onlyStarred'] == true,
+              onChanged: (v) => setState(() => s['onlyStarred'] = v),
+            ),
           ],
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text('Only IPOs I starred', style: OrvText.body(l)),
-          value: s['onlyStarred'] == true,
-          onChanged: (v) => setState(() => s['onlyStarred'] = v),
+        _label(l, 'Moments'),
+        SheetCard(
+          children: [
+            for (final (n, e) in _events.entries.indexed) ...[
+              if (n > 0) const SheetRule(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(e.value.$1, style: OrvText.body(l).copyWith(fontSize: 14)),
+                          Text(e.value.$2, style: OrvText.muted(l).copyWith(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    Switch(value: events.contains(e.key), onChanged: (v) => event(e.key, v)),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
-        Text('WHEN TO PING', style: OrvText.label(l)),
-        for (final e in _events.entries)
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            title: Text(e.value, style: OrvText.body(l).copyWith(fontSize: 14)),
-            value: events.contains(e.key),
-            onChanged: (v) => setState(() {
-              final next = {...events};
-              v ? next.add(e.key) : next.remove(e.key);
-              s['events'] = next.toList();
-            }),
-          ),
+        _label(l, 'Keep it calm'),
+        SheetCard(
+          children: [
+            const SizedBox(height: 10),
+            Text('A GMP move worth a ping', style: OrvText.body(l).copyWith(fontSize: 14)),
+            const SizedBox(height: 8),
+            Segment<int>(
+              value: (s['gmpMovePct'] as num).toInt(),
+              dense: true,
+              options: const [
+                (3, '3 pts', null, null),
+                (5, '5 pts', null, null),
+                (10, '10 pts', null, null),
+                (20, '20 pts', null, null),
+              ],
+              onChanged: (v) => setState(() => s['gmpMovePct'] = v),
+            ),
+            const SizedBox(height: 12),
+            Text('At most a day', style: OrvText.body(l).copyWith(fontSize: 14)),
+            const SizedBox(height: 8),
+            Segment<int>(
+              value: (s['maxPerDay'] as num).toInt(),
+              dense: true,
+              options: const [
+                (2, '2', null, null),
+                (4, '4', null, null),
+                (6, '6', null, null),
+                (10, '10', null, null),
+                (20, '20', null, null),
+              ],
+              onChanged: (v) => setState(() => s['maxPerDay'] = v),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ],
     );
   }

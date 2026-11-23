@@ -1,7 +1,11 @@
 import { Hlc, type SessionResponse, STARTING_SETTINGS } from '@orvyn/contracts';
 import { v7 } from 'uuid';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { AiService } from '../src/modules/ai/ai.service';
+import type { FakeModel } from '../src/modules/ai/fake.model';
+import { BriefOutside } from '../src/modules/brief/brief.outside';
 import { BriefService } from '../src/modules/brief/brief.service';
+import { IpoService } from '../src/modules/ipo/ipo.service';
 import { RemindersService } from '../src/modules/today/reminders.service';
 import { call, type Harness, OWNER, signIn, startApp } from './harness';
 
@@ -9,6 +13,8 @@ let h: Harness;
 let me: SessionResponse;
 let friend: SessionResponse;
 let brief: BriefService;
+let outside: BriefOutside;
+let fake: FakeModel;
 const clock = new Hlc('dev');
 
 /** "Today" is two days from now, 09:30 in Kolkata; everything is placed around it. */
@@ -45,6 +51,14 @@ beforeAll(async () => {
   h = await startApp();
   brief = h.app.get(BriefService);
   brief.now = () => D.getTime() + 3_600_000; // 10:30 IST
+  // nothing from outside in tests unless a test says so; the AI declines to write until a test asks it to
+  outside = h.app.get(BriefOutside);
+  outside.weather = async () => null;
+  outside.markets = async () => null;
+  fake = h.app.get(AiService).model as FakeModel;
+  fake.handlers['brief.write'] = () => {
+    throw new Error('not now');
+  };
   me = (await signIn(h, OWNER)).body;
   const inv = await call<any>(h, 'POST', '/admin/invites', {
     token: me.accessToken,
@@ -114,7 +128,8 @@ describe('the Brief (spec 0009)', () => {
     expect(JSON.stringify(b)).not.toContain('Friend secret task');
 
     const theirs = await get(friend, '/brief/today');
-    expect(theirs.sections.map((s: any) => s.kind)).toEqual(['agenda']); // no Money, Drop or Library for them
+    // no Money, Drop or Library for them; their own focus and agenda
+    expect(theirs.sections.map((s: any) => s.kind)).toEqual(['focus', 'agenda']);
     expect(JSON.stringify(theirs)).toContain('Friend secret task');
     expect(JSON.stringify(theirs)).not.toContain('Standup');
   });
@@ -196,5 +211,143 @@ describe('the Brief (spec 0009)', () => {
   it('keeps a week of Briefs', async () => {
     const hist = await get(me, '/brief/history?days=7');
     expect(hist.map((b: any) => b.day)).toEqual([TODAY]);
+  });
+});
+
+describe('the Brief with a brain (spec 0016 B)', () => {
+  it('weather, markets, focus with free slots, money due, IPOs closing — and the AI’s opening (AC4, AC5)', async () => {
+    const settings = await get(me, '/brief/settings');
+    await call(h, 'PUT', '/brief/settings', {
+      token: me.accessToken,
+      body: { ...settings, place: { name: 'Bengaluru, Karnataka, India', lat: 12.97, lon: 77.59 } },
+    });
+    outside.weather = async (place) => ({
+      kind: 'weather',
+      place: place.name.split(',')[0]!,
+      now: 24,
+      feels: 25,
+      high: 29,
+      low: 19,
+      rain: 70,
+      code: 61,
+      sky: 'Light rain',
+      sunrise: '06:21',
+      sunset: '17:49',
+      advice: 'Rain likely from 4 pm — carry an umbrella.',
+    });
+    outside.markets = async () => ({
+      kind: 'markets',
+      items: [{ name: 'Nifty 50', last: 25349.65, changePct: -1.75 }],
+      at: null,
+    });
+    let facts = '';
+    fake.handlers['brief.write'] = (text) => {
+      facts = text;
+      return {
+        story: 'Two meetings, and the release notes come first.',
+        tip: 'Use 11:15 to 12:15 for them.',
+      };
+    };
+    // a debt due tomorrow, and an IPO I plan to apply for that closes today
+    await push(me, 'money.iou', v7(), {
+      person: 'Ravi',
+      direction: 'i_owe',
+      amountMinor: 250_000,
+      dueDate: day(1),
+      startedAt: at(-5, '10:00'),
+    });
+    const ipo = h.app.get(IpoService);
+    await ipo.upsert({
+      slug: 'mega-ipo',
+      name: 'Mega Power',
+      type: 'mainboard',
+      status: 'open',
+      openDate: day(-2),
+      closeDate: TODAY,
+      allotmentDate: day(1),
+      refundDate: null,
+      listingDate: day(3),
+      priceMin: 140,
+      priceMax: 148,
+      lotSize: 101,
+      issueSizeCr: 1000,
+      gmp: 40,
+      gmpUpdatedAt: null,
+      subscription: null,
+      listingPrice: null,
+      url: null,
+    });
+    const mega = (await get(me, '/ipo/issues')).issues.find((i: any) => i.name === 'Mega Power');
+    await call(h, 'PUT', `/ipo/issues/${mega.id}/decision`, {
+      token: me.accessToken,
+      body: { decision: 'applying' },
+    });
+
+    const b = (await call<any>(h, 'POST', '/brief/today/refresh', { token: me.accessToken })).body;
+    expect(b.greeting).toMatch(/^Good morning/);
+    expect(b.story).toBe('Two meetings, and the release notes come first.');
+    expect(b.tip).toBe('Use 11:15 to 12:15 for them.');
+    // the AI was given the Brief's facts — this person's only
+    expect(facts).toContain('Ship release notes');
+    expect(facts).not.toContain('Friend secret task');
+    expect(b.sections.map((x: any) => x.kind).slice(0, 4)).toEqual(['weather', 'focus', 'agenda', 'ipo']);
+    expect(b.sections.find((x: any) => x.kind === 'weather')).toMatchObject({ sky: 'Light rain', high: 29 });
+    expect(b.sections.find((x: any) => x.kind === 'markets').items[0]).toMatchObject({ name: 'Nifty 50' });
+
+    // your three: the high-priority task first, in the first free stretch it fits (after the 11:00 standup)
+    const focus = b.sections.find((x: any) => x.kind === 'focus');
+    expect(focus.items[0]).toMatchObject({ title: 'Ship release notes', minutes: 60, planned: false });
+    expect(focus.items[0].slot).toEqual({ start: at(0, '11:15'), end: at(0, '12:15') });
+    expect(focus.free[0]).toEqual({ start: at(0, '10:30'), end: at(0, '11:00') });
+
+    expect(b.sections.find((x: any) => x.kind === 'ipo').items[0]).toMatchObject({
+      name: 'Mega Power',
+      today: 'closes',
+      decision: 'applying',
+      lotAmount: 14948,
+      gainPerLot: 4040,
+    });
+    expect(b.line).toContain('Last day: Mega Power IPO');
+    const money = b.sections.find((x: any) => x.kind === 'money');
+    expect(money.dues).toEqual([{ title: 'Pay back Ravi', amountMinor: 250_000, on: day(1), kind: 'pay' }]);
+
+    // Plan it: the task takes its slot, through sync
+    const planned = (
+      await call<any>(h, 'POST', '/brief/plan', {
+        token: me.accessToken,
+        body: { taskId: focus.items[0].id, start: focus.items[0].slot.start, minutes: 60 },
+      })
+    ).body;
+    expect(planned.sections.find((x: any) => x.kind === 'focus').items[0]).toMatchObject({
+      title: 'Ship release notes',
+      planned: true,
+    });
+    const t = (await tasks(me)).find((x) => x.entityId === focus.items[0].id);
+    expect(t.fields).toMatchObject({ scheduledStart: at(0, '11:15'), durationMin: 60 });
+    // someone else's task can't be planned
+    expect(
+      (
+        await call(h, 'POST', '/brief/plan', {
+          token: friend.accessToken,
+          body: { taskId: focus.items[0].id, start: at(0, '13:00'), minutes: 30 },
+        })
+      ).status,
+    ).toBe(404);
+  });
+
+  it('without AI, or when the weather can’t be read, it still builds (AC5)', async () => {
+    fake.handlers['brief.write'] = () => {
+      throw new Error('down');
+    };
+    outside.weather = async () => null;
+    const b = (await call<any>(h, 'POST', '/brief/today/refresh', { token: me.accessToken })).body;
+    expect(b.story).toBeNull();
+    expect(b.headline).toContain('meeting');
+    expect(b.sections.some((x: any) => x.kind === 'weather')).toBe(false);
+    const off = await get(me, '/brief/settings');
+    await call(h, 'PUT', '/brief/settings', { token: me.accessToken, body: { ...off, ai: false } });
+    fake.calls.length = 0;
+    await call(h, 'POST', '/brief/today/refresh', { token: me.accessToken });
+    expect(fake.calls.filter((c) => c.task === 'brief.write')).toEqual([]);
   });
 });

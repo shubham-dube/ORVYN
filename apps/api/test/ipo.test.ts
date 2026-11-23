@@ -30,7 +30,9 @@ const big = {
   price_max: 148,
   issue_size: 1000,
   lot_size: 101,
-  gmp: { price: '40', updated_at: `${TODAY}T04:00:00Z` },
+  min_investment: 14948,
+  logo: 'https://www.ipoguru.in/storage/logos/mega-power.webp',
+  gmp: { price: '40', updated_at: `${TODAY}T04:00:00Z`, subject_to_sauda: '1400,,19600' },
   subscription_total: 3.1,
   web_url: 'https://www.ipoguru.in/ipo/mega-power',
 };
@@ -41,6 +43,21 @@ const small = {
   display_name: 'Tiny Foods Ltd',
   issue_size: 60,
   gmp: { price: '5', updated_at: `${TODAY}T04:00:00Z` },
+};
+// an SME IPO: off the desk until SME is switched on (spec 0016 A1)
+const sme = {
+  ...big,
+  slug: 'kiddo-toys-sme-ipo',
+  name: 'Kiddo Toys',
+  display_name: 'Kiddo Toys',
+  type: 'SME',
+  issue_size: 40,
+  lot_size: 1200,
+  price_band: null,
+  price_min: null,
+  price_max: null,
+  issue_price: '95',
+  gmp: { price: '12', updated_at: `${TODAY}T04:00:00Z` },
 };
 let feedCalls: string[] = [];
 const retail = 12.5;
@@ -71,11 +88,10 @@ beforeAll(async () => {
       return res.end();
     }
     const u = new URL(req.url!, 'http://x');
-    if (u.pathname === '/gmp') return send({ data: [big, small] });
-    if (u.pathname === '/ipos') return send({ data: [] });
+    if (u.pathname === '/ipos') return send({ data: [big, small, sme] });
     const m = /^\/ipos\/([\w-]+)$/.exec(u.pathname);
     if (m) {
-      const base = m[1] === big.slug ? big : small;
+      const base = m[1] === big.slug ? big : m[1] === sme.slug ? sme : small;
       return send({
         data: {
           ...base,
@@ -101,6 +117,7 @@ beforeAll(async () => {
     IPO_FEED_URL: feedUrl,
     IPO_FEED_KEY: 'test-key',
     IPO_FEED_DAILY_CALLS: '4',
+    IPO_FEED_PER_MIN: '100',
   });
   ipo = h.app.get(IpoService);
   pool = h.app.get(PoolService);
@@ -119,18 +136,19 @@ afterAll(async () => {
 });
 
 describe('the IPO desk (spec 0010 A)', () => {
-  it('refreshes from the feed within the plan’s daily calls (AC1)', async () => {
-    expect(await ipo.refresh()).toBe(4); // two new IPOs, then each one's full subscription
-    // /gmp + /ipos + 2 details = 4 calls, the day's whole budget
+  it('refreshes from the feed within the plan’s daily calls (AC1; spec 0016 AC2)', async () => {
+    expect(await ipo.refresh()).toBe(6); // three new IPOs from one calendar call, then each one's details
+    // the calendar + 3 details = 4 calls, the day's whole budget; mainboard details first
     expect(feedCalls.map((c) => c.split('?')[0])).toEqual([
-      '/gmp',
       '/ipos',
-      `/ipos/${big.slug}`,
-      `/ipos/${small.slug}`,
+      expect.stringMatching(/mega-power|tiny-foods/),
+      expect.stringMatching(/mega-power|tiny-foods/),
+      `/ipos/${sme.slug}`,
     ]);
+    expect(feedCalls[0]).toBe('/ipos?months=2&limit=100');
     feedCalls = [];
     expect(await ipo.refresh()).toBe(0);
-    expect(feedCalls).toEqual([]); // nothing left today, and GMP is not due for 3 hours
+    expect(feedCalls).toEqual([]); // nothing left today, and the calendar is not due for 3 hours
   });
 
   it('shows GMP, subscription, odds and a verdict; the source is credited', async () => {
@@ -146,7 +164,19 @@ describe('the IPO desk (spec 0010 A)', () => {
       estListingPrice: 188,
       refundDate: day(4),
       sourceUrl: 'https://www.ipoguru.in',
+      // spec 0016: the four card figures and the rest of the calendar's facts
+      issueSizeCr: 1000,
+      minInvestment: 14948,
+      gainPerLot: 4040,
+      logo: 'https://www.ipoguru.in/storage/logos/mega-power.webp',
+      sauda: 1400,
+      decision: null,
     });
+    // mainboard only, unless asked (spec 0016 AC1)
+    expect(r.body.show).toBe('mainboard');
+    expect(r.body.issues.some((i: any) => i.slug === sme.slug)).toBe(false);
+    const all = (await api(me, 'GET', '/ipo/issues?type=all')).body.issues;
+    expect(all.find((i: any) => i.slug === sme.slug)).toMatchObject({ type: 'sme', priceMax: 95 });
     expect(m.gmpPct).toBeCloseTo(27.03, 1);
     expect(m.subscription).toMatchObject({ retail: 12.5, qib: 1.2 });
     const odds = m.odds.find((o: any) => o.category === 'retail');
@@ -192,6 +222,92 @@ describe('the IPO desk (spec 0010 A)', () => {
     await api(me, 'PUT', `/ipo/issues/${tiny.id}/figures`, { gmp: 20 }); // 3% → 14%
     await ipo.alert(me.user.id);
     expect((await notes('ipo')).some((n) => n.title === 'Tiny Foods Ltd: GMP up to 14%')).toBe(true);
+  });
+});
+
+describe('will you apply? (spec 0016 A5, AC3)', () => {
+  const at = (d: string, hhmmIst: string) => {
+    const [hh, mm] = hhmmIst.split(':').map(Number) as [number, number];
+    return Date.parse(`${d}T00:00:00Z`) + (hh * 60 + mm - 330) * 60_000;
+  };
+  const taskRows = async () => {
+    const latest = new Map<string, any>();
+    for (const c of (await api(me, 'GET', '/sync/pull?cursor=0')).body.changes as any[])
+      if (c.entity === 'today.task') latest.set(c.entityId, c);
+    return [...latest.values()];
+  };
+  let mega: any;
+
+  it('the desk remembers SME being switched on, on every device', async () => {
+    const s = (await api(me, 'GET', '/ipo/settings')).body;
+    expect(s).toMatchObject({ showSme: false, applyBy: '14:00' });
+    expect(s.events).toContain('decide');
+    await api(me, 'PUT', '/ipo/settings', { ...s, showSme: true });
+    expect((await api(me, 'GET', '/ipo/issues')).body.show).toBe('all');
+    await api(me, 'PUT', '/ipo/settings', { ...s, showSme: false });
+  });
+
+  it('“opens today” asks; I’ll apply makes one task, due on the close day at 2 pm, reminded that morning', async () => {
+    const n = (await notes('ipo')).find((x) => x.title === 'Mega Power Ltd opens today');
+    expect(n.actions.map((a: any) => a.id)).toEqual(['apply', 'skip']);
+    expect(n.body).toContain('1 lot ₹14,948');
+    expect((await api(me, 'POST', `/notifications/${n.id}/actions/apply`, {})).status).toBe(200);
+    mega = (await api(me, 'GET', '/ipo/issues')).body.issues.find((i: any) => i.slug === big.slug);
+    expect(mega.decision).toBe('applying');
+    const t = (await taskRows()).find((c) => c.entityId === mega.taskId);
+    expect(t.data).toMatchObject({
+      title: 'Apply for Mega Power Ltd IPO',
+      dueAt: new Date(at(day(2), '14:00')).toISOString(),
+      tags: ['ipo'],
+      priority: 3,
+      reminders: [
+        { kind: 'at', at: new Date(at(day(2), '09:30')).toISOString() },
+        { kind: 'before', minutes: 30 },
+      ],
+    });
+    // saying it again doesn't make a second task
+    await api(me, 'PUT', `/ipo/issues/${mega.id}/decision`, { decision: 'applying' });
+    expect((await taskRows()).filter((c) => c.data?.title === 'Apply for Mega Power Ltd IPO')).toHaveLength(
+      1,
+    );
+  });
+
+  it('the last day asks “applied?”; Applied ticks the task', async () => {
+    ipo.now = () => at(day(2), '10:05');
+    await ipo.alert(me.user.id);
+    const n = (await notes('ipo')).find((x) => x.title === 'Last day for Mega Power Ltd — applied?');
+    expect(n).toMatchObject({ priority: 'high' });
+    expect(n.actions.map((a: any) => a.id)).toEqual(['applied', 'skip']);
+    await api(me, 'POST', `/notifications/${n.id}/actions/applied`, {});
+    const t = (await taskRows()).find((c) => c.entityId === mega.taskId);
+    expect(t.data.completedAt).toEqual(expect.any(String));
+  });
+
+  it('allotment evening asks “did you get it?”; listing morning says what the lot may make', async () => {
+    ipo.now = () => at(day(3), '18:10');
+    await ipo.alert(me.user.id);
+    const n = (await notes('ipo')).find(
+      (x) => x.title === 'Mega Power Ltd: allotment is out — did you get it?',
+    );
+    expect(n.actions.map((a: any) => a.id)).toEqual(['allotted', 'missed']);
+    await api(me, 'POST', `/notifications/${n.id}/actions/allotted`, {});
+    ipo.now = () => at(day(5), '09:20');
+    await ipo.alert(me.user.id);
+    const l = (await notes('ipo')).find((x) => x.title === 'Mega Power Ltd lists today at 10 am');
+    expect(l.body).toContain('+₹5,252 on your lot'); // GMP ₹52 (typed in earlier) × 101 shares
+    expect((await api(me, 'GET', `/ipo/issues/${mega.id}`)).body.decision).toBe('allotted');
+    ipo.now = () => NOW;
+  });
+
+  it('Skip removes the task; someone else can’t decide for me', async () => {
+    const tiny = (await api(me, 'GET', '/ipo/issues')).body.issues.find((i: any) => i.slug === small.slug);
+    const r = await api(me, 'PUT', `/ipo/issues/${tiny.id}/decision`, { decision: 'applying' });
+    await api(me, 'PUT', `/ipo/issues/${tiny.id}/decision`, { decision: 'skipped' });
+    const t = (await taskRows()).find((c) => c.entityId === r.body.taskId);
+    expect(t.op === 'delete' || t.deleted === true || t.data === null).toBe(true);
+    // the friend's own decision is theirs alone
+    await api(friend, 'PUT', `/ipo/issues/${tiny.id}/decision`, { decision: 'applying' });
+    expect((await api(me, 'GET', `/ipo/issues/${tiny.id}`)).body.decision).toBe('skipped');
   });
 });
 
