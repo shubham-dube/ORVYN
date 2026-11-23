@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { formatMoney, MONEY_TRANSACTION } from '@orvyn/contracts';
+import { formatMoney, MONEY_IOU, MONEY_TRANSACTION } from '@orvyn/contracts';
 import {
   cleanMerchant,
   merchantKey,
@@ -19,7 +19,7 @@ import type { AuthContext } from '../auth/auth.decorators';
 import type { StoredAction } from '../notify/notify.schema';
 import { type NotifyAction, NotifyService } from '../notify/notify.service';
 import { SERVER_DEVICE, serverOrigin, type SyncApplied, SyncService } from '../sync/sync.service';
-import { moneyCategories, moneyMerchantRules, moneyTransactions } from './money.schema';
+import { moneyCategories, moneyIous, moneyMerchantRules, moneyTransactions } from './money.schema';
 
 /** Payments older than this when they arrive (a phone catching up) wait under "New" instead of pinging. */
 const ASK_WITHIN_MS = 3 * 86_400_000;
@@ -78,6 +78,11 @@ export class ReviewService {
     if (t.source === 'manual' || t.transfer) return 'none';
     if (this.now() - t.occurredAt.getTime() > ASK_WITHIN_MS) return 'none';
     if (await this.notify.hasKey(ownerId, keyOf(txId))) return 'none';
+    // money in read from a message isn't income until the person says so (spec 0014)
+    if (t.direction === 'credit' && t.counted) {
+      await this.write(ownerId, t.id, { counted: false });
+      t.counted = false;
+    }
 
     const name = t.merchant || cleanMerchant(t.rawMerchant).merchant;
     const rule = name ? await this.rule(ownerId, merchantKey(name)) : null;
@@ -127,6 +132,34 @@ export class ReviewService {
     if (phone) sugg = [phone, ...sugg.filter((c) => c.id !== phone.id)].slice(0, 3);
     const label = (c: ReviewCategory) => (c.name.length > 28 ? `${c.name.slice(0, 27)}…` : c.name);
     const credit = t.direction === 'credit';
+    if (credit) {
+      // money in waits for a yes (spec 0014): income, someone paying back, or not counted at all
+      const owed = await this.repayingFor(ownerId, t);
+      const left = (d: (typeof owed)[number]) => formatMoney(d.amountMinor - d.paidMinor, d.currency);
+      await this.notify.send({
+        userId: ownerId,
+        module: 'money',
+        kind: 'review',
+        title: `${formatMoney(t.amountMinor, t.currency)} came in${name ? ` from ${name}` : ''}`,
+        body:
+          note ??
+          (owed[0]
+            ? `Is this ${owed[0].person} paying back? They owe you ${left(owed[0])}. Not counted as income until you say.`
+            : 'Count it as income? It isn’t counted until you say — reply “salary”, “refund”, “not counted”…'),
+        url: '/money',
+        ref: `${REF}${t.id}`,
+        dedupeKey: keyOf(t.id),
+        actions: [
+          ...owed.slice(0, 1).map((d) => ({ id: `repay.${d.id}`, label: `${d.person} paying back` })),
+          ...sugg.slice(0, 1).map((c) => ({ id: `c.${c.id}`, label: label(c) })),
+          { id: 'nocount', label: 'Don’t count it' },
+          { id: 'reply', label: 'Reply', reply: { placeholder: 'salary · refund · not counted' } },
+          ...sugg.slice(1).map((c) => ({ id: `c.${c.id}`, label: label(c) })),
+          { id: 'transfer', label: 'My own transfer' },
+        ],
+      });
+      return;
+    }
     const actions: StoredAction[] = [
       ...sugg.slice(0, 1).map((c) => ({ id: `c.${c.id}`, label: label(c) })),
       { id: 'reply', label: 'Reply', reply: { placeholder: 'food · split 3 · always food · not mine' } },
@@ -171,7 +204,7 @@ export class ReviewService {
     }
     const cat = (await this.categories(ownerId)).find((c) => c.id === rule.categoryId);
     if (!cat) return this.ask(ownerId, t); // the category was deleted since
-    await this.write(ownerId, t.id, { categoryId: cat.id, reviewed: true });
+    await this.write(ownerId, t.id, { categoryId: cat.id, reviewed: true, counted: true });
     await this.quiet(ownerId, t.id, `Filed ${money} at ${name}`, `As ${cat.name}, like before.`, true);
   }
 
@@ -218,8 +251,16 @@ export class ReviewService {
     if (e.actionId.startsWith('c.')) {
       const cat = cats.find((c) => c.id === e.actionId.slice(2));
       if (!cat) return;
-      await this.write(e.ownerId, t.id, { categoryId: cat.id, reviewed: true });
+      await this.write(e.ownerId, t.id, { categoryId: cat.id, reviewed: true, counted: true });
       await this.learn(e.ownerId, name, 'category', cat.id, false);
+      return;
+    }
+    if (e.actionId === 'nocount') {
+      await this.write(e.ownerId, t.id, { counted: false, reviewed: true });
+      return;
+    }
+    if (e.actionId.startsWith('repay.')) {
+      await this.repaid(e.ownerId, t, e.actionId.slice(6));
       return;
     }
     if (e.actionId === 'reply' && e.text) await this.answer(e.ownerId, t, name, cats, e.text);
@@ -246,7 +287,7 @@ export class ReviewService {
         await this.learn(ownerId, name, 'transfer', null, m.always);
         return;
       case 'category': {
-        const fields: Record<string, unknown> = { categoryId: m.categoryId, reviewed: true };
+        const fields: Record<string, unknown> = { categoryId: m.categoryId, reviewed: true, counted: true };
         const extra: string[] = [];
         if (m.ways) {
           fields.amountMinor = myShare(t.amountMinor, m.ways);
@@ -431,6 +472,53 @@ export class ReviewService {
   }
 
   /** Writes go through the sync engine, so every device sees them; null deletes. */
+  private async writeEntity(ownerId: string, entity: string, id: string, fields: Record<string, unknown>) {
+    const p = await this.access.principal(ownerId);
+    if (!p) return;
+    await this.sync.pushAsServer(
+      { userId: ownerId, deviceId: SERVER_DEVICE, role: p.role, entitlements: p.entitlements },
+      [{ entity, entityId: id, op: 'upsert', fields }],
+    );
+  }
+
+  /** Open debts someone owes the person whose name matches the sender of a payment that came in. */
+  private async repayingFor(ownerId: string, t: Tx) {
+    if (t.direction !== 'credit') return [];
+    const who = merchantKey(t.merchant || cleanMerchant(t.rawMerchant).merchant);
+    if (!who) return [];
+    const open = await this.db
+      .select()
+      .from(moneyIous)
+      .where(
+        and(
+          eq(moneyIous.ownerId, ownerId),
+          isNull(moneyIous.deletedAt),
+          isNull(moneyIous.settledAt),
+          eq(moneyIous.direction, 'owed_to_me'),
+        ),
+      );
+    const words = who.split(' ');
+    return open.filter((d) => {
+      const p = merchantKey(d.person);
+      return !!p && (p === who || who.includes(p) || p.includes(who) || p.split(' ')[0] === words[0]);
+    });
+  }
+
+  /** Money in that someone paid back: not income; the debt goes down (settled when paid in full). */
+  private async repaid(ownerId: string, t: Tx, iouId: string) {
+    const [d] = await this.db
+      .select()
+      .from(moneyIous)
+      .where(and(eq(moneyIous.id, iouId), eq(moneyIous.ownerId, ownerId), isNull(moneyIous.deletedAt)));
+    if (!d) return;
+    const paid = Math.min(d.amountMinor, d.paidMinor + t.amountMinor);
+    await this.write(ownerId, t.id, { counted: false, reviewed: true, iouId: d.id });
+    await this.writeEntity(ownerId, MONEY_IOU, d.id, {
+      paidMinor: paid,
+      ...(paid >= d.amountMinor ? { settledAt: new Date(this.now()).toISOString() } : {}),
+    });
+  }
+
   private async write(ownerId: string, id: string, fields: Record<string, unknown> | null): Promise<void> {
     const p = await this.access.principal(ownerId);
     if (!p) return;

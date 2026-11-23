@@ -41,8 +41,8 @@ export class MoneyController {
     const mine = and(eq(moneyTransactions.ownerId, a.userId), isNull(moneyTransactions.deletedAt));
     const [totals] = await this.db
       .select({
-        spent: sql<number>`coalesce(sum(case when ${moneyTransactions.direction} = 'debit' and not ${moneyTransactions.transfer} then ${moneyTransactions.amountMinor} end), 0)`,
-        earned: sql<number>`coalesce(sum(case when ${moneyTransactions.direction} = 'credit' and not ${moneyTransactions.transfer} then ${moneyTransactions.amountMinor} end), 0)`,
+        spent: sql<number>`coalesce(sum(case when ${moneyTransactions.direction} = 'debit' and not ${moneyTransactions.transfer} and ${moneyTransactions.counted} then ${moneyTransactions.amountMinor} end), 0)`,
+        earned: sql<number>`coalesce(sum(case when ${moneyTransactions.direction} = 'credit' and not ${moneyTransactions.transfer} and ${moneyTransactions.counted} then ${moneyTransactions.amountMinor} end), 0)`,
       })
       .from(moneyTransactions)
       .where(and(mine, gte(moneyTransactions.occurredAt, from), lt(moneyTransactions.occurredAt, to)));
@@ -163,7 +163,7 @@ export class MoneyController {
         occurredAt: t.occurredAt.toISOString(),
         merchant: t.merchant,
         categoryId: t.categoryId,
-        transfer: t.transfer,
+        transfer: t.transfer || !t.counted,
         accountId: t.accountId,
         dedupeKey: t.dedupeKey,
       })),

@@ -13,6 +13,7 @@ import '../design/toast.dart';
 import '../money/brain.dart';
 import '../money/money.dart';
 import '../money/parse.dart' show cleanMerchant;
+import 'money_filters.dart' show BudgetSheet;
 import 'money_manage.dart' show showAddTransaction;
 import 'sheets.dart';
 import 'today_calendar.dart' show labelColour;
@@ -111,12 +112,12 @@ IconData _icon(String? kind) => switch (kind) {
 };
 
 /// Spent so far, where the month is heading, and the budget, on one bar; and what is safe per day.
-class _PaceCard extends StatelessWidget {
+class _PaceCard extends ConsumerWidget {
   const _PaceCard({required this.pace, required this.cards});
   final J pace;
   final List<J> cards;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l = context.orv;
     final spent = (pace['spentMinor'] as num).toInt();
     final projected = (pace['projectedMinor'] as num).toInt();
@@ -140,6 +141,21 @@ class _PaceCard extends StatelessWidget {
                 child: Text(
                   p?['title'] as String? ?? 'This month',
                   style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              // the one place the overall budget is set or changed (spec 0014: no second budget card)
+              TextButton.icon(
+                key: const Key('pace-budget'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: l.accent),
+                icon: Icon(budget == null ? LucideIcons.target : LucideIcons.pencil, size: 14),
+                label: Text(budget == null ? 'Set budget' : formatMoney(budget)),
+                onPressed: () => showGlassSheet<void>(
+                  context,
+                  (_) => BudgetSheet(
+                    cats: ref.read(categoriesProvider).value ?? const [],
+                    budgets: ref.read(budgetsProvider).value ?? const [],
+                    overall: true,
+                  ),
                 ),
               ),
             ],
@@ -584,7 +600,7 @@ class _QuickFileSheetState extends ConsumerState<QuickFileSheet> {
     final loc = MaterialLocalizations.of(context);
     final txs =
         (ref.watch(transactionsProvider).value ?? const <TxItem>[])
-            .where((t) => t.categoryId == null && !t.transfer)
+            .where((t) => t.categoryId == null && !t.ignored)
             .toList()
           ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
     final cats = (ref.watch(categoriesProvider).value ?? const <CategoryItem>[]).where((c) => !c.archived).toList();

@@ -46,6 +46,10 @@ class CalendarItem {
   bool get writable => data['writable'] != false;
   String get provider => (data['provider'] as String?) ?? 'orvyn';
   String? get accountId => data['accountId'] as String?;
+
+  /// Google's public-holiday calendars (one per connected account, so the same holiday shows up 4 times).
+  bool get holiday =>
+      RegExp(r'#holiday@group\.v\.calendar\.google\.com$').hasMatch(data['externalId'] as String? ?? '');
 }
 
 /// One thing on the river: a single event, or one occurrence of a repeating one (same rules as the web).
@@ -205,6 +209,14 @@ List<Instance> expandEvents(List<EventItem> events, DateTime from, DateTime to, 
     }
   }
   int key(Instance i) => i.allDay ? _date(i.startDate!).millisecondsSinceEpoch - 1 : i.start!.millisecondsSinceEpoch;
+  // the same event on several calendars (a holiday each Google account adds, one meeting seen from two accounts)
+  // shows once (spec 0014) — same rule as the web
+  final seen = <String>{};
+  out.retainWhere(
+    (i) => seen.add(
+      '${i.title.trim().toLowerCase()}|${i.allDay ? '${i.startDate}|${i.endDate}' : '${i.start?.toUtc()}|${i.end?.toUtc()}'}',
+    ),
+  );
   out.sort((a, b) {
     final c = key(a).compareTo(key(b));
     return c != 0 ? c : a.title.compareTo(b.title);
@@ -388,4 +400,13 @@ extension CalendarAccountActions on CalendarActions {
   }
 
   Future<void> setCalendar(String id, Map<String, dynamic> fields) => _then(sync.upsert(todayCalendar, fields, id: id));
+
+  /// Hide every public-holiday calendar at once; returns how many were hidden.
+  Future<int> hideHolidays(List<CalendarItem> calendars) async {
+    final hol = calendars.where((c) => c.holiday && c.visible).toList();
+    for (final c in hol) {
+      await _then(sync.upsert(todayCalendar, {'visible': false}, id: c.id));
+    }
+    return hol.length;
+  }
 }

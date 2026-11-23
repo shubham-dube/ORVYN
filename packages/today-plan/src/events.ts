@@ -142,5 +142,14 @@ export function expandEvents(
   }
   const key = (i: Instance) =>
     i.allDay ? `${i.startDate}T00:00:00.000Z#0` : `${new Date(i.start!).toISOString()}#1`;
-  return out.sort((a, b) => key(a).localeCompare(key(b)) || a.title.localeCompare(b.title));
+  // the same event on several calendars (a holiday each Google account adds, a meeting you're invited to from
+  // two accounts) shows once (spec 0014)
+  const seen = new Set<string>();
+  const once = out.filter((i) => {
+    const k = `${i.title.trim().toLowerCase()}|${i.allDay ? `${i.startDate}|${i.endDate}` : `${i.start}|${i.end}`}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return once.sort((a, b) => key(a).localeCompare(key(b)) || a.title.localeCompare(b.title));
 }

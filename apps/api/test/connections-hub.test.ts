@@ -94,6 +94,16 @@ let reviews: Record<number, { user: { login: string }; state: string }[]> = {
   ],
   51: [],
 };
+// reviews waiting for me, in a company repo reached through a second token (spec 0014)
+let reviewQueue = [
+  {
+    ...pr(60, 'Payment flow'),
+    html_url: 'https://github.com/acme/web/pull/60',
+    repository_url: 'https://api.github.com/repos/acme/web',
+    created_at: '2030-01-03T10:00:00Z',
+  },
+];
+const GH_TOKENS = ['Bearer ghp_hub_token_abcdefghijk', 'Bearer ghp_org_token_abcdefghijk'];
 let gh: Awaited<ReturnType<typeof fakeServer>>;
 
 let h: Harness;
@@ -177,10 +187,13 @@ beforeAll(async () => {
     return [404, {}];
   });
   gh = await fakeServer((r) => {
-    if (r.auth !== 'Bearer ghp_hub_token_abcdefghijk') return [401, { message: 'Bad credentials' }];
+    if (!GH_TOKENS.includes(r.auth ?? '')) return [401, { message: 'Bad credentials' }];
     if (r.path === '/user') return [200, { id: 78, login: 'asha', name: 'Asha' }];
+    if (r.path === '/user/orgs') return [200, r.auth === GH_TOKENS[1] ? [{ login: 'acme' }] : []];
     if (r.path === '/search/issues') {
       const q = r.q.get('q')!;
+      if (q.includes('review-requested:@me'))
+        return [200, { items: r.auth === GH_TOKENS[1] ? reviewQueue : [] }];
       if (q.includes('is:pr is:open author:@me')) return [200, { items: openPrs }];
       if (q.includes('is:pr is:closed author:@me')) return [200, { items: closedPrs }];
       return [200, { items: [] }];
@@ -459,6 +472,51 @@ describe('my pull requests (spec 0012 G)', () => {
     reviews = { ...reviews, 51: [{ user: { login: 'mira' }, state: 'APPROVED' }] };
     await svc.watch(me.user.id);
     expect(await pings()).toContain('PR approved: Fix nav');
+  });
+});
+
+describe('company pull requests and reviews as tasks (spec 0014)', () => {
+  it('a second token for the same GitHub person (one per organisation) is its own connection; nothing doubles', async () => {
+    const before = ((await as(me).get('/connections/github/prs')) as any[]).length;
+    const second = await as(me).req('POST', '/connections/github', { token: 'ghp_org_token_abcdefghijk' });
+    expect(second.status).toBe(200);
+    expect(second.body.id).not.toBe(ghConn);
+    const mine = ((await as(me).get('/connections')) as any[]).filter((c) => c.provider === 'github');
+    expect(mine).toHaveLength(2);
+    // both tokens see my own PRs: each shows once
+    expect(((await as(me).get('/connections/github/prs?fresh=1')) as any[]).length).toBe(before);
+    // adding the same token again replaces it, never a third
+    await as(me).req('POST', '/connections/github', { token: 'ghp_org_token_abcdefghijk' });
+    expect(((await as(me).get('/connections')) as any[]).filter((c) => c.provider === 'github')).toHaveLength(
+      2,
+    );
+    const work = (await as(me).get('/connections/github/work')) as any[];
+    expect(work.filter((w) => w.kind === 'review').map((w) => [w.repo, w.number])).toEqual([
+      ['acme/web', 60],
+    ]);
+  });
+
+  it('a review waiting for me becomes a task dated the day the PR was raised; done when it stops waiting', async () => {
+    const svc = h.app.get(ConnectionsService);
+    const tasks = async () =>
+      ((await as(me).get('/sync/pull?cursor=0')).changes as any[]).filter(
+        (c) => c.entity === 'today.task' && c.data?.source === 'github',
+      );
+    await svc.watch(me.user.id);
+    const [t] = await tasks();
+    expect(t.data).toMatchObject({
+      title: 'Review: Payment flow (#60)',
+      dueDate: '2030-01-03',
+      tags: ['review'],
+      notes: expect.stringContaining('https://github.com/acme/web/pull/60'),
+    });
+    await svc.watch(me.user.id);
+    expect(await tasks()).toHaveLength(1);
+
+    reviewQueue = [];
+    await svc.watch(me.user.id);
+    const done = (await tasks()).findLast((c) => c.entityId === t.entityId);
+    expect(done.data.completedAt).toEqual(expect.any(String));
   });
 });
 

@@ -15,6 +15,10 @@ import '../money/capture.dart';
 import '../money/money.dart';
 import '../money/spend_date.dart';
 import 'money_brain.dart';
+import 'money_filters.dart';
+import 'money_hand.dart';
+import 'money_ui.dart';
+import 'payment_sheet.dart';
 import 'money_manage.dart';
 import 'common.dart';
 import 'sheets.dart';
@@ -56,13 +60,6 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
     unawaited(ref.read(moneyActionsProvider).ensureSetup());
   }
 
-  String _shift(int n) {
-    final y = int.parse(_month.substring(0, 4));
-    final m = int.parse(_month.substring(5, 7)) + n;
-    final d = DateTime(y, m);
-    return monthKey(d);
-  }
-
   @override
   Widget build(BuildContext context) {
     final txs = ref.watch(transactionsProvider).value ?? const <TxItem>[];
@@ -89,7 +86,7 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
         .toList();
     var shownOut = 0, shownIn = 0;
     for (final t in inMonth) {
-      if (t.transfer) continue;
+      if (t.ignored) continue;
       if (t.credit) {
         shownIn += t.amountMinor;
       } else {
@@ -128,41 +125,15 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                   children: [
                     Expanded(child: PageTitle('Money', overline: loc.formatMonthYear(DateTime.parse('$_month-01')))),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: l.c.glassStrong,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: l.c.edge),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Previous month',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(LucideIcons.chevronLeft, size: 18, color: l.c.muted),
-                              onPressed: () => setState(() => _month = _shift(-1)),
-                            ),
-                            if (_month != thisMonth)
-                              GestureDetector(
-                                onTap: () => setState(() => _month = thisMonth),
-                                child: Text('Now', style: OrvText.muted(l).copyWith(color: l.accent)),
-                              ),
-                            IconButton(
-                              tooltip: 'Next month',
-                              visualDensity: VisualDensity.compact,
-                              icon: Icon(LucideIcons.chevronRight, size: 18, color: l.c.muted),
-                              onPressed: _month.compareTo(thisMonth) >= 0
-                                  ? null
-                                  : () => setState(() => _month = _shift(1)),
-                            ),
-                          ],
-                        ),
+                      padding: const EdgeInsets.only(bottom: 14),
+                      child: MonthSwitcher(
+                        month: _month,
+                        thisMonth: thisMonth,
+                        onChanged: (m) => setState(() => _month = m),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.only(bottom: 14),
                       child: PopupMenuButton<String>(
                         tooltip: 'More',
                         icon: Icon(LucideIcons.ellipsisVertical, color: l.c.muted),
@@ -171,13 +142,16 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                             final toaster = Toaster.of(context);
                             await Clipboard.setData(ClipboardData(text: transactionsCsv(inMonth, cats, accounts)));
                             toaster.show('Copied ${inMonth.length} rows', body: 'Paste them into Sheets or Excel.');
+                          } else if (v == 'balances' && context.mounted) {
+                            await showGlassSheet<void>(context, (_) => const BalancesSheet());
                           } else if (context.mounted) {
                             await showGlassSheet<void>(context, (_) => const ManageSheet());
                           }
                         },
                         itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'balances', child: Text('Balances & accounts')),
                           PopupMenuItem(value: 'copy', child: Text('Copy as spreadsheet text')),
-                          PopupMenuItem(value: 'manage', child: Text('Accounts, categories, repeating')),
+                          PopupMenuItem(value: 'manage', child: Text('Categories, repeating, learned')),
                         ],
                       ),
                     ),
@@ -188,7 +162,7 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                 if (fresh.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Glass(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -196,32 +170,48 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                           children: [
                             Icon(LucideIcons.sparkles, size: 15, color: l.accent),
                             const SizedBox(width: 6),
-                            Expanded(child: Text('New · ${fresh.length}', style: OrvText.label(l))),
-                            TextButton.icon(
-                              icon: const Icon(LucideIcons.checkCheck, size: 15),
-                              label: const Text('All fine'),
-                              onPressed: () async {
-                                for (final t in fresh) {
-                                  await ref.read(moneyActionsProvider).update(t.id, {'reviewed': true});
-                                }
-                              },
-                            ),
+                            Expanded(child: Text('NEW · ${fresh.length}', style: OrvText.label(l))),
+                            if (fresh.any((t) => !t.credit))
+                              GestureDetector(
+                                onTap: () async {
+                                  // spending looks right; money in still waits for its own answer
+                                  for (final t in fresh.where((t) => !t.credit)) {
+                                    await ref.read(moneyActionsProvider).update(t.id, {'reviewed': true});
+                                  }
+                                },
+                                child: Row(
+                                  children: [
+                                    Icon(LucideIcons.checkCheck, size: 15, color: l.accent),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'All fine',
+                                      style: OrvText.muted(l)
+                                          .copyWith(color: l.accent, fontWeight: FontWeight.w700, fontSize: 12.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
+                        const SizedBox(height: 4),
                         for (final t in fresh.take(8)) _TxRow(tx: t, category: cat(t.categoryId), fresh: true),
                       ],
                     ),
                   ),
                 ],
+                const SizedBox(height: 12),
+                const HandCard(),
                 InsightsStrip(
                   month: _month,
                   onOpenTx: (id) {
                     final t = txs.where((t) => t.id == id).firstOrNull;
-                    if (t != null) showGlassSheet<void>(context, (_) => _TxSheet(tx: t));
+                    if (t != null) openPayment(context, tx: t);
                   },
                 ),
                 const SizedBox(height: 12),
                 _Hero(spent: s.spent, earned: s.earned, days: days, byCategory: s.byCategory, cat: cat),
+                const SizedBox(height: 12),
+                const PeopleCard(),
                 const SizedBox(height: 12),
                 _Budgets(month: _month, txs: txs, budgets: budgets, cats: cats),
                 const SizedBox(height: 18),
@@ -249,15 +239,29 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                       badge: filters,
                       onTap: () => showGlassSheet<void>(
                         context,
-                        (_) => _MoneyFilterSheet(
+                        (_) => MoneyFilterSheet(
                           cats: cats.where((c) => !c.archived).toList(),
-                          accounts: accounts.where((a) => a.data['archived'] != true).toList(),
+                          accounts: accounts.where((a) => !a.archived).toList(),
                           value: (
                             category: _categoryFilter,
                             account: _accountFilter,
                             direction: _directionFilter,
                             allTime: _allTime,
                           ),
+                          count: (f) => txs
+                              .where(
+                                (t) =>
+                                    (f.allTime || monthKey(t.occurredAt) == _month) &&
+                                    txMatches(
+                                      t,
+                                      q: _search.text,
+                                      categoryId: f.category,
+                                      accountId: f.account,
+                                      direction: f.direction,
+                                      categoryName: catName,
+                                    ),
+                              )
+                              .length,
                           onChanged: (f) => setState(() {
                             _categoryFilter = f.category;
                             _accountFilter = f.account;
@@ -339,7 +343,7 @@ class _MoneyScreenState extends ConsumerState<MoneyScreen> {
                           ),
                         ),
                         Text(
-                          formatMoney(list.where((t) => !t.credit && !t.transfer).fold(0, (a, t) => a + t.amountMinor)),
+                          formatMoney(list.where((t) => !t.credit && !t.ignored).fold(0, (a, t) => a + t.amountMinor)),
                           style: OrvText.muted(l).copyWith(fontSize: 12.5),
                         ),
                       ],
@@ -538,103 +542,6 @@ class _Hero extends StatelessWidget {
   }
 }
 
-typedef _Filters = ({String? category, String? account, String? direction, bool allTime});
-
-/// Which transactions: category, account, in or out, and any month — choices in a sheet, applied as you tap.
-class _MoneyFilterSheet extends StatefulWidget {
-  const _MoneyFilterSheet({required this.cats, required this.accounts, required this.value, required this.onChanged});
-  final List<CategoryItem> cats;
-  final List<AccountItem> accounts;
-  final _Filters value;
-  final ValueChanged<_Filters> onChanged;
-  @override
-  State<_MoneyFilterSheet> createState() => _MoneyFilterSheetState();
-}
-
-class _MoneyFilterSheetState extends State<_MoneyFilterSheet> {
-  late _Filters _f = widget.value;
-  void _set(_Filters f) {
-    setState(() => _f = f);
-    widget.onChanged(f);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    Widget group<T>(String label, T value, List<(T, String)> options, ValueChanged<T> pick) => Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionLabel(label),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final (v, t) in options)
-                ChoiceChip(
-                  label: Text(t),
-                  selected: value == v,
-                  showCheckmark: false,
-                  onSelected: (_) => pick(v),
-                  selectedColor: l.accent.withValues(alpha: 0.16),
-                  side: BorderSide(color: value == v ? l.accent : l.c.edge),
-                  backgroundColor: Colors.transparent,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Filter transactions', style: OrvText.heading(l)),
-          const SizedBox(height: 10),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  group<String?>('Money', _f.direction, const [
-                    (null, 'Spent & came in'),
-                    ('debit', 'Spent'),
-                    ('credit', 'Came in'),
-                  ], (v) => _set((category: _f.category, account: _f.account, direction: v, allTime: _f.allTime))),
-                  group<bool>('Period', _f.allTime, const [
-                    (false, 'This month'),
-                    (true, 'All time'),
-                  ], (v) => _set((category: _f.category, account: _f.account, direction: _f.direction, allTime: v))),
-                  group<String?>('Category', _f.category, [
-                    (null, 'All categories'),
-                    ('none', 'Uncategorised'),
-                    for (final c in widget.cats) (c.id, c.name),
-                  ], (v) => _set((category: v, account: _f.account, direction: _f.direction, allTime: _f.allTime))),
-                  if (widget.accounts.isNotEmpty)
-                    group<String?>('Account', _f.account, [
-                      (null, 'All accounts'),
-                      for (final a in widget.accounts) (a.id, a.name),
-                    ], (v) => _set((category: _f.category, account: v, direction: _f.direction, allTime: _f.allTime))),
-                ],
-              ),
-            ),
-          ),
-          OrvButton(
-            label: 'Show transactions',
-            variant: ButtonVariant.primary,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// "yesterday" / "12 Nov" for a typed day (null for today).
 String? _dayLabel(String? date, DateTime now) {
   if (date == null) return null;
   final today = ymdString(todayOn(now));
@@ -664,10 +571,18 @@ class _QuickEntry extends ConsumerStatefulWidget {
 
 class _QuickEntryState extends ConsumerState<_QuickEntry> {
   final _c = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
     _c.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
@@ -687,14 +602,15 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
       'amountMinor': p.amountMinor,
       'direction': p.direction,
       'merchant': p.merchant,
-      'note': p.note,
+      'title': quickTitle(p.note, p.merchant),
       'categoryId': category?.id,
       'occurredAt': occurredAtFor(date: p.date, time: p.time, now: now).toUtc().toIso8601String(),
     });
     _c.clear();
     setState(() {});
+    final day = _dayLabel(p.date, now);
     toaster.show(
-      '${p.direction == 'credit' ? 'Received' : 'Spent'} ${formatMoney(p.amountMinor)}${_dayLabel(p.date, now) == null ? '' : ' · ${_dayLabel(p.date, now)}'}',
+      '${p.direction == 'credit' ? 'Received' : 'Spent'} ${formatMoney(p.amountMinor)}${day == null ? '' : ' · $day'}',
       tone: ToastTone.success,
     );
   }
@@ -703,63 +619,157 @@ class _QuickEntryState extends ConsumerState<_QuickEntry> {
   Widget build(BuildContext context) {
     final l = context.orv;
     final now = ref.watch(clockProvider)();
-    final p = _c.text.trim().isEmpty ? null : parseSpend(_c.text, now: now);
+    final empty = _c.text.trim().isEmpty;
+    final p = empty ? null : parseSpend(_c.text, now: now);
     final cats = ref.watch(categoriesProvider).value ?? const <CategoryItem>[];
     final category = p == null
         ? null
         : _categoryFor((merchant: p.merchant, category: p.category), cats, ref.watch(merchantProfilesProvider));
-    return Glass(
-      level: GlassLevel.float,
-      padding: const EdgeInsets.fromLTRB(14, 4, 8, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    final day = p == null ? null : _dayLabel(p.date, now);
+    Widget chip(IconData i, String text, {Color? tone}) => Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 9),
+      decoration: BoxDecoration(
+        color: (tone ?? l.accent).withValues(alpha: l.dark ? 0.18 : 0.10),
+        borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+        border: Border.all(color: (tone ?? l.accent).withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Icon(LucideIcons.plus, color: l.accent, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  key: const Key('money-add'),
-                  controller: _c,
-                  onChanged: (_) => setState(() {}),
-                  onSubmitted: (_) => _add(),
-                  textInputAction: TextInputAction.done,
-                  style: OrvText.body(l).copyWith(fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: 'Add… “spent 240 on lunch yesterday”',
-                    hintStyle: OrvText.body(l).copyWith(color: l.c.faint, fontSize: 16),
-                    border: InputBorder.none,
+          Icon(i, size: 13, color: tone ?? l.accent),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: OrvText.muted(
+              l,
+            ).copyWith(fontSize: 12.5, fontWeight: FontWeight.w600, color: l.dark ? Colors.white : (tone ?? l.accent)),
+          ),
+        ],
+      ),
+    );
+    return AnimatedContainer(
+      duration: OrvTokens.durationBase,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(OrvTokens.radiusLg),
+        boxShadow: _focus.hasFocus
+            ? [BoxShadow(color: l.accent.withValues(alpha: l.dark ? 0.30 : 0.20), spreadRadius: 3.5)]
+            : const [],
+      ),
+      child: Stack(
+        children: [
+          Glass(
+            level: GlassLevel.float,
+            padding: EdgeInsets.fromLTRB(14, 2, 6, p == null ? 2 : 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    AnimatedSwitcher(
+                      duration: OrvTokens.durationFast,
+                      child: Icon(
+                        empty ? LucideIcons.plus : LucideIcons.sparkles,
+                        key: ValueKey(empty),
+                        color: l.accent,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        key: const Key('money-add'),
+                        controller: _c,
+                        focusNode: _focus,
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => _add(),
+                        textInputAction: TextInputAction.done,
+                        style: OrvText.body(l).copyWith(fontSize: 16),
+                        decoration: bareInput(
+                          l,
+                          hint: 'Add… “240 lunch at swiggy yesterday”',
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('money-open-add'),
+                      tooltip: 'Add with details',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(LucideIcons.maximize2, size: 18, color: empty ? l.c.faint : l.c.muted),
+                      onPressed: () => showAddTransaction(context),
+                    ),
+                    AnimatedSwitcher(
+                      duration: OrvTokens.durationFast,
+                      transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                      child: empty
+                          ? const SizedBox(width: 4, key: ValueKey('none'))
+                          : Semantics(
+                              key: const ValueKey('add'),
+                              container: true,
+                              button: true,
+                              label: 'Add',
+                              child: GestureDetector(
+                                onTap: p == null ? null : _add,
+                                child: AnimatedOpacity(
+                                  duration: OrvTokens.durationFast,
+                                  opacity: p == null ? 0.4 : 1,
+                                  child: Container(
+                                    width: 36,
+                                    height: 36,
+                                    margin: const EdgeInsets.only(left: 2, right: 4),
+                                    decoration: BoxDecoration(
+                                      gradient: l.accentGradient,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: l.accentFrom.withValues(alpha: 0.4),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(LucideIcons.arrowUp, size: 18, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+                if (p != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 28),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        chip(
+                          p.direction == 'credit' ? LucideIcons.arrowDownLeft : LucideIcons.arrowUpRight,
+                          '${p.direction == 'credit' ? '+' : ''}${formatMoney(p.amountMinor)}',
+                          tone: p.direction == 'credit' ? l.c.success : null,
+                        ),
+                        if (p.merchant.isNotEmpty) chip(LucideIcons.store, p.merchant),
+                        if (category != null) chip(category.iconData, category.name),
+                        if (day != null) chip(LucideIcons.calendar, day),
+                        if (p.time != null) chip(LucideIcons.clock, p.time!),
+                      ],
+                    ),
                   ),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedContainer(
+                duration: OrvTokens.durationBase,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(OrvTokens.radiusLg),
+                  border: Border.all(color: _focus.hasFocus ? l.accent : Colors.transparent, width: 1.2),
                 ),
               ),
-              if (_c.text.trim().isEmpty)
-                IconButton(
-                  key: const Key('money-open-add'),
-                  tooltip: 'Add with details',
-                  icon: Icon(LucideIcons.listPlus, color: l.accent, size: 20),
-                  onPressed: () => showAddTransaction(context),
-                )
-              else
-                OrvButton(
-                  label: 'Add',
-                  small: true,
-                  variant: ButtonVariant.primary,
-                  onPressed: p == null ? null : _add,
-                ),
-            ],
-          ),
-          if (p != null)
-            Text(
-              [
-                '${p.direction == 'credit' ? '+' : ''}${formatMoney(p.amountMinor)}',
-                if (p.merchant.isNotEmpty) p.merchant,
-                if (category != null) category.name,
-                if (_dayLabel(p.date, now) != null) _dayLabel(p.date, now)!,
-                if (p.time != null) p.time!,
-              ].join(' · '),
-              style: OrvText.muted(l).copyWith(color: l.accent),
             ),
+          ),
         ],
       ),
     );
@@ -842,7 +852,9 @@ class _Budgets extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l = context.orv;
-    final progress = budgetProgress(budgets, txs, month);
+    // the overall budget lives on the pace bar above; here, the categories
+    final progress = budgetProgress(budgets, txs, month).where((p) => p.budget.categoryId != null).toList();
+    final overall = budgets.any((b) => !b.archived && b.categoryId == null);
     if (progress.isEmpty) {
       return Semantics(
         button: true,
@@ -850,7 +862,8 @@ class _Budgets extends ConsumerWidget {
         excludeSemantics: true,
         child: InkWell(
           borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-          onTap: () => showGlassSheet<void>(context, (_) => _BudgetSheet(cats: cats, budgets: budgets)),
+          onTap: () =>
+              showGlassSheet<void>(context, (_) => BudgetSheet(cats: cats, budgets: budgets, overall: !overall)),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -861,7 +874,12 @@ class _Budgets extends ConsumerWidget {
               children: [
                 Icon(LucideIcons.target, size: 18, color: l.accent),
                 const SizedBox(width: 10),
-                Expanded(child: Text('Set a monthly budget', style: OrvText.body(l).copyWith(fontSize: 14))),
+                Expanded(
+                  child: Text(
+                    overall ? 'Add a budget for a category' : 'Set a monthly budget',
+                    style: OrvText.body(l).copyWith(fontSize: 14),
+                  ),
+                ),
                 Icon(LucideIcons.chevronRight, size: 16, color: l.c.muted),
               ],
             ),
@@ -876,127 +894,62 @@ class _Budgets extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text('Budgets', style: OrvText.label(l))),
+              Expanded(child: Text('CATEGORY BUDGETS', style: OrvText.label(l))),
               OrvButton(
                 label: 'Set',
                 small: true,
                 variant: ButtonVariant.ghost,
                 icon: LucideIcons.plus,
-                onPressed: () => showGlassSheet<void>(context, (_) => _BudgetSheet(cats: cats, budgets: budgets)),
+                onPressed: () => showGlassSheet<void>(context, (_) => BudgetSheet(cats: cats, budgets: budgets)),
               ),
             ],
           ),
           if (progress.isEmpty) Text('None yet.', style: OrvText.muted(l)),
           for (final p in progress)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          p.budget.categoryId == null
-                              ? 'Everything'
-                              : (cats.where((c) => c.id == p.budget.categoryId).firstOrNull?.name ?? '—'),
-                          style: OrvText.body(l),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => showGlassSheet<void>(
+                context,
+                (_) => BudgetSheet(cats: cats, budgets: budgets, categoryId: p.budget.categoryId),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            p.budget.categoryId == null
+                                ? 'Everything'
+                                : (cats.where((c) => c.id == p.budget.categoryId).firstOrNull?.name ?? '—'),
+                            style: OrvText.body(l),
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${formatMoney(p.used)} / ${formatMoney(p.budget.amountMinor)}',
-                        style: OrvText.muted(l).copyWith(color: p.used > p.budget.amountMinor ? l.c.danger : l.c.muted),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
-                    child: LinearProgressIndicator(
-                      value: (p.used / p.budget.amountMinor).clamp(0, 1).toDouble(),
-                      minHeight: 6,
-                      backgroundColor: l.c.track,
-                      color: p.used > p.budget.amountMinor
-                          ? l.c.danger
-                          : (p.used > p.budget.amountMinor * 0.8 ? l.c.warning : l.accent),
+                        Text(
+                          '${formatMoney(p.used)} / ${formatMoney(p.budget.amountMinor)}',
+                          style: OrvText.muted(l)
+                              .copyWith(color: p.used > p.budget.amountMinor ? l.c.danger : l.c.muted),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+                      child: LinearProgressIndicator(
+                        value: (p.used / p.budget.amountMinor).clamp(0, 1).toDouble(),
+                        minHeight: 6,
+                        backgroundColor: l.c.track,
+                        color: p.used > p.budget.amountMinor
+                            ? l.c.danger
+                            : (p.used > p.budget.amountMinor * 0.8 ? l.c.warning : l.accent),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BudgetSheet extends ConsumerStatefulWidget {
-  const _BudgetSheet({required this.cats, required this.budgets});
-  final List<CategoryItem> cats;
-  final List<BudgetItem> budgets;
-  @override
-  ConsumerState<_BudgetSheet> createState() => _BudgetSheetState();
-}
-
-class _BudgetSheetState extends ConsumerState<_BudgetSheet> {
-  String? _categoryId;
-  final _amount = TextEditingController();
-
-  @override
-  void dispose() {
-    _amount.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    ChoiceChip chip(String label, bool on, VoidCallback tap) => ChoiceChip(
-      label: Text(label),
-      selected: on,
-      showCheckmark: false,
-      onSelected: (_) => setState(tap),
-      selectedColor: l.accent.withValues(alpha: 0.16),
-      side: BorderSide(color: on ? l.accent : l.c.edge),
-      backgroundColor: Colors.transparent,
-    );
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Monthly budget', style: OrvText.heading(l)),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              chip('Everything', _categoryId == null, () => _categoryId = null),
-              for (final c in widget.cats.where((c) => c.kind == 'expense' && !c.archived))
-                chip(c.name, _categoryId == c.id, () => _categoryId = c.id),
-            ],
-          ),
-          const SizedBox(height: 12),
-          OrvField(label: '₹ a month', controller: _amount, keyboardType: TextInputType.number),
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OrvButton(
-              label: 'Save',
-              variant: ButtonVariant.primary,
-              onPressed: () async {
-                final v = (double.tryParse(_amount.text.replaceAll(',', '')) ?? 0) * 100;
-                if (v <= 0) return;
-                final existing = widget.budgets.where((b) => !b.archived && b.categoryId == _categoryId).firstOrNull;
-                await ref.read(moneyActionsProvider).saveBudget(existing?.id, {
-                  'categoryId': _categoryId,
-                  'amountMinor': v.round(),
-                  'from': monthKey(ref.read(clockProvider)()),
-                });
-                if (context.mounted) Navigator.of(context).pop();
-              },
-            ),
-          ),
         ],
       ),
     );
@@ -1013,42 +966,96 @@ class _TxRow extends ConsumerWidget {
     final l = context.orv;
     final loc = MaterialLocalizations.of(context);
     final colour = labelColour(l, category?.colour);
-    final name = tx.merchant.isNotEmpty ? tx.merchant : (category?.name ?? 'Transaction');
+    final name = tx.label.isNotEmpty ? tx.label : (category?.name ?? (tx.credit ? 'Money in' : 'Payment'));
+    final accounts = ref.watch(accountsProvider).value ?? const <AccountItem>[];
+    final acct = accounts.where((a) => a.id == tx.accountId).firstOrNull;
+    final sub = [
+      if (tx.title.isNotEmpty && tx.merchant.isNotEmpty) tx.merchant,
+      if (tx.transfer)
+        'moved${acct == null ? '' : ' from ${acct.name}'}'
+      else
+        category?.name ?? (tx.iouId != null ? (tx.credit ? 'paid back' : 'lent') : 'No category'),
+      if (!tx.transfer && acct != null) acct.name,
+      fresh ? loc.formatShortMonthDay(tx.occurredAt) : loc.formatTimeOfDay(TimeOfDay.fromDateTime(tx.occurredAt)),
+    ].join(' · ');
+    final waitingCredit = fresh && tx.credit;
     return InkWell(
-      onTap: () => showGlassSheet<void>(context, (_) => _TxSheet(tx: tx)),
+      onTap: () => openPayment(context, tx: tx),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(color: colour.withValues(alpha: 0.16), shape: BoxShape.circle),
-              child: Icon(LucideIcons.circleDot, size: 14, color: colour),
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: (tx.transfer || tx.iouId != null ? l.accent : colour).withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                tx.transfer
+                    ? LucideIcons.arrowLeftRight
+                    : (tx.iouId != null ? LucideIcons.handCoins : (category?.iconData ?? LucideIcons.circleDot)),
+                size: 16,
+                color: tx.transfer || tx.iouId != null ? l.accent : colour,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w500)),
                   Text(
-                    '${category?.name ?? 'Uncategorised'} · ${tx.source == 'manual' ? 'typed' : tx.source} · '
-                    '${fresh ? loc.formatShortMonthDay(tx.occurredAt) : loc.formatTimeOfDay(TimeOfDay.fromDateTime(tx.occurredAt))}',
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    sub,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: OrvText.muted(l).copyWith(fontSize: 12),
                   ),
                 ],
               ),
             ),
-            Text(
-              '${tx.credit ? '+' : ''}${formatMoney(tx.amountMinor, currency: tx.currency)}',
-              style: OrvText.body(l).copyWith(fontWeight: FontWeight.w600, color: tx.credit ? l.c.success : l.c.text),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${tx.credit ? '+' : (tx.transfer ? '' : '−')}${formatMoney(tx.amountMinor, currency: tx.currency)}',
+                  style: OrvText.body(l).copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: tx.transfer ? l.c.muted : (tx.credit ? l.c.success : l.c.text),
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (!tx.counted && !tx.transfer)
+                  Text('not counted', style: OrvText.muted(l).copyWith(fontSize: 10.5, color: l.c.faint)),
+              ],
             ),
-            if (fresh)
-              IconButton(
-                tooltip: 'Looks right: $name',
-                icon: Icon(LucideIcons.check, size: 18, color: l.accent),
-                onPressed: () => ref.read(moneyActionsProvider).update(tx.id, {'reviewed': true}),
+            if (waitingCredit) ...[
+              const SizedBox(width: 4),
+              _Mini(
+                icon: LucideIcons.check,
+                label: 'Count it',
+                tone: l.c.success,
+                onTap: () => ref.read(moneyActionsProvider).update(tx.id, {'reviewed': true, 'counted': true}),
+              ),
+              _Mini(
+                icon: LucideIcons.x,
+                label: 'Not income',
+                tone: l.c.muted,
+                onTap: () => ref.read(moneyActionsProvider).update(tx.id, {'reviewed': true, 'counted': false}),
+              ),
+            ] else if (fresh)
+              _Mini(
+                icon: LucideIcons.check,
+                label: 'Looks right: $name',
+                tone: l.accent,
+                onTap: () => ref.read(moneyActionsProvider).update(tx.id, {'reviewed': true}),
               ),
           ],
         ),
@@ -1057,122 +1064,34 @@ class _TxRow extends ConsumerWidget {
   }
 }
 
-class _TxSheet extends ConsumerStatefulWidget {
-  const _TxSheet({required this.tx});
-  final TxItem tx;
+class _Mini extends StatelessWidget {
+  const _Mini({required this.icon, required this.label, required this.tone, required this.onTap});
+  final IconData icon;
+  final String label;
+  final Color tone;
+  final VoidCallback onTap;
   @override
-  ConsumerState<_TxSheet> createState() => _TxSheetState();
+  Widget build(BuildContext context) => Semantics(
+    container: true,
+    button: true,
+    label: label,
+    excludeSemantics: true,
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        margin: const EdgeInsets.only(left: 4),
+        decoration: BoxDecoration(color: tone.withValues(alpha: 0.12), shape: BoxShape.circle),
+        child: Icon(icon, size: 15, color: tone),
+      ),
+    ),
+  );
 }
 
-class _TxSheetState extends ConsumerState<_TxSheet> {
-  late final _amount = TextEditingController(text: (widget.tx.amountMinor / 100).toStringAsFixed(2));
-  late final _merchant = TextEditingController(text: widget.tx.merchant);
-  late final _note = TextEditingController(text: widget.tx.note);
-  late String? _categoryId = widget.tx.categoryId;
-  late bool _credit = widget.tx.credit;
-  late bool _transfer = widget.tx.transfer;
-
-  @override
-  void dispose() {
-    _amount.dispose();
-    _merchant.dispose();
-    _note.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l = context.orv;
-    final cats = (ref.watch(categoriesProvider).value ?? const <CategoryItem>[]).where((c) => !c.archived);
-    ChoiceChip chip(String label, bool on, VoidCallback tap) => ChoiceChip(
-      label: Text(label),
-      selected: on,
-      showCheckmark: false,
-      onSelected: (_) => setState(tap),
-      selectedColor: l.accent.withValues(alpha: 0.16),
-      side: BorderSide(color: on ? l.accent : l.c.edge),
-      backgroundColor: Colors.transparent,
-    );
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Transaction', style: OrvText.heading(l)),
-          const SizedBox(height: 10),
-          OrvField(label: 'Amount (₹)', controller: _amount, keyboardType: TextInputType.number),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            children: [chip('Spent', !_credit, () => _credit = false), chip('Came in', _credit, () => _credit = true)],
-          ),
-          const SizedBox(height: 8),
-          OrvField(label: 'Merchant', controller: _merchant),
-          const SizedBox(height: 8),
-          Text('Category', style: OrvText.label(l)),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final c in cats.where((c) => c.kind == (_credit ? 'income' : 'expense') || c.kind == 'transfer'))
-                chip(c.name, _categoryId == c.id, () => _categoryId = c.id),
-            ],
-          ),
-          const SizedBox(height: 8),
-          OrvField(label: 'Note', controller: _note),
-          OrvSwitchRow(
-            label: 'Between my own accounts',
-            subtitle: 'Not counted as spending',
-            value: _transfer,
-            onChanged: (v) => setState(() => _transfer = v),
-          ),
-          if (widget.tx.merchant.isNotEmpty)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(LucideIcons.store, size: 15),
-                label: Text('See all at ${widget.tx.merchant}'),
-                onPressed: () => openMerchant(context, widget.tx.merchant),
-              ),
-            ),
-          if (widget.tx.rawMerchant.isNotEmpty && widget.tx.rawMerchant != widget.tx.merchant)
-            Text('The message said: ${widget.tx.rawMerchant}', style: OrvText.muted(l).copyWith(fontSize: 12)),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              OrvButton(
-                label: 'Delete',
-                small: true,
-                variant: ButtonVariant.danger,
-                icon: LucideIcons.trash2,
-                onPressed: () async {
-                  await ref.read(moneyActionsProvider).remove(widget.tx.id);
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-              ),
-              const Spacer(),
-              OrvButton(
-                label: 'Save',
-                variant: ButtonVariant.primary,
-                onPressed: () async {
-                  final v = ((double.tryParse(_amount.text.replaceAll(',', '')) ?? 0) * 100).round();
-                  await ref.read(moneyActionsProvider).update(widget.tx.id, {
-                    if (v > 0) 'amountMinor': v,
-                    'direction': _credit ? 'credit' : 'debit',
-                    'merchant': _merchant.text.trim(),
-                    'categoryId': _categoryId,
-                    'note': _note.text,
-                    'transfer': _transfer,
-                    'reviewed': true,
-                  });
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+/// The title a typed entry gets: what it was for ("Lunch"), not a repeat of the merchant ("uber").
+String quickTitle(String note, String merchant) {
+  final n = note.trim();
+  if (n.isEmpty || n.toLowerCase() == merchant.trim().toLowerCase()) return '';
+  return n[0].toUpperCase() + n.substring(1);
 }

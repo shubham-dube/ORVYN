@@ -2,6 +2,17 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-23 (spec 0014, What's in my hand — chosen for you; change any)
+
+| #        | Topic           | Decision                                                                                                                                            |
+| -------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0014-1 | In your hand    | **Accounts − card & loan dues − what you owe + money owed to you that is sure.** "Not sure" money is shown, not counted. Card limit is never yours. |
+| D-0014-2 | Balances        | Typed once per account (as of a moment); later payments move them. ORVYN never reads a bank; check it against the bank app now and then.            |
+| D-0014-3 | Money in        | A credit read from a message is **not counted until you say**: income, someone paying back, or not counted. Typed credits count at once.            |
+| D-0014-4 | Debts and tasks | A debt with a due day adds a Today task; settling ticks it. Lending and being paid back are never spending or income.                               |
+| D-0014-5 | Company PRs     | One GitHub connection **per token** (user + each organisation). Review requests become tasks dated the day the PR was raised; on by default.        |
+| D-0014-6 | Public holidays | Holiday calendars arrive **hidden**; duplicates across accounts show once; one tap in Schedule hides them all.                                      |
+
 ## Decided — 2026-11-22 (spec 0013, Money brain — chosen for you; change any)
 
 | #        | Topic            | Decision                                                                                                                             |

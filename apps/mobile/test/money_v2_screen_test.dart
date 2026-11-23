@@ -1,13 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:orvyn/features/money_manage.dart';
+import 'package:orvyn/features/payment_sheet.dart';
 
 import 'calendar_screen_test.dart' show tapIt;
 import 'money_screen_test.dart' show openMoney, only;
 import 'support/harness.dart';
 
 // The harness clock is Monday 16 Nov 2026, 09:30.
-Finder inSheet(Finder f) => find.descendant(of: find.byType(AddTransactionSheet), matching: f);
+Finder inSheet(Finder f) => find.descendant(of: find.byType(PaymentSheet), matching: f);
 
 void main() {
   testWidgets('typing a day files the entry on that day', (tester) async {
@@ -30,10 +30,11 @@ void main() {
     final h = AppHarness()..signedInAs(userJson(ent: ['money']));
     final b = await openMoney(tester, h);
     await tapIt(tester, find.byKey(const Key('money-open-add')));
-    await tester.enterText(inSheet(find.byType(TextField)).at(0), '640');
-    await tester.enterText(inSheet(find.byType(TextField)).at(1), 'Zorba dinner');
+    await tester.enterText(find.byKey(const Key('money-amount')), '640');
+    await tester.enterText(find.byKey(const Key('money-merchant')), 'Zorba dinner');
+    await tapIt(tester, inSheet(find.text('When')));
     await tapIt(tester, find.text('Yesterday'));
-    await tapIt(tester, inSheet(find.text('Add')));
+    await tapIt(tester, find.byKey(const Key('money-save')));
     final tx = only(b, 'money.transaction');
     expect(tx['merchant'], 'Zorba dinner');
     expect(tx['amountMinor'], 64000);
@@ -41,9 +42,9 @@ void main() {
 
     // a repeating one: rent on the 1st, every month, added for me
     await tapIt(tester, find.byKey(const Key('money-open-add')));
-    await tester.enterText(inSheet(find.byType(TextField)).at(0), '22000');
-    await tester.enterText(inSheet(find.byType(TextField)).at(1), 'Rent');
-    await tapIt(tester, inSheet(find.byType(Switch)));
+    await tester.enterText(find.byKey(const Key('money-amount')), '22000');
+    await tester.enterText(find.byKey(const Key('money-merchant')), 'Rent');
+    await tapIt(tester, inSheet(find.byType(Switch)).last);
     expect(find.text('Every month on the 16th'), findsOneWidget);
     await tapIt(tester, find.text('Daily'));
     expect(find.text('Every day'), findsOneWidget);
@@ -86,7 +87,7 @@ void main() {
     expect(find.text('Uber'), findsWidgets);
 
     await tapIt(tester, find.byTooltip('More'));
-    await tapIt(tester, find.text('Accounts, categories, repeating'));
+    await tapIt(tester, find.text('Categories, repeating, learned'));
     expect(
       find.text('Nothing repeats yet. Add rent, a subscription or your salary once and it shows up on its day.'),
       findsOneWidget,

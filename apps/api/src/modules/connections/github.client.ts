@@ -136,6 +136,12 @@ export class GitHubClient {
     return 'passing';
   }
 
+  /** The organisations this token can see (for the account's label and the "missing PRs?" hint). */
+  async orgs(token: string): Promise<string[]> {
+    const r = await this.call<{ login: string }[]>(token, 'GET', '/user/orgs?per_page=50');
+    return r.map((o) => o.login);
+  }
+
   /** "owner/repo" from an API repository URL. */
   static repoOf(repositoryUrl: string): string {
     return repositoryUrl.replace(/^.*\/repos\//, '');

@@ -49,6 +49,9 @@ const FULL_SYNC_DAYS = 120;
  * channel or a 5-minute poll, and edits from any device go back to Google with etags. All server writes go
  * through the sync engine, so every device converges.
  */
+/** Google's holiday calendars: `en.indian#holiday@group.v.calendar.google.com` and the like. */
+export const HOLIDAYS = /#holiday@group\.v\.calendar\.google\.com$/;
+
 @Injectable()
 export class CalendarService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('calendar');
@@ -322,7 +325,11 @@ export class CalendarService implements OnModuleInit, OnModuleDestroy {
           writable: g.accessRole === 'owner' || g.accessRole === 'writer',
           ...(known
             ? {}
-            : { visible: !!(g.primary || g.selected), colour: PROJECT_COLOURS[i % PROJECT_COLOURS.length] }),
+            : {
+                // Google's public-holiday calendars (one per account) start switched off (spec 0014)
+                visible: !!(g.primary || g.selected) && !HOLIDAYS.test(g.id),
+                colour: PROJECT_COLOURS[i % PROJECT_COLOURS.length],
+              }),
         },
       });
     });

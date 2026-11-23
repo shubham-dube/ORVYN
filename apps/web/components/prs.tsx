@@ -15,6 +15,8 @@ import {
   Hourglass,
   Loader,
   MessageSquareWarning,
+  Building2,
+  Plus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -23,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { type GitHubItem, invalidate, type Pr, prSummary, useCached } from '@/lib/work';
 import { useConnectionsCached } from './clickup';
-import { ProviderMark } from './connections';
+import { type Provider, ProviderMark, TokenSheet } from './connections';
 
 const age = (iso: string) => {
   const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60_000));
@@ -127,6 +129,9 @@ export function GitHubCard() {
   if (!has) return null;
   const reviews = (work.data ?? []).filter((w) => w.kind === 'review');
   const issues = (work.data ?? []).filter((w) => w.kind === 'issue');
+  const need = (p: Pr) =>
+    p.review === 'changes' ? 0 : p.checks === 'failing' ? 1 : p.review === 'approved' ? 2 : 3;
+  const mine = (prs.data ?? []).filter((p) => p.state === 'open').sort((a, b) => need(a) - need(b));
   return (
     <Glass as="section" className="p-4">
       <div className="mb-1 flex items-center gap-2 px-1">
@@ -144,7 +149,20 @@ export function GitHubCard() {
         </span>
         <ChevronRight size={15} className="text-orv-muted" aria-hidden />
       </Link>
+      {mine.length ? (
+        <ul className="flex flex-col" aria-label="My open pull requests">
+          {mine.slice(0, 3).map((p) => (
+            <PrRow key={p.id} pr={p} />
+          ))}
+          {mine.length > 3 ? (
+            <li className="px-1.5 pb-1 text-[12px] text-orv-muted">
+              +{mine.length - 3} more in My pull requests
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
       {work.data === undefined ? <SkeletonRows rows={1} className="mt-1" /> : null}
+      {reviews.length ? <Label className="mt-3 px-1.5">Waiting for your review</Label> : null}
       <ul className="flex flex-col">
         {reviews.slice(0, 5).map((w) => (
           <PrRow key={w.id} pr={{ ...w, state: 'open' }} review />
@@ -188,6 +206,8 @@ export function PrsView() {
   const { has, known, prs, work } = useGitHub();
   const [tab, setTab] = useState<'open' | 'review' | 'done'>('open');
   const [pings, setPings] = useState(false);
+  const [addToken, setAddToken] = useState(false);
+  const toast = useToast();
   if (known && !has)
     return (
       <Glass className="p-6 text-center text-small text-orv-muted">
@@ -266,15 +286,48 @@ export function PrsView() {
           </ul>
         </Glass>
       )}
+      <button
+        className="glass-pane flex items-center gap-3 rounded-orv-md p-3 text-left hover:bg-orv-track"
+        onClick={() => setAddToken(true)}
+      >
+        <Building2 size={18} className="text-orv-accent" aria-hidden />
+        <span className="flex-1">
+          <span className="block text-[14px] font-semibold">Missing PRs from your company?</span>
+          <span className="block text-[12px] text-orv-muted">
+            A GitHub token sees one owner. Add one for that organisation — PRs from your fork show up too.
+          </span>
+        </span>
+        <Plus size={16} className="text-orv-muted" aria-hidden />
+      </button>
       <PrPingsSheet open={pings} onClose={() => setPings(false)} />
+      <TokenSheet
+        provider={addToken ? GITHUB : null}
+        onClose={() => setAddToken(false)}
+        onDone={async (account) => {
+          setAddToken(false);
+          toast({ title: 'GitHub connected', body: account, tone: 'success' });
+          invalidate('github.');
+          await prs.reload();
+        }}
+      />
     </div>
   );
 }
 
+const GITHUB: Provider = {
+  id: 'github',
+  name: 'GitHub',
+  gives: ['Another organisation’s pull requests, reviews and issues'],
+  how: 'token',
+  available: true,
+  tokenHelp:
+    'github.com → Settings → Developer settings → Fine-grained token → Resource owner: your company’s organisation. Permissions: Pull requests read, Issues read & write, Commit statuses read.',
+};
+
 export function PrPingsSheet({ open, onClose }: { open: boolean; onClose(): void }) {
   const conns = useConnectionsCached();
   const toast = useToast();
-  const [p, setP] = useState({ merged: true, changes: true, approved: false });
+  const [p, setP] = useState({ merged: true, changes: true, approved: false, reviewTasks: true });
   return (
     <Sheet
       open={open}
@@ -319,6 +372,19 @@ export function PrPingsSheet({ open, onClose }: { open: boolean; onClose(): void
             />
           </div>
         ))}
+        <div className="flex items-center justify-between gap-3 border-t border-orv-hairline pt-3">
+          <span>
+            <span className="block text-[15px] font-medium">Add review requests to my tasks</span>
+            <span className="block text-[12px] text-orv-muted">
+              Dated the day the PR was opened; ticked off once you’ve reviewed
+            </span>
+          </span>
+          <Switch
+            label="Add review requests to my tasks"
+            checked={p.reviewTasks}
+            onChange={(v) => setP({ ...p, reviewTasks: v })}
+          />
+        </div>
       </div>
     </Sheet>
   );

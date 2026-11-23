@@ -816,6 +816,16 @@ class _Calendars extends ConsumerWidget {
             AsyncError() => [Text('Couldn’t load your calendars.', style: OrvText.muted(l))],
             _ => [const SizedBox(height: 24)],
           },
+          if (calendars.any((c) => c.holiday && c.visible))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: OrvButton(
+                label: 'Hide public holidays',
+                icon: LucideIcons.eyeOff,
+                variant: ButtonVariant.ghost,
+                onPressed: () => actions.hideHolidays(calendars),
+              ),
+            ),
           OrvButton(
             label: (accounts.value?.isNotEmpty ?? false)
                 ? 'Connect another Google account'

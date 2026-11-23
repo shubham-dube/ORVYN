@@ -14,6 +14,9 @@ export const moneyAccounts = pgTable(
     institution: text('institution'),
     currency: text('currency').notNull().default('INR'),
     archived: boolean('archived').notNull().default(false),
+    balanceMinor: bigint('balance_minor', { mode: 'number' }),
+    balanceAt: ts('balance_at'),
+    creditLimitMinor: bigint('credit_limit_minor', { mode: 'number' }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: ts('deleted_at'),
@@ -65,6 +68,10 @@ export const moneyTransactions = pgTable(
     reviewed: boolean('reviewed').notNull().default(true),
     receiptFileId: uuid('receipt_file_id'),
     dropItemId: uuid('drop_item_id'),
+    title: text('title').notNull().default(''),
+    counted: boolean('counted').notNull().default(true),
+    toAccountId: uuid('to_account_id'),
+    iouId: uuid('iou_id'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     deletedAt: ts('deleted_at'),
@@ -92,6 +99,30 @@ export const moneyBudgets = pgTable(
     deletedAt: ts('deleted_at'),
   },
   (t) => [index('money_budgets_owner_idx').on(t.ownerId)],
+);
+
+/** Who owes whom (spec 0014). */
+export const moneyIous = pgTable(
+  'money_ious',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: uuid('owner_id').notNull(),
+    person: text('person').notNull(),
+    direction: text('direction').notNull(),
+    amountMinor: bigint('amount_minor', { mode: 'number' }).notNull(),
+    paidMinor: bigint('paid_minor', { mode: 'number' }).notNull().default(0),
+    currency: text('currency').notNull().default('INR'),
+    note: text('note').notNull().default(''),
+    dueDate: text('due_date'),
+    sure: boolean('sure').notNull().default(true),
+    settledAt: ts('settled_at'),
+    taskId: uuid('task_id'),
+    startedAt: ts('started_at').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: ts('deleted_at'),
+  },
+  (t) => [index('money_ious_owner_idx').on(t.ownerId)],
 );
 
 /** Scheduled money (rent, subscriptions, salary…): the server adds each occurrence on its day, once. */

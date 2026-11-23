@@ -9,6 +9,7 @@ import '../app/state.dart';
 import '../app/today.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
+import '../design/toast.dart';
 import 'sheets.dart';
 import 'task_sheet.dart';
 import 'today_calendar.dart' show EventDraft, EventSheet, labelColour;
@@ -111,6 +112,10 @@ class _ScheduleGroupState extends ConsumerState<ScheduleGroup> with _Ticking {
     final m = ref.watch(todayMeetingsProvider);
     final now = ref.watch(clockProvider)();
     if (m.timed.isEmpty && m.allDay.isEmpty) return const SizedBox.shrink();
+    final holidayIds = {
+      for (final c in ref.watch(calendarsProvider).value ?? const <CalendarItem>[])
+        if (c.holiday) c.id,
+    };
     final ended = m.timed.where((x) => x.stateAt(now) == MeetingState.ended).toList();
     final ahead = m.timed.where((x) => x.stateAt(now) != MeetingState.ended).toList();
     return GroupCard(
@@ -127,20 +132,7 @@ class _ScheduleGroupState extends ConsumerState<ScheduleGroup> with _Ticking {
             child: Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: [
-                for (final a in m.allDay)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: l.accent.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
-                    ),
-                    child: Text(
-                      'All day · ${a.title}',
-                      style: OrvText.muted(l).copyWith(fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-              ],
+              children: [for (final a in m.allDay) _AllDayChip(a, holiday: holidayIds.contains(a.calendarId))],
             ),
           ),
         for (final x in ahead) MeetingRow(meeting: x, now: now),
@@ -470,6 +462,55 @@ class _ScheduleStripState extends ConsumerState<ScheduleStrip> with _Ticking {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// An all-day chip. A public holiday carries a small "hide" mark: one tap hides every holiday calendar.
+class _AllDayChip extends ConsumerWidget {
+  const _AllDayChip(this.a, {required this.holiday});
+  final Instance a;
+  final bool holiday;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final chip = Container(
+      padding: EdgeInsets.fromLTRB(9, 3, holiday ? 6 : 9, 3),
+      decoration: BoxDecoration(
+        color: (holiday ? l.c.warning : l.accent).withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (holiday) ...[Icon(LucideIcons.partyPopper, size: 12, color: l.c.warning), const SizedBox(width: 5)],
+          Text(
+            holiday ? a.title : 'All day · ${a.title}',
+            style: OrvText.muted(l).copyWith(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          if (holiday) ...[const SizedBox(width: 4), Icon(LucideIcons.eyeOff, size: 12, color: l.c.faint)],
+        ],
+      ),
+    );
+    if (!holiday) return chip;
+    return Semantics(
+      container: true,
+      button: true,
+      label: '${a.title}. Hide public holidays',
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: const Key('hide-holidays'),
+        onTap: () async {
+          final toaster = Toaster.of(context);
+          final cals = ref.read(calendarsProvider).value ?? const <CalendarItem>[];
+          final n = await ref.read(calendarActionsProvider).hideHolidays(cals);
+          toaster.show(
+            n == 0 ? 'Holidays are already hidden' : 'Public holidays hidden · turn them back on in Settings',
+            tone: ToastTone.success,
+          );
+        },
+        child: chip,
       ),
     );
   }

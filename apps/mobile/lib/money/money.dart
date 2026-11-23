@@ -12,6 +12,7 @@ const moneyCategory = 'money.category';
 const moneyTransaction = 'money.transaction';
 const moneyBudget = 'money.budget';
 const moneyRecurring = 'money.recurring';
+const moneyIou = 'money.iou';
 
 class TxItem {
   TxItem(this.id, this.data);
@@ -30,6 +31,20 @@ class TxItem {
   String? get dedupeKey => data['dedupeKey'] as String?;
   bool get transfer => data['transfer'] == true;
   bool get reviewed => data['reviewed'] != false;
+
+  /// what it was, in your words ("Dinner with Riya"): shown first; the merchant is who was paid (spec 0014)
+  String get title => (data['title'] as String?) ?? '';
+
+  /// counted as spending/income; false for money that only moves (lending, being paid back, unconfirmed credits)
+  bool get counted => data['counted'] != false;
+  String? get toAccountId => data['toAccountId'] as String?;
+  String? get iouId => data['iouId'] as String?;
+
+  /// left out of spending and income: a transfer between your accounts, or not counted
+  bool get ignored => transfer || !counted;
+
+  /// the name a row shows: your title, else the merchant
+  String get label => title.isNotEmpty ? title : merchant;
 
   Sighting get sighting => Sighting(
     id: id,
@@ -61,6 +76,33 @@ class AccountItem {
   String get kind => (data['kind'] as String?) ?? 'bank';
   String? get last4 => data['last4'] as String?;
   String? get institution => data['institution'] as String?;
+  bool get archived => data['archived'] == true;
+
+  /// cards and loans hold what you owe; the rest hold what you have
+  bool get owed => kind == 'card' || kind == 'loan';
+  int? get balanceMinor => (data['balanceMinor'] as num?)?.toInt();
+  DateTime? get balanceAt => data['balanceAt'] == null ? null : DateTime.parse(data['balanceAt'] as String);
+  int? get creditLimitMinor => (data['creditLimitMinor'] as num?)?.toInt();
+}
+
+/// Who owes whom (spec 0014): money owed to me, or that I owe (borrowed, or holding someone's money).
+class IouItem {
+  IouItem(this.id, this.data);
+  final String id;
+  final Map<String, dynamic> data;
+  String get person => (data['person'] as String?) ?? '';
+  bool get owedToMe => data['direction'] != 'i_owe';
+  int get amountMinor => (data['amountMinor'] as num?)?.toInt() ?? 0;
+  int get paidMinor => (data['paidMinor'] as num?)?.toInt() ?? 0;
+  int get leftMinor => (amountMinor - paidMinor).clamp(0, amountMinor);
+  String get note => (data['note'] as String?) ?? '';
+  String? get dueDate => data['dueDate'] as String?;
+  bool get sure => data['sure'] != false;
+  DateTime? get settledAt => data['settledAt'] == null ? null : DateTime.parse(data['settledAt'] as String).toLocal();
+  bool get open => settledAt == null;
+  String? get taskId => data['taskId'] as String?;
+  DateTime get startedAt =>
+      data['startedAt'] == null ? DateTime(2000) : DateTime.parse(data['startedAt'] as String).toLocal();
 }
 
 class BudgetItem {
@@ -106,6 +148,9 @@ final categoriesProvider = StreamProvider<List<CategoryItem>>(
 final accountsProvider = StreamProvider<List<AccountItem>>((ref) => _watch(ref, moneyAccount, AccountItem.new));
 final budgetsProvider = StreamProvider<List<BudgetItem>>((ref) => _watch(ref, moneyBudget, BudgetItem.new));
 final recurringProvider = StreamProvider<List<RecurringItem>>((ref) => _watch(ref, moneyRecurring, RecurringItem.new));
+final iousProvider = StreamProvider<List<IouItem>>(
+  (ref) => _watch(ref, moneyIou, IouItem.new).map((l) => l..sort((a, b) => b.startedAt.compareTo(a.startedAt))),
+);
 
 String monthKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
 
@@ -114,7 +159,7 @@ String monthKey(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.t
   var spent = 0, earned = 0;
   final by = <String?, int>{};
   for (final t in txs) {
-    if (t.transfer || monthKey(t.occurredAt) != month) continue;
+    if (t.ignored || monthKey(t.occurredAt) != month) continue;
     if (t.credit) {
       earned += t.amountMinor;
     } else {
@@ -282,6 +327,8 @@ class MoneyActions {
       _then(sync.upsert(moneyAccount, fields, id: id));
   Future<String> saveCategory(String? id, Map<String, dynamic> fields) =>
       _then(sync.upsert(moneyCategory, fields, id: id));
+  Future<String> saveIou(String? id, Map<String, dynamic> fields) => _then(sync.upsert(moneyIou, fields, id: id));
+  Future<void> removeIou(String id) => _then(sync.remove(moneyIou, id));
 
   Future<T> _then<T>(Future<T> f) async {
     final r = await f;
@@ -306,6 +353,7 @@ bool txMatches(
   if (w.isEmpty) return true;
   final amount = (t.amountMinor / 100).toString().replaceFirst(RegExp(r'\.0$'), '');
   return [
+    t.title,
     t.merchant,
     t.rawMerchant,
     t.note,

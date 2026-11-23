@@ -82,7 +82,7 @@ int _median(List<int> xs) {
 Map<String, MerchantProfile> merchantProfiles(List<TxItem> txs) {
   final by = <String, List<TxItem>>{};
   for (final t in txs) {
-    if (t.transfer || t.merchant.trim().isEmpty) continue;
+    if (t.ignored || t.merchant.trim().isEmpty) continue;
     final k = merchantKey(t.merchant);
     if (k.isEmpty) continue;
     (by[k] ??= []).add(t);

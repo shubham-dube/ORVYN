@@ -36,7 +36,10 @@ void main() {
     expect(h.server.count('POST /money/setup'), 1);
     await tester.enterText(find.byKey(const Key('money-add')), 'spent 240 on lunch at swiggy');
     await settle(tester);
-    expect(find.text('₹240 · Swiggy · Food & dining'), findsOneWidget);
+    // the preview reads it back as chips: amount, merchant, category
+    for (final chip in ['₹240', 'Swiggy', 'Food & dining']) {
+      expect(find.text(chip), findsOneWidget);
+    }
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
     expect(only(b, 'money.transaction'), containsPair('categoryId', 'c-food'));
@@ -85,7 +88,7 @@ void main() {
       isFalse,
       reason: 'the raw message never leaves the phone',
     );
-    expect(find.text('New · 1'), findsOneWidget);
+    expect(find.text('NEW · 1'), findsOneWidget);
 
     // later, while open: arrives and is added right away
     h.capture.deliver(
@@ -99,7 +102,7 @@ void main() {
     );
     await settle(tester, 20);
     expect(b.rows.values.where((r) => r['merchant'] == 'Uber'), hasLength(1));
-    await tapIt(tester, find.byTooltip('Looks right: Uber'));
+    await tapIt(tester, find.bySemanticsLabel('Looks right: Uber'));
     expect(b.rows.values.firstWhere((r) => r['merchant'] == 'Uber')['reviewed'], true);
     await finish(tester);
   });
@@ -109,15 +112,21 @@ void main() {
     final b = await openMoney(tester, h);
     await tapIt(tester, find.text('Turn on'));
     expect(h.capture.settingsOpened, 1);
+    tester.view.physicalSize = const Size(1080, 4800);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
 
     await tester.enterText(find.byKey(const Key('money-add')), 'uber 180');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
     await tapIt(tester, find.text('Uber').last);
-    await tester.enterText(find.widgetWithText(TextField, 'Uber'), 'Uber to airport');
-    await tapIt(tester, find.text('Save'));
-    expect(only(b, 'money.transaction'), containsPair('merchant', 'Uber to airport'));
-    await tapIt(tester, find.text('Uber to airport').last);
+    await tester.enterText(find.byKey(const Key('money-title')), 'To the airport');
+    await tapIt(tester, find.byKey(const Key('money-save')));
+    // the title leads the row; the merchant stays underneath
+    expect(only(b, 'money.transaction'), containsPair('title', 'To the airport'));
+    expect(only(b, 'money.transaction'), containsPair('merchant', 'Uber'));
+    await tapIt(tester, find.text('To the airport').last);
+    await tapIt(tester, find.byTooltip('Delete payment'));
     await tapIt(tester, find.text('Delete'));
     expect(b.deleted.where((k) => k.startsWith('money.transaction/')), hasLength(1));
     await finish(tester);

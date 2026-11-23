@@ -4,6 +4,8 @@ import {
   BudgetFields,
   CategoryFields,
   MONEY_ACCOUNT,
+  MONEY_IOU,
+  IouFields,
   MONEY_BUDGET,
   MONEY_RECURRING,
   RecurringFields,
@@ -21,6 +23,7 @@ import {
   moneyAccounts,
   moneyBudgets,
   moneyCategories,
+  moneyIous,
   moneyRecurring,
   moneyTransactions,
 } from './money.schema';
@@ -46,7 +49,22 @@ class MoneyEntities implements OnModuleInit {
 
   onModuleInit(): void {
     this.registry.register(
-      tableEntity({ name: MONEY_ACCOUNT, entitlement: 'money', table: moneyAccounts, schema: AccountFields }),
+      tableEntity({
+        name: MONEY_ACCOUNT,
+        entitlement: 'money',
+        table: moneyAccounts,
+        schema: AccountFields,
+        timestamps: ['balanceAt'],
+      }),
+    );
+    this.registry.register(
+      tableEntity({
+        name: MONEY_IOU,
+        entitlement: 'money',
+        table: moneyIous,
+        schema: IouFields,
+        timestamps: ['settledAt', 'startedAt'],
+      }),
     );
     this.registry.register(
       tableEntity({
@@ -91,6 +109,8 @@ class MoneyEntities implements OnModuleInit {
         validate: async (tx, ownerId, f, id) => {
           await mine(tx, moneyCategories, ownerId, f.categoryId, 'category');
           await mine(tx, moneyAccounts, ownerId, f.accountId, 'account');
+          await mine(tx, moneyAccounts, ownerId, f.toAccountId, 'account');
+          await mine(tx, moneyIous, ownerId, f.iouId, 'debt');
           if (typeof f.dedupeKey === 'string') {
             const [dup] = await tx
               .select({ id: moneyTransactions.id })

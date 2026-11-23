@@ -298,6 +298,17 @@ class FromYourToolsSection extends ConsumerWidget {
     final api = ref.read(apiProvider);
     final open = ref.read(urlOpenerProvider);
     final now = ref.watch(clockProvider)();
+    int need(Map<String, dynamic> p) => p['review'] == 'changes'
+        ? 0
+        : p['checks'] == 'failing'
+        ? 1
+        : p['review'] == 'approved'
+        ? 2
+        : 3;
+    final mine = [
+      for (final p in prs.value ?? const <Map<String, dynamic>>[])
+        if (p['state'] == 'open') p,
+    ]..sort((a, b) => need(a).compareTo(need(b)));
 
     return GroupCard(
       children: [
@@ -328,7 +339,19 @@ class FromYourToolsSection extends ConsumerWidget {
             ),
           ),
         ),
+        // spec 0014: my open PRs right here, the ones that need me first (changes asked, failing, approved to merge)
+        for (final p in mine.take(3)) PrRow(pr: p, now: now),
+        if (mine.length > 3)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 0, 6, 4),
+            child: Text('+${mine.length - 3} more in My pull requests', style: OrvText.muted(l).copyWith(fontSize: 12)),
+          ),
         if (!work.hasValue && work.isLoading) const SkeletonRows(count: 1, dense: true),
+        if (reviews.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 10, 6, 2),
+            child: Text('WAITING FOR YOUR REVIEW', style: OrvText.label(l)),
+          ),
         for (final w in reviews.take(5)) PrRow(pr: {...w, 'state': 'open'}, now: now, review: true),
         for (final w in issues.take(5))
           Row(

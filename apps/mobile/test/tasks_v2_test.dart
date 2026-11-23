@@ -59,9 +59,11 @@ void main() {
     await settle(tester);
     await tester.tap(find.bySemanticsLabel('Filters'));
     await settle(tester);
-    await tester.tap(find.widgetWithText(ChoiceChip, '#urgent'));
+    await tester.tap(find.bySemanticsLabel('#urgent'));
     await settle(tester);
-    await tester.tap(find.text('Show tasks'));
+    // the button counts what matches before you close the sheet
+    expect(find.text('Show 1 task'), findsOneWidget);
+    await tester.tap(find.text('Show 1 task'));
     await settle(tester);
     expect(find.bySemanticsLabel('Filters'), findsOneWidget);
     expect(find.text('Buy milk'), findsNothing);

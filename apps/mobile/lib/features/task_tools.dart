@@ -1,12 +1,15 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/state.dart' show clockProvider;
 import '../app/task_query.dart';
 import '../app/today.dart';
 import '../design/controls.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
+import 'today_calendar.dart' show labelColour;
 
 /// How many filters (besides words) are on — shown as a badge on the filter button.
 int filterCount(TaskQuery q) =>
@@ -159,7 +162,6 @@ class _TaskFilterBarState extends ConsumerState<TaskFilterBar> {
   }
 }
 
-/// The filter choices, in a sheet: project, tag, priority and when — each a short row of choices.
 class TaskFilterSheet extends ConsumerStatefulWidget {
   const TaskFilterSheet({super.key, required this.query, required this.onChanged, required this.tasks});
   final TaskQuery query;
@@ -169,10 +171,13 @@ class TaskFilterSheet extends ConsumerStatefulWidget {
   ConsumerState<TaskFilterSheet> createState() => _TaskFilterSheetState();
 }
 
+/// Filter tasks (spec 0014 redesign): when as six tiles, priority as a switch, projects and tags as pills, and the
+/// button says how many match.
 class _TaskFilterSheetState extends ConsumerState<TaskFilterSheet> {
   late TaskQuery _q = widget.query;
 
   void _set(TaskQuery q) {
+    HapticFeedback.selectionClick();
     setState(() => _q = q);
     widget.onChanged(q);
   }
@@ -182,87 +187,235 @@ class _TaskFilterSheetState extends ConsumerState<TaskFilterSheet> {
     final l = context.orv;
     final projects = ref.watch(projectsProvider).value ?? const <ProjectItem>[];
     final tags = allTags(widget.tasks);
-
-    Widget group<T>(String label, T value, List<(T, String)> options, ValueChanged<T> pick) => Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionLabel(label),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final (v, t) in options)
-                ChoiceChip(
-                  label: Text(t),
-                  selected: value == v,
-                  showCheckmark: false,
-                  onSelected: (_) => pick(v),
-                  selectedColor: l.accent.withValues(alpha: 0.16),
-                  side: BorderSide(color: value == v ? l.accent : l.c.edge),
-                  backgroundColor: Colors.transparent,
-                ),
-            ],
-          ),
-        ],
-      ),
+    final now = ref.watch(clockProvider)();
+    final n = widget.tasks.where((t) => t.completedAt == null && taskMatches(t, _q, now)).length;
+    Widget label(String s) => Padding(
+      padding: const EdgeInsets.fromLTRB(2, 14, 2, 8),
+      child: Text(s.toUpperCase(), style: OrvText.label(l)),
     );
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text('Filter tasks', style: OrvText.heading(l))),
-              if (filterCount(_q) > 0)
-                TextButton(
-                  onPressed: () => _set(TaskQuery(text: _q.text)),
-                  child: const Text('Reset'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Flexible(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  group<String>('When', _q.when, const [
-                    ('any', 'Any time'),
-                    ('overdue', 'Overdue'),
-                    ('today', 'Today'),
-                    ('week', 'Next 7 days'),
-                    ('later', 'Later'),
-                    ('none', 'No date'),
-                  ], (v) => _set(_q.copy(when: v))),
-                  group<String?>('Project', _q.projectId, [
-                    (null, 'All projects'),
-                    ('none', 'No project'),
-                    for (final p in projects) (p.id, p.name),
-                  ], (v) => _set(_q.copy(projectId: v))),
-                  if (tags.isNotEmpty)
-                    group<String?>('Tag', _q.tag, [
-                      (null, 'Any tag'),
-                      for (final t in tags) (t, '#$t'),
-                    ], (v) => _set(_q.copy(tag: v))),
-                  group<int>('Priority', _q.minPriority, const [
-                    (0, 'Any priority'),
-                    (1, 'Low and up'),
-                    (2, 'Medium and up'),
-                    (3, 'High only'),
-                  ], (v) => _set(_q.copy(minPriority: v))),
+    Widget pill(String text, bool on, VoidCallback tap, {Color? dot}) => Padding(
+      padding: const EdgeInsets.only(right: 6, bottom: 6),
+      child: Semantics(
+        container: true,
+        button: true,
+        selected: on,
+        label: text,
+        excludeSemantics: true,
+        child: GestureDetector(
+          onTap: tap,
+          child: AnimatedContainer(
+            duration: OrvTokens.durationFast,
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: on ? l.accent.withValues(alpha: l.dark ? 0.2 : 0.12) : Colors.transparent,
+              borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+              border: Border.all(color: on ? l.accent.withValues(alpha: 0.6) : l.c.edge),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (dot != null) ...[
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 6),
                 ],
-              ),
+                Text(
+                  text,
+                  style: OrvText.body(l).copyWith(
+                    fontSize: 13,
+                    fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                    color: on ? l.accent : l.c.text,
+                  ),
+                ),
+              ],
             ),
           ),
-          OrvButton(label: 'Show tasks', variant: ButtonVariant.primary, onPressed: () => Navigator.of(context).pop()),
-        ],
+        ),
       ),
+    );
+    const when = [
+      ('any', 'Any time', LucideIcons.infinity),
+      ('overdue', 'Overdue', LucideIcons.alarmClock),
+      ('today', 'Today', LucideIcons.sun),
+      ('week', 'Next 7 days', LucideIcons.calendarRange),
+      ('later', 'Later', LucideIcons.calendarClock),
+      ('none', 'No date', LucideIcons.inbox),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 10, 0),
+          child: Column(
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(2)),
+              ),
+              Row(
+                children: [
+                  Expanded(child: Text('Filter tasks', style: OrvText.heading(l))),
+                  if (filterCount(_q) > 0)
+                    TextButton(
+                      onPressed: () => _set(TaskQuery(text: _q.text)),
+                      child: const Text('Reset'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                label('When'),
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1.9,
+                  children: [
+                    for (final (v, name, icon) in when)
+                      Semantics(
+                        container: true,
+                        button: true,
+                        selected: _q.when == v,
+                        label: name,
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          onTap: () => _set(_q.copy(when: v)),
+                          child: AnimatedContainer(
+                            duration: OrvTokens.durationFast,
+                            decoration: BoxDecoration(
+                              gradient: _q.when == v ? l.accentGradient : null,
+                              color: _q.when == v ? null : l.c.field,
+                              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                              border: Border.all(color: _q.when == v ? Colors.transparent : l.c.edge),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(icon, size: 17, color: _q.when == v ? Colors.white : l.c.muted),
+                                const SizedBox(height: 3),
+                                Text(
+                                  name,
+                                  style: OrvText.muted(l).copyWith(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _q.when == v ? Colors.white : l.c.text,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                label('Priority'),
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: l.c.track,
+                    borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+                  ),
+                  child: Row(
+                    children: [
+                      for (final (v, name, tone) in [
+                        (0, 'Any', null),
+                        (1, 'Low+', l.c.faint),
+                        (2, 'Medium+', l.c.warning),
+                        (3, 'High', l.c.danger),
+                      ])
+                        Expanded(
+                          child: Semantics(
+                            container: true,
+                            button: true,
+                            selected: _q.minPriority == v,
+                            label: name,
+                            excludeSemantics: true,
+                            child: GestureDetector(
+                              onTap: () => _set(_q.copy(minPriority: v)),
+                              child: AnimatedContainer(
+                                duration: OrvTokens.durationFast,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: _q.minPriority == v ? l.c.glassStrong : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (tone != null) ...[
+                                      Icon(LucideIcons.flag, size: 12, color: tone),
+                                      const SizedBox(width: 4),
+                                    ],
+                                    Text(
+                                      name,
+                                      style: OrvText.body(l).copyWith(
+                                        fontSize: 12.5,
+                                        fontWeight: _q.minPriority == v ? FontWeight.w700 : FontWeight.w500,
+                                        color: _q.minPriority == v ? l.c.text : l.c.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (projects.isNotEmpty) ...[
+                  label('Project'),
+                  Wrap(
+                    children: [
+                      pill('All', _q.projectId == null, () => _set(_q.copy(projectId: null))),
+                      pill('No project', _q.projectId == 'none', () => _set(_q.copy(projectId: 'none'))),
+                      for (final p in projects)
+                        pill(
+                          p.name,
+                          _q.projectId == p.id,
+                          () => _set(_q.copy(projectId: _q.projectId == p.id ? null : p.id)),
+                          dot: labelColour(l, p.colour),
+                        ),
+                    ],
+                  ),
+                ],
+                if (tags.isNotEmpty) ...[
+                  label('Tag'),
+                  Wrap(
+                    children: [
+                      for (final t in tags) pill('#$t', _q.tag == t, () => _set(_q.copy(tag: _q.tag == t ? null : t))),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+          child: OrvButton(
+            label: n == 0 ? 'Nothing matches' : 'Show $n ${n == 1 ? 'task' : 'tasks'}',
+            variant: ButtonVariant.primary,
+            expand: true,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+      ],
     );
   }
 }

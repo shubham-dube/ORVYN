@@ -226,6 +226,39 @@ void main() {
     await finish(tester);
   });
 
+  testWidgets('public holidays from four Google accounts show once, and one tap hides them all (spec 0014)', (
+    tester,
+  ) async {
+    final h = AppHarness()..signedInAs(userJson(ent: ['today']));
+    final b = await openToday(tester, h, (b) {
+      for (final n in [1, 2, 3, 4]) {
+        seed(b, 'today.calendar', 'hol$n', {
+          'name': 'Holidays in India',
+          'colour': 'amber',
+          'visible': true,
+          'externalId': 'en.indian#holiday@group.v.calendar.google.com',
+        });
+        seed(b, 'today.event', 'gn$n', {
+          'title': 'Guru Nanak Jayanti',
+          'allDay': true,
+          'startDate': '2026-11-16',
+          'endDate': '2026-11-17',
+          'calendarId': 'hol$n',
+        });
+      }
+      seed(b, 'today.calendar', 'cal', {'name': 'Work', 'colour': 'violet', 'visible': true});
+    });
+    expect(find.text('Guru Nanak Jayanti'), findsOneWidget, reason: 'the same holiday from four calendars is one');
+    await tapIt(tester, find.byKey(const Key('hide-holidays')));
+    await settle(tester, 30);
+    for (final n in [1, 2, 3, 4]) {
+      expect(b.rows['today.calendar/hol$n']!['visible'], false);
+    }
+    expect(b.rows['today.calendar/cal']!['visible'], true, reason: 'only holiday calendars');
+    expect(find.text('Guru Nanak Jayanti'), findsNothing);
+    await finish(tester);
+  });
+
   testWidgets('quick add: no day written → the Inbox chip; ⤢ opens the full form with what was typed', (tester) async {
     final h = AppHarness()..signedInAs(userJson(ent: ['today']));
     h.server.on(

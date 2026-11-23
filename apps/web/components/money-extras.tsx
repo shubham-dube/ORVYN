@@ -45,6 +45,11 @@ interface Draft {
   note: string;
   rrule: string;
   mode: 'add' | 'remind';
+  /** what it was for — leads the row (spec 0014) */
+  title?: string;
+  /** between you and someone: '' just mine, 'lent' / 'borrowed' a new debt, 'settle:<iouId>' paying one off */
+  between?: string;
+  person?: string;
 }
 
 /**
@@ -63,7 +68,7 @@ export function AddTransactionSheet({
   seed?: Partial<Draft>;
   recurring?: Recurring | null;
 }) {
-  const { categories, accounts, addTransaction, saveRecurring } = useMoney();
+  const { categories, accounts, addTransaction, saveRecurring, ious, saveIou } = useMoney();
   const toast = useToast();
   const tz = zone();
   const today = dayOf(new Date(), tz);
@@ -170,13 +175,38 @@ export function AddTransactionSheet({
       toast({ title: 'Scheduled', body: describeSpec(parseRepeat(d.rrule)!), tone: 'success' });
     } else {
       const at = occurredAtFor({ date: d.date, time: d.time || null }, new Date(), tz);
+      const between = d.between ?? '';
+      let iouId: string | null = null;
+      if (between === 'lent' || between === 'borrowed') {
+        if (!d.person?.trim()) return setProblem('Who is it with?');
+        iouId = await saveIou(null, {
+          person: d.person.trim(),
+          direction: between === 'lent' ? 'owed_to_me' : 'i_owe',
+          amountMinor,
+          note: d.title ?? '',
+          startedAt: at.toISOString(),
+        });
+      } else if (between.startsWith('settle:')) {
+        const debt = ious.find((x) => x.id === between.slice(7));
+        if (debt) {
+          const paid = Math.min(debt.amountMinor, debt.paidMinor + amountMinor);
+          await saveIou(debt.id, {
+            paidMinor: paid,
+            ...(paid >= debt.amountMinor ? { settledAt: new Date().toISOString() } : {}),
+          });
+          iouId = debt.id;
+        }
+      }
       await addTransaction({
         amountMinor,
         direction: d.direction,
-        merchant: d.merchant.trim(),
-        categoryId: cat,
+        title: (d.title ?? '').trim(),
+        merchant: d.merchant.trim() || (iouId ? (d.person ?? '').trim() : ''),
+        categoryId: iouId ? null : cat,
         accountId: acct,
         note: d.note,
+        counted: !iouId,
+        iouId,
         occurredAt: at.toISOString(),
         source: 'manual',
       });
@@ -240,11 +270,72 @@ export function AddTransactionSheet({
             ]}
           />
         </div>
-        <Field label="Merchant or what for">
+        <Field label="What for">
           {(id) => (
-            <Input id={id} value={d.merchant} maxLength={120} onChange={(e) => fill(e.target.value)} />
+            <Input
+              id={id}
+              value={d.title ?? ''}
+              maxLength={120}
+              placeholder="Dinner with Riya"
+              onChange={(e) => set({ title: e.target.value })}
+            />
           )}
         </Field>
+        <Field label={d.direction === 'credit' ? 'From' : 'Paid to'}>
+          {(id) => (
+            <Input
+              id={id}
+              value={d.merchant}
+              maxLength={120}
+              placeholder={d.direction === 'credit' ? 'Who sent it' : 'Shop, person or app'}
+              onChange={(e) => fill(e.target.value)}
+            />
+          )}
+        </Field>
+        {!repeats ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Between you and someone?">
+              {(id) => (
+                <select
+                  id={id}
+                  className={select}
+                  value={d.between ?? ''}
+                  onChange={(e) => set({ between: e.target.value })}
+                >
+                  <option value="">No, it’s just mine</option>
+                  {d.direction === 'debit' ? (
+                    <option value="lent">I lent it / paid for someone</option>
+                  ) : (
+                    <option value="borrowed">I borrowed it / holding it for someone</option>
+                  )}
+                  {ious
+                    .filter(
+                      (x) =>
+                        !x.settledAt && x.direction === (d.direction === 'credit' ? 'owed_to_me' : 'i_owe'),
+                    )
+                    .map((x) => (
+                      <option key={x.id} value={`settle:${x.id}`}>
+                        {d.direction === 'credit' ? `${x.person} paying me back` : `Paying ${x.person} back`}{' '}
+                        ({formatMoney(Math.max(0, x.amountMinor - x.paidMinor))} left)
+                      </option>
+                    ))}
+                </select>
+              )}
+            </Field>
+            {d.between === 'lent' || d.between === 'borrowed' ? (
+              <Field label="Who">
+                {(id) => (
+                  <Input
+                    id={id}
+                    value={d.person ?? ''}
+                    placeholder="Rahul"
+                    onChange={(e) => set({ person: e.target.value })}
+                  />
+                )}
+              </Field>
+            ) : null}
+          </div>
+        ) : null}
         <SmartFill
           merchant={d.merchant}
           amountMinor={toMinor(d.amount)}
@@ -569,13 +660,14 @@ function RepeatingList() {
   );
 }
 
-const ACCOUNT_KINDS: Account['kind'][] = ['bank', 'card', 'upi', 'wallet', 'cash'];
+const ACCOUNT_KINDS: Account['kind'][] = ['bank', 'card', 'upi', 'wallet', 'cash', 'loan'];
 const KIND_LABEL: Record<Account['kind'], string> = {
   bank: 'Bank',
   card: 'Card',
   upi: 'UPI app',
   wallet: 'Wallet',
   cash: 'Cash',
+  loan: 'Loan',
 };
 
 function Accounts() {

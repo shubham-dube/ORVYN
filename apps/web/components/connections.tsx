@@ -35,7 +35,7 @@ export interface Connection {
   lastSyncedAt: string | null;
   problem?: string | null;
 }
-interface Provider {
+export interface Provider {
   id: string;
   name: string;
   gives: string[];
@@ -290,7 +290,7 @@ export function ConnectionsSection() {
   );
 }
 
-function TokenSheet({
+export function TokenSheet({
   provider,
   onClose,
   onDone,

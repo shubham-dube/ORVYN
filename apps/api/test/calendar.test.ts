@@ -69,6 +69,13 @@ beforeAll(async () => {
   ]);
   g.addAccount('asha@work.test', [
     { id: 'asha@work.test', summary: 'Work', primary: true, accessRole: 'owner' },
+    // Google's public holidays, switched on in Google (spec 0014: they arrive hidden in ORVYN)
+    {
+      id: 'en.indian#holiday@group.v.calendar.google.com',
+      summary: 'Holidays in India',
+      selected: true,
+      accessRole: 'reader',
+    },
   ]);
   const tz = { timeZone: 'Asia/Kolkata' };
   g.put('asha@gmail.test', 'asha@gmail.test', {
@@ -156,7 +163,11 @@ describe('connecting Google accounts (D15: several per person)', () => {
       ['asha@work.test', 'active'],
     ]);
     const m = await mirror();
-    expect(m.calendars).toHaveLength(3);
+    expect(m.calendars).toHaveLength(4);
+    // a public-holiday calendar comes hidden even when Google shows it: one per account would repeat every holiday
+    expect(
+      m.calendars.find((c) => c.externalId === 'en.indian#holiday@group.v.calendar.google.com'),
+    ).toMatchObject({ visible: false });
     expect(m.events.filter((e) => e.title === 'Dentist')).toHaveLength(1);
     expect(m.events.filter((e) => e.title === 'Standup')).toHaveLength(1);
   });
@@ -336,7 +347,7 @@ describe('when Google stops accepting, and disconnecting', () => {
       (await call(h, 'DELETE', `/calendar/accounts/${gmail.id}`, { token: me.accessToken })).status,
     ).toBe(200);
     const m = await mirror();
-    expect(m.calendars.map((c) => c.name)).toEqual(['Work']);
+    expect(m.calendars.map((c) => c.name).sort()).toEqual(['Holidays in India', 'Work']); // the work account's
     expect(m.events.some((e) => e.title.startsWith('Dentist'))).toBe(false);
     expect(g.revoked.has('rt-asha@gmail.test')).toBe(true);
   });

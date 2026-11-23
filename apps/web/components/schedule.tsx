@@ -2,9 +2,17 @@
 
 import type { CalEvent } from '@orvyn/contracts';
 import { expandEvents, type Instance } from '@orvyn/today-plan';
-import { CalendarClock, ChevronDown, ChevronUp, EllipsisVertical, Video } from 'lucide-react';
+import {
+  CalendarClock,
+  ChevronDown,
+  ChevronUp,
+  EllipsisVertical,
+  EyeOff,
+  PartyPopper,
+  Video,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Glass, Label } from '@/components/ui/bits';
+import { Glass, Label, useToast } from '@/components/ui/bits';
 import { cn } from '@/lib/cn';
 import { localDay, useToday } from '@/lib/today';
 import { hm, joinLink } from '@/lib/work';
@@ -72,9 +80,23 @@ export function useTodayMeetings() {
   }, [events, calendars, day]);
 }
 
+/** Google's public-holiday calendars: one per connected account, so the same holiday shows up once per account. */
+export const HOLIDAYS = /#holiday@group\.v\.calendar\.google\.com$/;
+
 export function ScheduleGroup({ onFollowUp }: { onFollowUp(title: string): void }) {
   const { timed, allDay } = useTodayMeetings();
-  const { events } = useToday();
+  const { events, calendars, saveCalendar } = useToday();
+  const toast = useToast();
+  const holiday = new Set(calendars.filter((c) => HOLIDAYS.test(c.externalId ?? '')).map((c) => c.id));
+  const hideHolidays = async () => {
+    for (const c of calendars.filter((c) => holiday.has(c.id) && c.visible))
+      await saveCalendar(c.id, { visible: false });
+    toast({
+      title: 'Public holidays hidden',
+      body: 'Turn them back on in Settings → Calendars',
+      tone: 'success',
+    });
+  };
   const now = useNow();
   const [showEnded, setShowEnded] = useState(false);
   const [draft, setDraft] = useState<EventDraft | null>(null);
@@ -93,14 +115,28 @@ export function ScheduleGroup({ onFollowUp }: { onFollowUp(title: string): void 
       </div>
       {allDay.length ? (
         <div className="mb-1 flex flex-wrap gap-1.5 px-1">
-          {allDay.map((a) => (
-            <span
-              key={`${a.eventId}-${a.occurrence}`}
-              className="rounded-full bg-[color-mix(in_srgb,var(--orv-accent)_10%,transparent)] px-2.5 py-0.5 text-[12px] font-semibold"
-            >
-              All day · {a.title}
-            </span>
-          ))}
+          {allDay.map((a) =>
+            a.calendarId && holiday.has(a.calendarId) ? (
+              <button
+                key={`${a.eventId}-${a.occurrence}`}
+                onClick={() => void hideHolidays()}
+                title="Hide public holidays"
+                aria-label={`${a.title}. Hide public holidays`}
+                className="group flex items-center gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--orv-warning)_12%,transparent)] px-2.5 py-0.5 text-[12px] font-semibold"
+              >
+                <PartyPopper size={12} className="text-orv-warning" aria-hidden />
+                {a.title}
+                <EyeOff size={12} className="text-orv-faint group-hover:text-orv-text" aria-hidden />
+              </button>
+            ) : (
+              <span
+                key={`${a.eventId}-${a.occurrence}`}
+                className="rounded-full bg-[color-mix(in_srgb,var(--orv-accent)_10%,transparent)] px-2.5 py-0.5 text-[12px] font-semibold"
+              >
+                All day · {a.title}
+              </span>
+            ),
+          )}
         </div>
       ) : null}
       <ul className="flex flex-col gap-0.5">

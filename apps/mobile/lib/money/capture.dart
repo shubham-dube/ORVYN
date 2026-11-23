@@ -157,6 +157,8 @@ Future<int> processCaptured(SyncClient sync, List<Captured> items) async {
       'dedupeKey': m.dedupeKey,
       'refNo': m.refNo,
       'reviewed': false,
+      // money in isn't income until you say so (spec 0014); money out counts
+      'counted': m.direction == 'debit',
     });
     seen.add(
       Sighting(

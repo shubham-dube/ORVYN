@@ -1,12 +1,13 @@
 'use client';
 
 import { PROJECT_COLOURS } from '@orvyn/contracts';
-import { CalendarDays, Plus, RefreshCw, Unplug } from 'lucide-react';
+import { CalendarDays, EyeOff, Plus, RefreshCw, Unplug } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Glass, Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { api, ApiError } from '@/lib/api';
 import { useToday } from '@/lib/today';
+import { HOLIDAYS } from './schedule';
 
 interface Account {
   id: string;
@@ -177,7 +178,18 @@ export function CalendarAccounts() {
           })}
         </ul>
       )}
-      <div>
+      <div className="flex flex-wrap gap-2">
+        {calendars.some((c) => c.visible && HOLIDAYS.test(c.externalId ?? '')) ? (
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              for (const c of calendars.filter((c) => c.visible && HOLIDAYS.test(c.externalId ?? '')))
+                await saveCalendar(c.id, { visible: false });
+            }}
+          >
+            <EyeOff size={14} /> Hide public holidays
+          </Button>
+        ) : null}
         <Button onClick={() => void connect()} loading={busy === 'connect'}>
           <Plus size={14} />{' '}
           {accounts?.length ? 'Connect another Google account' : 'Connect a Google account'}

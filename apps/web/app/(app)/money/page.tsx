@@ -2,7 +2,6 @@
 
 import { type Category, formatMoney, type Transaction } from '@orvyn/contracts';
 import {
-  budgetProgress,
   occurredAtFor,
   monthOf,
   monthStory,
@@ -52,6 +51,7 @@ import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
 import { AddTransactionSheet, ManageSheet, transactionsCsv } from '@/components/money-extras';
 import { InsightsPanel, MerchantSheet } from '@/components/money-brain';
+import { HandCard, PeopleCard } from '@/components/money-hand';
 import { cn } from '@/lib/cn';
 import { useMoney } from '@/lib/money';
 
@@ -92,7 +92,7 @@ export default function MoneyPage() {
 }
 
 function MoneyView() {
-  const { ready, transactions, categories, budgets, updateTransaction } = useMoney();
+  const { ready, transactions, categories, updateTransaction } = useMoney();
   const tz = zone();
   const [month, setMonth] = useState(() => monthOf(new Date().toISOString(), tz));
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -102,10 +102,14 @@ function MoneyView() {
   const [f, setF] = useState<Filters>(NO_FILTERS);
   const { accounts } = useMoney();
   const cat = (id: string | null) => categories.find((c) => c.id === id);
-  const s = useMemo(() => summarise(transactions, month, tz), [transactions, month, tz]);
-  const story = useMemo(() => monthStory(transactions, month, tz), [transactions, month, tz]);
-  const subs = useMemo(() => subscriptions(transactions, month, tz), [transactions, month, tz]);
-  const progress = useMemo(() => budgetProgress(budgets, s), [budgets, s]);
+  // money that only moves (lent, paid back, a credit you said isn't income) stays out of every sum (spec 0014)
+  const counting = useMemo(
+    () => transactions.map((t) => (t.counted ? t : { ...t, transfer: true })),
+    [transactions],
+  );
+  const s = useMemo(() => summarise(counting, month, tz), [counting, month, tz]);
+  const story = useMemo(() => monthStory(counting, month, tz), [counting, month, tz]);
+  const subs = useMemo(() => subscriptions(counting, month, tz), [counting, month, tz]);
   const fresh = transactions.filter((t) => !t.reviewed);
   const filtering = !!(f.q.trim() || f.category || f.account || f.direction || f.all);
   const inMonth = useMemo(
@@ -116,7 +120,7 @@ function MoneyView() {
     let out = 0,
       inn = 0;
     for (const t of inMonth)
-      if (!t.transfer) {
+      if (!t.transfer && t.counted) {
         if (t.direction === 'credit') inn += t.amountMinor;
         else out += t.amountMinor;
       }
@@ -136,30 +140,37 @@ function MoneyView() {
           <h1 className="text-title font-semibold">Money</h1>
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="Previous month"
-            onClick={() => setMonth(prevMonth(month))}
+          <div
+            className="glass-pane mr-1 flex h-9 items-center !rounded-full p-0.5"
+            role="group"
+            aria-label="Month"
           >
-            <ChevronLeft size={16} />
-          </Button>
-          <Button
-            size="sm"
-            variant={month === thisMonth ? 'secondary' : 'ghost'}
-            onClick={() => setMonth(thisMonth)}
-          >
-            This month
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label="Next month"
-            disabled={month >= thisMonth}
-            onClick={() => setMonth(next(month))}
-          >
-            <ChevronRight size={16} />
-          </Button>
+            <button
+              aria-label="Previous month"
+              onClick={() => setMonth(prevMonth(month))}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-orv-muted transition-colors hover:bg-orv-track hover:text-orv-text"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={() => setMonth(thisMonth)}
+              title={month === thisMonth ? undefined : 'Back to this month'}
+              className={cn(
+                'h-8 min-w-28 rounded-full px-3 text-[13px] font-semibold tabular-nums transition-colors',
+                month === thisMonth ? 'text-orv-text' : 'text-orv-accent hover:bg-orv-track',
+              )}
+            >
+              {month === thisMonth ? 'This month' : monthName(month)}
+            </button>
+            <button
+              aria-label="Next month"
+              disabled={month >= thisMonth}
+              onClick={() => setMonth(next(month))}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-orv-muted transition-colors hover:bg-orv-track hover:text-orv-text disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
           <ImportStatement />
           <Button
             size="sm"
@@ -226,39 +237,9 @@ function MoneyView() {
         <Glass className="p-5">
           <Label>Came in</Label>
           <p className="text-display font-semibold tabular-nums">{formatMoney(s.earnedMinor)}</p>
-          <p className="text-small text-orv-muted">Transfers between your accounts aren’t counted</p>
+          <p className="text-small text-orv-muted">Transfers and money paid back aren’t counted</p>
         </Glass>
-        <Glass className="flex flex-col gap-2 p-5" aria-label="Budgets">
-          <Label>Budgets</Label>
-          {progress.length ? (
-            progress.slice(0, 4).map((b) => (
-              <div key={b.budgetId}>
-                <div className="flex justify-between text-[13px]">
-                  <span>{b.categoryId ? (cat(b.categoryId)?.name ?? 'Category') : 'Everything'}</span>
-                  <span className={cn('tabular-nums', b.ratio > 1 && 'text-orv-danger')}>
-                    {formatMoney(b.usedMinor)} / {formatMoney(b.limitMinor)}
-                  </span>
-                </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-orv-track">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${Math.min(100, b.ratio * 100)}%`,
-                      background:
-                        b.ratio > 1
-                          ? 'var(--orv-danger)'
-                          : b.ratio > 0.8
-                            ? 'var(--orv-warning)'
-                            : 'var(--orv-accent-grad)',
-                    }}
-                  />
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-small text-orv-muted">None yet. Set them below.</p>
-          )}
-        </Glass>
+        <HandCard />
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_320px]">
@@ -288,6 +269,7 @@ function MoneyView() {
         </Glass>
 
         <div className="flex flex-col gap-3">
+          <PeopleCard />
           <Glass className="flex flex-col gap-2 p-4" aria-label="By category">
             <Label>By category</Label>
             {s.byCategory.map((b) => {
@@ -407,12 +389,26 @@ function TxList({
               </span>
               <button className="min-w-0 flex-1 text-left" onClick={() => onOpen(t)}>
                 <span className="block truncate text-[14px] font-medium">
-                  {t.merchant || c?.name || 'Transaction'}
+                  {t.title || t.merchant || c?.name || 'Transaction'}
                 </span>
                 <span className="block truncate text-[12px] text-orv-muted">
-                  {c?.name ?? 'Uncategorised'}
-                  {t.transfer ? ' · transfer' : ''} · {t.source === 'manual' ? 'typed' : t.source}
-                  {fresh ? ` · ${day}` : ''}
+                  {[
+                    t.title && t.merchant ? t.merchant : null,
+                    t.transfer
+                      ? 'moved'
+                      : t.iouId
+                        ? t.direction === 'credit'
+                          ? 'paid back'
+                          : 'lent'
+                        : (c?.name ?? 'Uncategorised'),
+                    t.source === 'manual' ? 'typed' : t.source,
+                    fresh ? day : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  {!t.counted && !t.transfer && !t.iouId ? (
+                    <span className="ml-1 text-orv-faint">· not counted</span>
+                  ) : null}
                 </span>
               </button>
               <span
@@ -424,7 +420,24 @@ function TxList({
                 {t.direction === 'credit' ? '+' : ''}
                 {formatMoney(t.amountMinor, t.currency)}
               </span>
-              {fresh ? (
+              {fresh && t.direction === 'credit' && !t.counted && !t.iouId ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void money.updateTransaction(t.id, { reviewed: true, counted: true })}
+                  >
+                    <Check size={14} /> Count it
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => void money.updateTransaction(t.id, { reviewed: true, counted: false })}
+                  >
+                    Not income
+                  </Button>
+                </>
+              ) : fresh ? (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -472,7 +485,7 @@ function QuickEntry({ onDetails }: { onDetails(): void }) {
             amountMinor: p.amountMinor,
             direction: p.direction,
             merchant: p.merchant,
-            note: p.note,
+            title: quickTitle(p.note, p.merchant),
             categoryId: categoryBySlug(p.category)?.id ?? null,
             occurredAt: when.toISOString(),
             source: 'manual',
@@ -532,8 +545,8 @@ function matches(t: Transaction, f: Filters, cat: (id: string | null) => Categor
   const q = f.q.trim().toLowerCase();
   if (!q) return true;
   const amount = (t.amountMinor / 100).toString();
-  return [t.merchant, t.rawMerchant, t.note, cat(t.categoryId)?.name ?? '', amount, ...t.tags].some((x) =>
-    x.toLowerCase().includes(q.replace(/^₹/, '')),
+  return [t.title, t.merchant, t.rawMerchant, t.note, cat(t.categoryId)?.name ?? '', amount, ...t.tags].some(
+    (x) => x.toLowerCase().includes(q.replace(/^₹/, '')),
   );
 }
 
@@ -632,11 +645,13 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
     await updateTransaction(d.id, {
       amountMinor: d.amountMinor,
       direction: d.direction,
+      title: d.title,
       merchant: d.merchant,
       categoryId: d.categoryId,
       accountId: d.accountId,
       note: d.note,
       transfer: d.transfer,
+      counted: d.counted,
       occurredAt: d.occurredAt,
       reviewed: true,
     });
@@ -705,7 +720,18 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
               ]}
             />
           </div>
-          <Field label="Merchant">
+          <Field label="Title" hint="What it was for — shown first in the list">
+            {(id) => (
+              <Input
+                id={id}
+                value={d.title}
+                maxLength={120}
+                placeholder="Dinner with Riya"
+                onChange={(e) => setD({ ...d, title: e.target.value })}
+              />
+            )}
+          </Field>
+          <Field label={d.direction === 'credit' ? 'From' : 'Paid to'}>
             {(id) => (
               <Input
                 id={id}
@@ -776,6 +802,21 @@ function TxSheet({ tx, onClose }: { tx: Transaction | null; onClose(): void }) {
               />
             )}
           </Field>
+          {!d.transfer ? (
+            <div className="flex items-center justify-between">
+              <span className="text-[14px]">
+                {d.direction === 'credit' ? 'Counts as income' : 'Counts as spending'}
+                <span className="block text-[12px] text-orv-muted">
+                  Off for money paid back or held for someone
+                </span>
+              </span>
+              <Switch
+                checked={d.counted}
+                onChange={(v) => setD({ ...d, counted: v })}
+                label={d.direction === 'credit' ? 'Counts as income' : 'Counts as spending'}
+              />
+            </div>
+          ) : null}
           <div className="flex items-center justify-between">
             <span className="text-[14px]">Between my own accounts (not spending)</span>
             <Switch
@@ -970,4 +1011,11 @@ function ImportStatement() {
       </Sheet>
     </>
   );
+}
+
+/** The title a typed entry gets: what it was for ("Lunch"), not a repeat of the merchant ("uber"). */
+function quickTitle(note: string, merchant: string): string {
+  const n = note.trim();
+  if (!n || n.toLowerCase() === merchant.trim().toLowerCase()) return '';
+  return n[0]!.toUpperCase() + n.slice(1);
 }

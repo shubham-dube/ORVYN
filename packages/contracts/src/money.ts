@@ -11,10 +11,12 @@ export const MONEY_CATEGORY = 'money.category';
 export const MONEY_TRANSACTION = 'money.transaction';
 export const MONEY_BUDGET = 'money.budget';
 export const MONEY_RECURRING = 'money.recurring';
+export const MONEY_IOU = 'money.iou';
 
 export const AccountFields = z.object({
   name: z.string().trim().min(1).max(80),
-  kind: z.enum(['bank', 'card', 'upi', 'wallet', 'cash']).default('bank'),
+  /** card and loan accounts hold what you owe; the others hold what you have */
+  kind: z.enum(['bank', 'card', 'upi', 'wallet', 'cash', 'loan']).default('bank'),
   /** last digits as the bank prints them (XX1234 → "1234") — never a full number */
   last4: z
     .string()
@@ -24,6 +26,14 @@ export const AccountFields = z.object({
   institution: z.string().max(40).nullable().default(null),
   currency: currency.default('INR'),
   archived: z.boolean().default(false),
+  /**
+   * The balance as you last checked it (spec 0014): money in it for bank/cash/wallet/UPI, what you owe on it for a
+   * card or a loan. Payments on the account after `balanceAt` move it from there. Null = not told yet.
+   */
+  balanceMinor: z.number().int().min(-1_000_000_000_00).max(1_000_000_000_00).nullable().default(null),
+  balanceAt: isoDateTime.nullable().default(null),
+  /** a card's credit limit, for what's still available */
+  creditLimitMinor: z.number().int().min(0).max(1_000_000_000_00).nullable().default(null),
 });
 export type AccountFields = z.infer<typeof AccountFields>;
 export type Account = AccountFields & { id: string };
@@ -76,6 +86,17 @@ export const TransactionFields = z.object({
   reviewed: z.boolean().default(true),
   receiptFileId: z.string().uuid().nullable().default(null),
   dropItemId: z.string().uuid().nullable().default(null),
+  /** what it was, in your words ("Dinner with Riya") — shown first; the merchant is who was paid (spec 0014) */
+  title: z.string().trim().max(120).default(''),
+  /**
+   * Counted as spending or income. False for money that only moves: lending, being paid back, paying for someone,
+   * a credit you haven't confirmed yet (captured credits wait for a yes). Balances still move.
+   */
+  counted: z.boolean().default(true),
+  /** a transfer between your own accounts: where it went (paying a card's bill from the bank) */
+  toAccountId: z.string().uuid().nullable().default(null),
+  /** the debt this payment lends, borrows or settles */
+  iouId: z.string().uuid().nullable().default(null),
 });
 export type TransactionFields = z.infer<typeof TransactionFields>;
 export type Transaction = TransactionFields & { id: string };
@@ -128,6 +149,35 @@ export const RecurringFields = z.object({
 });
 export type RecurringFields = z.infer<typeof RecurringFields>;
 export type Recurring = RecurringFields & { id: string };
+
+/**
+ * Who owes whom (spec 0014): money you lent or paid for someone ("owed_to_me"), or borrowed / are holding for
+ * someone ("i_owe"). Payments with `iouId` settle it; a due day can add a task to Today.
+ */
+export const IouFields = z.object({
+  person: z.string().trim().min(1).max(80),
+  direction: z.enum(['owed_to_me', 'i_owe']),
+  amountMinor: z.number().int().positive().max(1_000_000_000_00),
+  /** paid back so far */
+  paidMinor: z.number().int().min(0).max(1_000_000_000_00).default(0),
+  currency: currency.default('INR'),
+  note: z.string().max(2000).default(''),
+  /** YYYY-MM-DD it's due, if agreed */
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .default(null),
+  /** counted in "what's in my hand" as money that will definitely come */
+  sure: z.boolean().default(true),
+  settledAt: isoDateTime.nullable().default(null),
+  /** the reminder task in Today */
+  taskId: z.string().uuid().nullable().default(null),
+  /** when it started */
+  startedAt: isoDateTime,
+});
+export type IouFields = z.infer<typeof IouFields>;
+export type Iou = IouFields & { id: string };
 
 /** Starting categories, created once per person (they can rename, recolour, hide or add). */
 export const DEFAULT_CATEGORIES: {

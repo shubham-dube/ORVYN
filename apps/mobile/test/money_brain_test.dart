@@ -97,12 +97,12 @@ void main() {
     h.server.on('GET /money/insights', (_) => const Reply(404));
     final b = await openMoney(tester, h);
     await tapIt(tester, find.byTooltip('Add with details'));
-    await tester.enterText(find.widgetWithText(TextField, '').at(1), 'blu');
+    await tester.enterText(find.byKey(const Key('money-merchant')), 'blu');
     await settle(tester);
     expect(find.byKey(const Key('smart-blue tokai')), findsOneWidget);
     await tapIt(tester, find.byKey(const Key('smart-blue tokai')));
     expect(find.text('Like your last 3 at Blue Tokai'), findsOneWidget);
-    await tapIt(tester, find.text('Add'));
+    await tapIt(tester, find.byKey(const Key('money-save')));
     final added = b.rows.entries
         .where((e) => e.key.startsWith('money.transaction/') && !e.key.contains('/h') && !e.key.endsWith('loose'))
         .single

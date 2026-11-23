@@ -7,3 +7,4 @@ export * from './dates';
 export * from './review';
 export * from './split';
 export * from './brain';
+export * from './hand';

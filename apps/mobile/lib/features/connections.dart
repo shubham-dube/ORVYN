@@ -175,13 +175,13 @@ class ConnectionsPanel extends ConsumerWidget {
               label: 'ClickUp',
               icon: LucideIcons.plus,
               small: true,
-              onPressed: () => showGlassSheet<void>(context, (_) => const _TokenSheet(provider: 'clickup')),
+              onPressed: () => showGlassSheet<void>(context, (_) => const TokenSheet(provider: 'clickup')),
             ),
             OrvButton(
               label: 'GitHub',
               icon: LucideIcons.plus,
               small: true,
-              onPressed: () => showGlassSheet<void>(context, (_) => const _TokenSheet(provider: 'github')),
+              onPressed: () => showGlassSheet<void>(context, (_) => const TokenSheet(provider: 'github')),
             ),
             OrvButton(
               label: 'Mailbox (Zoho…)',
@@ -234,17 +234,17 @@ class ProviderMark extends StatelessWidget {
 
 const _tokenHelp = {
   'clickup': 'ClickUp → avatar → Settings → Apps → API Token (starts with pk_). Sealed on the server.',
-  'github': 'github.com → Settings → Developer settings → Personal access tokens → Fine-grained. Permissions: Issues read & write, Pull requests read. Sealed on the server.',
+  'github': 'github.com → Settings → Developer settings → Personal access tokens → Fine-grained. Permissions: Issues read & write, Pull requests read. A fine-grained token sees one owner: for your company’s repos (and PRs from your fork into them) add another token with the organisation as resource owner. Sealed on the server.',
 };
 
-class _TokenSheet extends ConsumerStatefulWidget {
-  const _TokenSheet({required this.provider});
+class TokenSheet extends ConsumerStatefulWidget {
+  const TokenSheet({super.key, required this.provider});
   final String provider;
   @override
-  ConsumerState<_TokenSheet> createState() => _TokenSheetState();
+  ConsumerState<TokenSheet> createState() => TokenSheetState();
 }
 
-class _TokenSheetState extends ConsumerState<_TokenSheet> {
+class TokenSheetState extends ConsumerState<TokenSheet> {
   String get _name => widget.provider == 'github' ? 'GitHub' : 'ClickUp';
   final _c = TextEditingController();
   bool _busy = false;

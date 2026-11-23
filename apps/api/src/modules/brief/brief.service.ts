@@ -330,6 +330,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
           isNull(moneyTransactions.deletedAt),
           eq(moneyTransactions.direction, 'debit'),
           eq(moneyTransactions.transfer, false),
+          eq(moneyTransactions.counted, true),
           gte(moneyTransactions.occurredAt, from),
           lt(moneyTransactions.occurredAt, to),
           ...(categoryId ? [eq(moneyTransactions.categoryId, categoryId)] : []),

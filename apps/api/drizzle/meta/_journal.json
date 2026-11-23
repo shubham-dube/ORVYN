@@ -183,6 +183,13 @@
       "when": 1795343463869,
       "tag": "0025_today_refined",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1795378069557,
+      "tag": "0026_money_hand",
+      "breakpoints": true
     }
   ]
 }

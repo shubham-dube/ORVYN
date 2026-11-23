@@ -187,6 +187,42 @@ class _PrsScreenState extends ConsumerState<PrsScreen> {
                           ],
                         },
                       ),
+                    // spec 0014: fine-grained tokens see one owner, so company PRs need their own token
+                    const SizedBox(height: 12),
+                    InkWell(
+                      key: const Key('prs-add-org'),
+                      borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                      onTap: () => showGlassSheet<void>(context, (_) => const TokenSheet(provider: 'github')),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+                          border: Border.all(color: l.c.hairline),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(LucideIcons.building2, size: 18, color: l.accent),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Missing PRs from your company?',
+                                    style: OrvText.body(l).copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+                                  ),
+                                  Text(
+                                    'Add a token for that organisation — PRs from your fork show up too.',
+                                    style: OrvText.muted(l).copyWith(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(LucideIcons.plus, size: 16, color: l.c.muted),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -308,7 +344,7 @@ class PrPingsSheet extends ConsumerStatefulWidget {
 }
 
 class _PrPingsSheetState extends ConsumerState<PrPingsSheet> {
-  final _p = {'merged': true, 'changes': true, 'approved': false};
+  final _p = {'merged': true, 'changes': true, 'approved': false, 'reviewTasks': true};
   bool _busy = false;
 
   Future<void> _save() async {
@@ -351,6 +387,13 @@ class _PrPingsSheetState extends ConsumerState<PrPingsSheet> {
           label: 'is approved',
           value: _p['approved']!,
           onChanged: (v) => setState(() => _p['approved'] = v),
+        ),
+        const SizedBox(height: 8),
+        OrvSwitchRow(
+          label: 'Add review requests to my tasks',
+          subtitle: 'Dated the day the PR was opened; ticked off once you’ve reviewed',
+          value: _p['reviewTasks']!,
+          onChanged: (v) => setState(() => _p['reviewTasks'] = v),
         ),
         const SizedBox(height: 10),
         Text(

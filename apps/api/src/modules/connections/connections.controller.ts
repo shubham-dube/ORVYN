@@ -309,11 +309,21 @@ export class ConnectionsController {
     @Body(
       new ZodPipe(
         Conn.extend({
-          pings: z.object({ merged: z.boolean(), changes: z.boolean(), approved: z.boolean() }).partial(),
+          pings: z
+            .object({
+              merged: z.boolean(),
+              changes: z.boolean(),
+              approved: z.boolean(),
+              reviewTasks: z.boolean(),
+            })
+            .partial(),
         }),
       ),
     )
-    body: { connectionId: string; pings: { merged?: boolean; changes?: boolean; approved?: boolean } },
+    body: {
+      connectionId: string;
+      pings: { merged?: boolean; changes?: boolean; approved?: boolean; reviewTasks?: boolean };
+    },
   ) {
     if (!(await this.c.setGitHubPings(a.userId, body.connectionId, body.pings))) throw notFound();
     return { ok: true };

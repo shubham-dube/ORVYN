@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import { instantAt, parseTask, wallIn } from '@orvyn/today-parse';
@@ -12,6 +13,10 @@ import { TokenBox } from '../calendar/token-box';
 import { googleProblem } from '../calendar/google.client';
 import { ClickUpClient, ClickUpError } from './clickup.client';
 import { ClickUpHub } from './clickup.hub';
+import { TODAY_TASK } from '@orvyn/contracts';
+import { randomUUID } from 'node:crypto';
+import { SERVER_DEVICE, SyncService } from '../sync/sync.service';
+import { AccessService } from '../access/access.service';
 import {
   type ChecksState,
   GitHubClient,
@@ -53,7 +58,7 @@ export const PROVIDERS = [
     ],
     how: 'token',
     tokenHelp:
-      'github.com → Settings → Developer settings → Personal access tokens → Fine-grained: repository access as you like, permissions Issues: read & write, Pull requests: read, Commit statuses: read (for checks).',
+      'github.com → Settings → Developer settings → Personal access tokens → Fine-grained: repository access as you like, permissions Issues: read & write, Pull requests: read, Commit statuses: read (for checks). A fine-grained token sees one owner: for your company’s repos (and PRs from your fork into them) add another token with the organisation as resource owner.',
   },
   {
     id: 'mail',
@@ -87,6 +92,8 @@ export class ConnectionsService {
     private readonly notify: NotifyService,
     private readonly ai: AiService,
     private readonly hub: ClickUpHub,
+    private readonly sync: SyncService,
+    private readonly access: AccessService,
   ) {}
 
   providers() {
@@ -270,8 +277,17 @@ export class ConnectionsService {
         return { error: 'bad_token' as const };
       throw e;
     }
-    const row = await this.save(ownerId, 'github', String(me.id), me.login, t, { login: me.login });
-    return { id: row.id, account: row.label };
+    const fp = createHash('sha256').update(t).digest('hex').slice(0, 12);
+    const orgs = await this.github.orgs(t).catch(() => [] as string[]);
+    const row = await this.save(
+      ownerId,
+      'github',
+      `${me.id}:${fp}`,
+      orgs.length ? `${me.login} · ${orgs.slice(0, 3).join(', ')}` : me.login,
+      t,
+      { login: me.login, orgs },
+    );
+    return { id: row.id, account: row.label, orgs };
   }
 
   /** Issues assigned to me and reviews waiting for me, across every GitHub account. */
@@ -286,6 +302,7 @@ export class ConnectionsService {
       title: string;
       url: string;
       updatedAt: string;
+      createdAt: string;
     }[] = [];
     for (const r of await this.rows(ownerId, 'github')) {
       try {
@@ -300,6 +317,7 @@ export class ConnectionsService {
             title: w.item.title,
             url: w.item.html_url,
             updatedAt: w.item.updated_at,
+            createdAt: w.item.created_at ?? w.item.updated_at,
           });
         if (r.lastError) await this.mark(r, null);
       } catch (e) {
@@ -312,7 +330,11 @@ export class ConnectionsService {
         );
       }
     }
-    return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    // the same item seen through two tokens (personal + organisation) is one item
+    const seen = new Set<string>();
+    return out
+      .filter((w) => (seen.has(`${w.kind}:${w.id}`) ? false : (seen.add(`${w.kind}:${w.id}`), true)))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   private readonly prCache = new Map<string, { at: number; prs: Pr[] }>();
@@ -361,7 +383,10 @@ export class ConnectionsService {
         );
       }
     }
-    return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    const seen = new Set<string>();
+    return out
+      .filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   /** Which PR changes ping me (spec 0012 G; defaults D-0012-5: merged and changes requested). */
@@ -651,6 +676,13 @@ export class ConnectionsService {
             url: '/today',
           });
         const prs = r.provider === 'github' ? await this.prPings(r) : undefined;
+        const reviewTasks =
+          r.provider === 'github'
+            ? await this.reviewTasks(r, await this.githubWork(r.ownerId)).catch((e: Error) => {
+                this.log.warn(`review tasks ${r.id}: ${e.message}`);
+                return undefined;
+              })
+            : undefined;
         if (prs) sent += prs.sent;
         await this.db
           .update(connections)
@@ -659,6 +691,7 @@ export class ConnectionsService {
               ...r.meta,
               seen: [...new Set([...now.map((n) => n.key), ...(meta.seen ?? [])])].slice(0, 500),
               ...(prs ? { prs: prs.state } : {}),
+              ...(reviewTasks ? { reviewTasks } : {}),
             },
           })
           .where(eq(connections.id, r.id));
@@ -709,6 +742,62 @@ export class ConnectionsService {
     return { sent, state };
   }
 
+  /**
+   * A review requested from me becomes a task in Today, dated the day the pull request was raised, with the link
+   * (spec 0014 G2). When the review no longer waits for me (done, merged, closed), the task is ticked off.
+   * Switch off with pings.reviewTasks = false. Returns the remembered pull request → task map.
+   */
+  private async reviewTasks(
+    r: Row,
+    work: Awaited<ReturnType<ConnectionsService['githubWork']>>,
+  ): Promise<Record<string, string>> {
+    const meta = r.meta as { reviewTasks?: Record<string, string>; pings?: { reviewTasks?: boolean } };
+    const known = { ...(meta.reviewTasks ?? {}) };
+    if (meta.pings?.reviewTasks === false) return known;
+    const p = await this.access.principal(r.ownerId);
+    if (!p) return known;
+    const auth = { userId: r.ownerId, deviceId: SERVER_DEVICE, role: p.role, entitlements: p.entitlements };
+    const tz = await this.tz(r.ownerId);
+    const waiting = work.filter((w) => w.kind === 'review' && w.connectionId === r.id);
+    const firstLook = meta.reviewTasks === undefined;
+    for (const w of waiting) {
+      if (known[w.id]) continue;
+      const id = randomUUID();
+      const wd = wallIn(new Date(w.createdAt), tz);
+      await this.sync.pushAsServer(auth, [
+        {
+          entity: TODAY_TASK,
+          entityId: id,
+          op: 'upsert',
+          fields: {
+            title: `Review: ${w.title} (#${w.number})`.slice(0, 500),
+            notes: `${w.repo} #${w.number}\n${w.url}`,
+            dueDate: `${wd.y}-${String(wd.m).padStart(2, '0')}-${String(wd.d).padStart(2, '0')}`,
+            tags: ['review'],
+            priority: 2,
+            source: 'github',
+          },
+        },
+      ]);
+      known[w.id] = id;
+    }
+    // reviews no longer waiting: tick their tasks (not on the first look, when nothing was ours yet)
+    if (!firstLook)
+      for (const [pr, taskId] of Object.entries(known)) {
+        if (waiting.some((w) => w.id === pr)) continue;
+        await this.sync.pushAsServer(auth, [
+          {
+            entity: TODAY_TASK,
+            entityId: taskId,
+            op: 'upsert',
+            fields: { completedAt: new Date().toISOString() },
+          },
+        ]);
+        delete known[pr];
+      }
+    return known;
+  }
+
   private async mark(r: Row, problem: string | null) {
     await this.db
       .update(connections)
@@ -721,8 +810,10 @@ export interface PrPings {
   merged: boolean;
   changes: boolean;
   approved: boolean;
+  /** a review requested from me becomes a task in Today */
+  reviewTasks: boolean;
 }
-export const PR_PINGS: PrPings = { merged: true, changes: true, approved: false };
+export const PR_PINGS: PrPings = { merged: true, changes: true, approved: false, reviewTasks: true };
 
 export interface Pr {
   id: string;
