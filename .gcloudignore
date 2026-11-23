@@ -1,0 +1,12 @@
+# What `gcloud builds submit` leaves out. gcloud only reads the root .gitignore,
+# so the nested build outputs (Rust target/, Gradle, Flutter build/) are listed here.
+#!include:.gitignore
+.git
+**/node_modules/
+**/target/
+**/.gradle/
+**/build/
+**/.dart_tool/
+**/.next/
+**/.turbo/
+**/dist/
