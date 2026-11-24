@@ -388,6 +388,21 @@ function Group({
   );
 }
 
+/** "3 · 12": important (bold, accent) and unread, for one mailbox. */
+function BoxCount({ b }: { b?: { unread: number; important?: number } }) {
+  if (!b || !b.unread) return null;
+  return (
+    <span className="inline-flex items-center gap-1 tabular-nums">
+      {b.important ? (
+        <span className="grid h-4 min-w-4 place-items-center rounded-full bg-orv-accent px-1 text-[10.5px] font-semibold text-white">
+          {b.important}
+        </span>
+      ) : null}
+      <span className="text-[11.5px] text-orv-muted">{b.unread}</span>
+    </span>
+  );
+}
+
 /** The Mail page: the catch-up, then Important, Updates and Everything else, across every mailbox. */
 export function SmartInbox() {
   const { v, setV, load } = useInbox();
@@ -403,7 +418,9 @@ export function SmartInbox() {
         <div>
           <span className="text-small text-orv-muted">
             {v
-              ? `${total} unread across ${v.boxes.length} ${v.boxes.length === 1 ? 'mailbox' : 'mailboxes'}`
+              ? v.important.length
+                ? `${v.important.length} need you · ${total} unread`
+                : `${total} unread · nothing needs you`
               : 'Reading your mailboxes…'}
           </span>
           <h1 className="text-title font-semibold">Mail</h1>
@@ -440,6 +457,7 @@ export function SmartInbox() {
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full" style={{ background: accountTone(a, accounts) }} />
                   {a}
+                  <BoxCount b={v.boxes.find((x) => x.account === a)} />
                 </span>
               ) : (
                 'All mailboxes'

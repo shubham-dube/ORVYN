@@ -321,6 +321,13 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
         within(this.connections.githubWork(ownerId), []),
         within(this.connections.clickupTasks(ownerId), []),
       ]);
+      const working = cu
+        .filter((t) => t.working)
+        .sort(
+          (a, b) =>
+            (a.due ? Date.parse(a.due) : Infinity) - (b.due ? Date.parse(b.due) : Infinity) ||
+            a.name.localeCompare(b.name),
+        );
       if (gh.length || cu.length)
         sections.push({
           kind: 'work',
@@ -328,6 +335,20 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
           reviews: gh.filter((w) => w.kind === 'review').length,
           clickup: cu.length,
           clickupDueToday: cu.filter((t) => t.due && new Date(t.due) < c.dayEnd).length,
+          tasks: working.slice(0, 12).map((t) => ({
+            id: t.id,
+            name: t.name,
+            status: t.status,
+            statusColor: t.statusColor ?? null,
+            list: t.list,
+            due: t.due,
+            overdue: !!t.due && Date.parse(t.due) < c.dayStart.getTime(),
+            url: t.url,
+          })),
+          github: [...gh]
+            .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'review' ? -1 : 1))
+            .slice(0, 8)
+            .map((w) => ({ kind: w.kind, title: w.title, repo: w.repo, number: w.number, url: w.url })),
         });
     }
     if (want('mail')) {
@@ -1054,6 +1075,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
       userId: ownerId,
       module: 'brief',
       kind: 'brief',
+      type: 'brief.ready',
       title:
         view.headline === 'A clear day' ? 'Good morning — a clear day' : `Good morning — ${view.headline}`,
       // the AI's first sentence when it wrote one (spec 0016 B2), else the rules' line
@@ -1119,6 +1141,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
           userId: ownerId,
           module: 'brief',
           kind: 'nudge',
+          type: 'brief.slipped',
           title: `${late.length} things slipped`,
           body: `${late
             .slice(0, 3)
@@ -1143,6 +1166,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
           userId: ownerId,
           module: 'brief',
           kind: 'nudge',
+          type: 'brief.budget',
           title:
             level === 100
               ? `${b.name}: budget used up`
@@ -1163,6 +1187,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
           userId: ownerId,
           module: 'brief',
           kind: 'nudge',
+          type: 'brief.payments',
           title: `${waiting} payments wait for a look`,
           body: 'A minute in Money keeps your month right.',
           url: '/money',
@@ -1177,6 +1202,7 @@ export class BriefService implements OnModuleInit, OnModuleDestroy {
           userId: ownerId,
           module: 'brief',
           kind: 'nudge',
+          type: 'brief.drop',
           title: `${waiting} things wait in Drop`,
           body: 'Each needs one tap: add it, keep it or let it go.',
           url: '/drop',

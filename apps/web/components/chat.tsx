@@ -165,13 +165,23 @@ function Face({ c, size = 40 }: { c: ConversationView; size?: number }) {
 
 // ------------------------------------------------------------------ the list
 
+/** the last list this tab saw, so coming back to Chat shows it at once while a fresh one loads */
+let lastList: ConversationView[] | null = null;
+
 /** My conversations, kept live: new lines, typing and who is online. */
 export function useConversations() {
-  const [list, setList] = useState<ConversationView[] | null>(null);
+  const [list, setList] = useState<ConversationView[] | null>(lastList);
   const [typing, setTyping] = useState<Record<string, string>>({});
-  const load = useCallback(() => api<ConversationView[]>('/chat/conversations').then(setList), []);
+  const load = useCallback(
+    () =>
+      api<ConversationView[]>('/chat/conversations').then((l) => {
+        lastList = l;
+        setList(l);
+      }),
+    [],
+  );
   useEffect(() => {
-    void load().catch(() => setList([]));
+    void load().catch(() => setList((l) => l ?? []));
     let t: ReturnType<typeof setTimeout> | null = null;
     const soon = () => {
       if (t) clearTimeout(t);

@@ -302,7 +302,7 @@ export function PoolOverview() {
         <h2 className="text-[14px] font-semibold">IPOs you applied to</h2>
         {!s.rounds.length ? (
           <p className="text-small text-orv-muted">
-            Open an IPO in the Desk and choose “Apply from my accounts”.
+            Open an IPO in the Desk and choose “Plan with my partners”.
           </p>
         ) : (
           s.rounds.map((r) => (
@@ -847,7 +847,10 @@ export function MoneySheet({
   );
 }
 
-/** Pick the accounts for an IPO. */
+/**
+ * Plan an IPO with my partners (spec 0018): pick who's in now — or nobody, and add them one by one as you ask. They
+ * start at "To ask", or at "Will apply" if they already said yes.
+ */
 export function StartRoundSheet({
   issueId,
   issueName,
@@ -863,6 +866,7 @@ export function StartRoundSheet({
   const [partners, setPartners] = useState<Partner[] | null>(null);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [category, setCategory] = useState<'retail' | 'snii'>('retail');
+  const [start, setStart] = useState<'to_ask' | 'planned'>('to_ask');
   useEffect(() => {
     void api<Partner[]>('/ipo/pool/partners').then((p) => {
       const active = p.filter((x) => x.active);
@@ -875,12 +879,11 @@ export function StartRoundSheet({
     <Sheet
       open
       onClose={onClose}
-      title={`Apply to ${issueName}`}
-      subtitle="Choose the accounts. ORVYN then shows who already holds enough and who needs money."
+      title={`Plan ${issueName} with your partners`}
+      subtitle="Everyone is on the round’s board. Pick who’s in now — or nobody, and add people as you ask them."
       footer={
         <Button
           variant="primary"
-          disabled={![...chosen].some((id) => eligible.some((p) => p.id === id))}
           onClick={async () => {
             try {
               const r = await api<{ id: string }>('/ipo/pool/rounds', {
@@ -888,6 +891,7 @@ export function StartRoundSheet({
                 body: {
                   issueId,
                   category,
+                  status: start,
                   partnerIds: [...chosen].filter((id) => eligible.some((p) => p.id === id)),
                 },
               });
@@ -897,7 +901,7 @@ export function StartRoundSheet({
             }
           }}
         >
-          Plan it
+          {[...chosen].some((id) => eligible.some((p) => p.id === id)) ? 'Open the round' : 'Open it empty'}
         </Button>
       }
     >
@@ -922,6 +926,27 @@ export function StartRoundSheet({
               ['snii', 'Small HNI'],
             ]}
           />
+          <Chips
+            label="They start at"
+            value={start}
+            onChange={(v) => setStart(v as 'to_ask' | 'planned')}
+            options={[
+              ['to_ask', 'To ask'],
+              ['planned', 'Already said yes'],
+            ]}
+          />
+          <div className="flex gap-3 text-[12.5px]">
+            <button
+              type="button"
+              className="text-orv-accent"
+              onClick={() => setChosen(new Set(eligible.map((p) => p.id)))}
+            >
+              Everyone
+            </button>
+            <button type="button" className="text-orv-muted" onClick={() => setChosen(new Set())}>
+              Nobody yet
+            </button>
+          </div>
           {eligible.map((p) => (
             <label key={p.id} className="flex items-center gap-3 text-[14px]">
               <input

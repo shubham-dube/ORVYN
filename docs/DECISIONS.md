@@ -2,6 +2,29 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-24 (spec 0019, notifications set your way — chosen for you; change any)
+
+| #        | Topic        | Decision                                                                                                                                   |
+| -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| D-0019-1 | Channels     | In-app (always), Push, Urgent (through quiet hours, repeats), Alarm (rings), Email and WhatsApp copies. WhatsApp to partners stays manual. |
+| D-0019-2 | Rules        | Per notification type, per person. Ways chosen on an item (a task’s reminder, a document’s expiry) win.                                    |
+| D-0019-3 | Catalog      | One catalog in `packages/contracts`; a test fails when code sends a type that isn’t in it.                                                 |
+| D-0019-4 | Off          | Off sends nothing, not even the bell (kept dismissed so dedupe and actions behave). Security can’t be off.                                 |
+| D-0019-5 | Copies       | Email and WhatsApp go once, not on every repeat.                                                                                           |
+| D-0019-6 | Brief nudges | Their on/off stays in the Brief’s settings; their ways come from the catalog rules.                                                        |
+| D-0019-7 | Samples      | “Send me a sample” per type, at most once a minute.                                                                                        |
+
+## Decided — 2026-11-24 (spec 0018, the Pool as a roster — chosen for you; change any)
+
+| #        | Topic        | Decision                                                                                                                                                                                                  |
+| -------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0018-1 | Roster       | A round shows every active partner; statuses go To ask → Asked → Will apply → Money sent → Applied → Mandate done (or Can't / No reply / Missed). Any status can be set back; Undo restores the last one. |
+| D-0018-2 | Track record | Per partner across rounds: applied N of M, missed K, the last one missed — shown in new rounds.                                                                                                           |
+| D-0018-3 | The close    | At 5 pm on the close day: Will apply / Money sent → Missed, Asked → No reply; one summary notification; the round shows the summary.                                                                      |
+| D-0018-4 | Messages     | Templates per moment with placeholders, edited by the owner, rendered by the server; asking moves To ask → Asked.                                                                                         |
+| D-0018-5 | Moving back  | Changing a status never changes the ledger: money entries stay until removed by hand.                                                                                                                     |
+| D-0018-6 | Mail counts  | The Mail entry shows the important count (not every unread); each mailbox shows unread and important.                                                                                                     |
+
 ## Decided — 2026-11-24 (spec 0017, Home and the smart inbox — chosen for you; change any)
 
 | #        | Topic                 | Decision                                                                                                                                            |

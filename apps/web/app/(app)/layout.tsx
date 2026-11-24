@@ -25,6 +25,7 @@ import { MeetingHost } from '@/components/connections';
 import { Wordmark } from '@/components/logo';
 import { NotificationCenter } from '@/components/notification-center';
 import { Avatar } from '@/components/ui/bits';
+import { api } from '@/lib/api';
 import { Orb } from '@/components/ui/orb';
 import { cn } from '@/lib/cn';
 import { NotificationsProvider, useNotifications } from '@/lib/notifications';
@@ -177,6 +178,8 @@ function Shell({ children }: { children: ReactNode }) {
     ...(me?.role === 'owner' ? [{ href: '/admin', label: 'People', icon: Shield }] : []),
   ];
 
+  const mailCount = useMailCount(nav.some((x) => x.href === '/mail'));
+
   return (
     <div className="mx-auto flex min-h-dvh max-w-[1440px] gap-4 p-3 pb-28 sm:p-5 lg:pb-5">
       <aside className="glass-pane sticky top-5 hidden h-[calc(100dvh-40px)] w-60 shrink-0 flex-col p-3 lg:flex">
@@ -199,6 +202,14 @@ function Shell({ children }: { children: ReactNode }) {
             >
               <i.icon size={18} aria-hidden className={pathname === i.href ? 'text-orv-accent' : ''} />
               {i.label}
+              {i.href === '/mail' && mailCount ? (
+                <span
+                  className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-orv-accent px-1.5 text-[11px] font-semibold text-white"
+                  aria-label={`${mailCount} important`}
+                >
+                  {mailCount > 99 ? '99+' : mailCount}
+                </span>
+              ) : null}
             </Link>
           ))}
         </nav>
@@ -308,4 +319,25 @@ function DockLink({
       {label}
     </Link>
   );
+}
+
+/** The important mail count for the sidebar (D-0018-6): on open, on focus, and every five minutes. */
+function useMailCount(on: boolean) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!on) return;
+    const load = () =>
+      void api<{ important: number }>('/inbox/counts').then(
+        (c) => setN(c.important),
+        () => undefined,
+      );
+    load();
+    const t = setInterval(load, 5 * 60_000);
+    window.addEventListener('focus', load);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('focus', load);
+    };
+  }, [on]);
+  return n;
 }

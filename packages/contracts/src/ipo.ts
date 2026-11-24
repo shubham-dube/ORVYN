@@ -134,7 +134,11 @@ export interface IpoDetails {
   strengths?: string[];
   risks?: string[];
   objects?: string[];
-  financials?: { headers: string[]; rows: { metric: string; data: (string | number | null)[] }[]; unit?: string } | null;
+  financials?: {
+    headers: string[];
+    rows: { metric: string; data: (string | number | null)[] }[];
+    unit?: string;
+  } | null;
   leadManagers?: string[];
   registrar?: { name: string; statusPage?: string | null } | null;
   lotTable?: { label: string; lots: number | null; shares: number | null; amount: number | null }[];
@@ -209,7 +213,13 @@ export const SourceFields = z.object({
 });
 export type SourceFields = z.infer<typeof SourceFields>;
 
+/**
+ * Where one partner is for one IPO (spec 0018): asked → yes → money → applied → mandate → the result. Off the path:
+ * declined (can't this time), no_reply (asked, never answered by the close), missed (said yes, didn't apply).
+ */
 export const APPLICATION_STATUSES = [
+  'to_ask',
+  'asked',
   'planned',
   'funded',
   'applied',
@@ -218,12 +228,89 @@ export const APPLICATION_STATUSES = [
   'not_allotted',
   'sold',
   'settled',
+  'declined',
+  'no_reply',
+  'missed',
 ] as const;
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 
+/** The board's columns (spec 0018 A). */
+export const POOL_STAGES = ['not_asked', 'asked', 'will_apply', 'applied', 'mandate', 'out'] as const;
+export type PoolStage = (typeof POOL_STAGES)[number];
+export const STAGE_OF: Record<ApplicationStatus, PoolStage> = {
+  to_ask: 'not_asked',
+  asked: 'asked',
+  planned: 'will_apply',
+  funded: 'will_apply',
+  applied: 'applied',
+  mandate: 'mandate',
+  allotted: 'mandate',
+  not_allotted: 'mandate',
+  sold: 'mandate',
+  settled: 'mandate',
+  declined: 'out',
+  no_reply: 'out',
+  missed: 'out',
+};
+/** statuses the roster can set by hand (a sale and a settlement need their figures) */
+export const ROSTER_STATUSES = [
+  'to_ask',
+  'asked',
+  'planned',
+  'funded',
+  'applied',
+  'mandate',
+  'allotted',
+  'not_allotted',
+  'declined',
+  'no_reply',
+  'missed',
+] as const;
+
+/** Add people to a round or move them (spec 0018 A): one or many at once. */
+export const RosterSet = z.object({
+  partnerIds: z.array(z.string().uuid()).min(1).max(100),
+  status: z.enum(ROSTER_STATUSES),
+  lots: z.number().int().min(1).max(1000).optional(),
+  category: z.enum(IPO_CATEGORIES).optional(),
+});
+export type RosterSet = z.infer<typeof RosterSet>;
+
+/** The WhatsApp messages, one per moment (spec 0018 D). */
+export const POOL_MESSAGE_KINDS = ['ask', 'apply', 'mandate', 'allotment', 'settle'] as const;
+export type PoolMessageKind = (typeof POOL_MESSAGE_KINDS)[number];
+export const POOL_PLACEHOLDERS = [
+  'name',
+  'ipo',
+  'lots',
+  'amount',
+  'closes',
+  'link',
+  'upi',
+  'gmp',
+  'back',
+  'missedLast',
+] as const;
+export const PoolTemplates = z
+  .object(
+    Object.fromEntries(
+      POOL_MESSAGE_KINDS.map((k) => [k, z.string().max(1500).nullable().optional()]),
+    ) as Record<PoolMessageKind, z.ZodOptional<z.ZodNullable<z.ZodString>>>,
+  )
+  .strict();
+export type PoolTemplates = Partial<Record<PoolMessageKind, string | null>>;
+export const PoolMessageRequest = z.object({
+  partnerIds: z.array(z.string().uuid()).min(1).max(100),
+  kind: z.enum(POOL_MESSAGE_KINDS),
+});
+export type PoolMessageRequest = z.infer<typeof PoolMessageRequest>;
+
 export const NewRound = z.object({
   issueId: z.string().uuid(),
-  partnerIds: z.array(z.string().uuid()).min(1).max(100),
+  /** may be empty: a round starts with nobody, and people are added as they're asked (spec 0018) */
+  partnerIds: z.array(z.string().uuid()).max(100).default([]),
+  /** where the people picked now start */
+  status: z.enum(['to_ask', 'asked', 'planned']).default('planned'),
   category: z.enum(IPO_CATEGORIES).default('retail'),
   /** lots per application (default: the category's minimum) */
   lots: z.number().int().min(1).max(1000).optional(),

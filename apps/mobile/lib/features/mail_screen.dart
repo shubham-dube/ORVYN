@@ -104,7 +104,9 @@ class _MailScreenState extends ConsumerState<MailScreen> {
                       'Mail',
                       overline: v == null
                           ? 'Reading your mailboxes…'
-                          : '$total unread · ${boxes.length} ${boxes.length == 1 ? 'mailbox' : 'mailboxes'}',
+                          : important.isNotEmpty
+                          ? '${important.length} need you · $total unread'
+                          : '$total unread · nothing needs you',
                     ),
                   ),
                   Padding(
@@ -161,10 +163,9 @@ class _MailScreenState extends ConsumerState<MailScreen> {
                   ),
                 ),
               if (boxes.length > 1)
-                SizedBox(
-                  height: 40,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
                     children: [
                       for (final a in ['', ...accounts])
                         Padding(
@@ -173,7 +174,28 @@ class _MailScreenState extends ConsumerState<MailScreen> {
                             avatar: a.isEmpty
                                 ? null
                                 : CircleAvatar(radius: 5, backgroundColor: accountTone(l, a, accounts)),
-                            label: Text(a.isEmpty ? 'All' : a),
+                            label: a.isEmpty
+                                ? const Text('All')
+                                : Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(a),
+                                      for (final b in boxes.where((b) => b['account'] == a && (b['unread'] as num) > 0))
+                                        Padding(
+                                          padding: const EdgeInsets.only(left: 6),
+                                          child: Text(
+                                            (b['important'] as num? ?? 0) > 0
+                                                ? '${b['important']} · ${b['unread']}'
+                                                : '${b['unread']}',
+                                            style: OrvText.muted(l).copyWith(
+                                              fontSize: 11.5,
+                                              color: (b['important'] as num? ?? 0) > 0 ? l.accent : null,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                             selected: _box == a,
                             showCheckmark: false,
                             visualDensity: VisualDensity.compact,

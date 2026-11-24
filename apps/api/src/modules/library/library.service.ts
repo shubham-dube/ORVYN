@@ -270,6 +270,8 @@ for search, at most a few paragraphs). Never invent a date or an amount: if it i
         userId: d.ownerId,
         module: 'library',
         kind: 'library.expiry',
+        type: 'library.expiry',
+        own: true,
         title:
           left === 0
             ? `${title} expires today`

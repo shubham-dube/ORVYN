@@ -68,7 +68,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           if (me?.can('today') ?? false) const InboxPreview(),
           const LiveCard(),
           if (me?.can('today') ?? false) const WeekCard(),
-          const SizedBox(height: 14),
           Glass(
             padding: const EdgeInsets.all(20),
             child: Column(

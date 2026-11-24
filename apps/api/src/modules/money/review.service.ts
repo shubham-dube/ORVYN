@@ -140,6 +140,7 @@ export class ReviewService {
         userId: ownerId,
         module: 'money',
         kind: 'review',
+        type: 'money.review',
         title: `${formatMoney(t.amountMinor, t.currency)} came in${name ? ` from ${name}` : ''}`,
         body:
           note ??
@@ -171,6 +172,7 @@ export class ReviewService {
       userId: ownerId,
       module: 'money',
       kind: 'review',
+      type: 'money.review',
       title: `${formatMoney(t.amountMinor, t.currency)} ${credit ? 'from' : 'at'} ${name || 'someone'}`,
       body:
         note ??
@@ -213,6 +215,7 @@ export class ReviewService {
       userId: ownerId,
       module: 'money',
       kind: 'filed',
+      type: 'money.filed',
       title,
       body,
       url: '/money',

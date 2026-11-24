@@ -426,8 +426,9 @@ describe('the IPO Pool (spec 0010 B)', () => {
     ipo.now = () => Date.parse(`${day(2)}T05:30:00Z`);
     await ipo.alert(me.user.id);
     ipo.now = at;
+    // Priya and Amit have money but no bid yet; Ravi applied, and his mandate is still to approve
     expect((await notes('pool')).map((n) => n.title)).toContain(
-      '2 accounts haven’t applied — Mega Power Ltd closes today',
+      '2 accounts haven’t applied · 1 mandate pending — Mega Power Ltd closes today',
     );
   });
 
@@ -505,5 +506,165 @@ describe('the IPO Pool (spec 0010 B)', () => {
     });
     const other = (await signIn(h, 'noipo@example.test', { invite: inv.body.link.split('/join/')[1] })).body;
     expect((await api(other, 'GET', '/ipo/issues')).status).toBe(403);
+  });
+});
+
+describe('the Pool as a roster: ask, track, close (spec 0018)', () => {
+  let partners: Record<string, string>;
+  let tiny: any;
+  let roundId: string;
+  const view = async () => (await api(me, 'GET', `/ipo/pool/rounds/${roundId}`)).body;
+  const statusOf = (v: any, name: string) => v.roster.find((r: any) => r.partner.name === name)?.status;
+  const put = (body: unknown, who = me) => api(who, 'PUT', `/ipo/pool/rounds/${roundId}/partners`, body);
+
+  it('a round starts empty; people come in one by one or all at once, and move both ways with Undo (AC1)', async () => {
+    const neha = await api(me, 'POST', '/ipo/pool/partners', {
+      name: 'Neha Sharma',
+      phone: '98765 43210',
+      upi: 'neha@okhdfc',
+    });
+    partners = Object.fromEntries(
+      ((await api(me, 'GET', '/ipo/pool/partners')).body as any[]).map((p) => [p.name, p.id]),
+    );
+    expect(partners['Neha Sharma']).toBe(neha.body.id);
+    tiny = (await api(me, 'GET', '/ipo/issues')).body.issues.find((i: any) => i.slug === small.slug);
+    const r = await api(me, 'POST', '/ipo/pool/rounds', { issueId: tiny.id, partnerIds: [] });
+    expect(r.status).toBe(201);
+    roundId = r.body.id;
+    // everyone is on the roster, nobody in the round yet
+    expect(r.body.roster.map((x: any) => [x.partner.name, x.status])).toEqual([
+      ['Amit', null],
+      ['Neha Sharma', null],
+      ['Priya', null],
+      ['Ravi', null],
+    ]);
+    expect(r.body.board.stages).toMatchObject({ not_asked: 0, asked: 0, will_apply: 0 });
+
+    // one, then many
+    await put({ partnerIds: [partners.Ravi], status: 'to_ask' });
+    const many = await put({ partnerIds: [partners.Priya, partners.Amit], status: 'asked' });
+    expect(many.body.board.stages).toMatchObject({ not_asked: 1, asked: 2 });
+    // forward, forward, and back
+    await put({ partnerIds: [partners.Ravi], status: 'planned' });
+    let v = (await put({ partnerIds: [partners.Ravi], status: 'applied' })).body;
+    const ravi = v.applications.find((a: any) => a.partner.name === 'Ravi');
+    expect(ravi.history.map((h: any) => h.status)).toEqual(['to_ask', 'planned', 'applied']);
+    expect(ravi.canUndo).toBe(true);
+    v = (await api(me, 'POST', `/ipo/pool/applications/${ravi.id}/undo`)).body;
+    expect(statusOf(v, 'Ravi')).toBe('planned');
+    // straight to "can't this time" works too, and Undo returns from it
+    await put({ partnerIds: [partners.Ravi], status: 'declined' });
+    v = (await api(me, 'POST', `/ipo/pool/applications/${ravi.id}/undo`)).body;
+    expect(statusOf(v, 'Ravi')).toBe('planned');
+
+    // out of the round while nothing is recorded; not once money is
+    v = (await api(me, 'DELETE', `/ipo/pool/rounds/${roundId}/partners/${partners.Amit}`)).body;
+    expect(statusOf(v, 'Amit')).toBeNull();
+    await put({ partnerIds: [partners.Amit], status: 'asked' });
+    const meSrc = (await api(me, 'GET', '/ipo/pool/sources')).body[0].id;
+    await api(me, 'POST', '/ipo/pool/ledger', {
+      kind: 'fund',
+      amount: 100,
+      sourceId: meSrc,
+      partnerId: partners.Priya,
+      roundId,
+    });
+    expect(statusOf(await view(), 'Priya')).toBe('funded'); // money sent is a yes
+    const no = await api(me, 'DELETE', `/ipo/pool/rounds/${roundId}/partners/${partners.Priya}`);
+    expect(no.status).toBe(400);
+    expect(no.body.error.code).toBe('has_money');
+
+    // someone else can't touch it (rule 5)
+    expect((await put({ partnerIds: [partners.Ravi], status: 'missed' }, friend)).status).toBe(404);
+    expect((await api(friend, 'POST', `/ipo/pool/applications/${ravi.id}/undo`)).status).toBe(404);
+  });
+
+  it('WhatsApp in my words: templates with placeholders; asking moves them to Asked (AC3)', async () => {
+    const t = (await api(me, 'GET', '/ipo/pool/templates')).body;
+    expect(t.custom).toEqual([]);
+    expect(t.placeholders).toContain('missedLast');
+    const saved = await api(me, 'PUT', '/ipo/pool/templates', {
+      ask: 'Hey {name}, {ipo}? {lots} lot(s), {amount}, by {closes}. UPI {upi}',
+    });
+    expect(saved.body.custom).toEqual(['ask']);
+    const out = (
+      await api(me, 'POST', `/ipo/pool/rounds/${roundId}/messages`, {
+        partnerIds: [partners['Neha Sharma']],
+        kind: 'ask',
+      })
+    ).body;
+    expect(out[0].text).toMatch(
+      /^Hey Neha, Tiny Foods Ltd\? 1 lot\(s\), ₹14,948(\.00)?, by 5 pm, .+\. UPI neha@okhdfc$/,
+    );
+    expect(out[0].url).toMatch(/^https:\/\/wa\.me\/919876543210\?text=Hey%20Neha/);
+    expect(statusOf(await view(), 'Neha Sharma')).toBe('asked');
+    // the apply message carries their private link
+    const apply = (
+      await api(me, 'POST', `/ipo/pool/rounds/${roundId}/messages`, {
+        partnerIds: [partners.Ravi],
+        kind: 'apply',
+      })
+    ).body;
+    expect(apply[0].text).toContain('/p/');
+    // my templates are mine; my round is mine
+    expect((await api(friend, 'GET', '/ipo/pool/templates')).body.custom).toEqual([]);
+    expect(
+      (
+        await api(friend, 'POST', `/ipo/pool/rounds/${roundId}/messages`, {
+          partnerIds: [partners.Ravi],
+          kind: 'ask',
+        })
+      ).status,
+    ).toBe(404);
+    // back to ORVYN's words
+    expect((await api(me, 'PUT', '/ipo/pool/templates', { ask: null })).body.custom).toEqual([]);
+  });
+
+  it('at the close: yes-but-no-bid is missed, asked is no reply; one summary; next time they show (AC2)', async () => {
+    await put({ partnerIds: [partners.Ravi], status: 'applied' });
+    expect(await pool.closeDue(day(2), '16:30')).toBe(0); // not yet: bids close at 5 pm
+    expect(await pool.closeDue(day(2), '17:05')).toBeGreaterThanOrEqual(1);
+    expect(await pool.closeDue(day(2), '18:00')).toBe(0); // once
+    const v = await view();
+    expect(v.closed).toBe(true);
+    expect(v.roster.map((x: any) => [x.partner.name, x.status])).toEqual([
+      ['Amit', 'no_reply'],
+      ['Neha Sharma', 'no_reply'],
+      ['Priya', 'missed'],
+      ['Ravi', 'applied'],
+    ]);
+    expect(v.board).toMatchObject({ applied: 1, mandates: 0, missed: ['Priya'], mandatePending: ['Ravi'] });
+    const closed = (await notes('pool')).find((x) => x.title.startsWith('Tiny Foods Ltd closed'));
+    expect(closed.title).toBe('Tiny Foods Ltd closed: 1 applied · 0 mandates · 3 missed');
+    expect(closed.body).toBe('Missed: Priya. No reply: Amit, Neha Sharma. Mandate pending: Ravi.');
+
+    // the next IPO: who missed last time shows, and the ask says so gently
+    const next = (
+      await api(me, 'POST', '/ipo/issues', {
+        name: 'Next Steel',
+        openDate: day(5),
+        closeDate: day(7),
+        priceMax: 100,
+        lotSize: 150,
+        issueSizeCr: 900,
+      })
+    ).body;
+    const r2 = (await api(me, 'POST', '/ipo/pool/rounds', { issueId: next.id })).body;
+    const rec = (name: string) => r2.roster.find((x: any) => x.partner.name === name).record;
+    expect(rec('Priya')).toMatchObject({
+      missedLast: true,
+      lastMissed: 'Tiny Foods Ltd',
+      missed: 1,
+      applied: 1,
+      of: 2,
+    });
+    expect(rec('Ravi')).toMatchObject({ missedLast: false, missed: 0, applied: 2, of: 2 });
+    const ask = (
+      await api(me, 'POST', `/ipo/pool/rounds/${r2.id}/messages`, {
+        partnerIds: [partners.Priya],
+        kind: 'ask',
+      })
+    ).body;
+    expect(ask[0].text).toContain('Last time Tiny Foods Ltd slipped by');
   });
 });

@@ -87,6 +87,14 @@ export const ipoSettings = pgTable('ipo_settings', {
   updatedAt: updatedAt(),
 });
 
+/** The Pool's own settings: the WhatsApp messages in the owner's words (spec 0018 D). */
+export const ipoPoolSettings = pgTable('ipo_pool_settings', {
+  ownerId: uuid('owner_id').primaryKey(),
+  templates: jsonb('templates').$type<Record<string, string>>().notNull().default({}),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
 /** Notifications sent, so each IPO and event pings once; `value` remembers the GMP % last told. */
 export const ipoAlerts = pgTable(
   'ipo_alerts',
@@ -164,6 +172,8 @@ export const ipoRounds = pgTable(
     ownerId: uuid('owner_id').notNull(),
     issueId: uuid('issue_id').notNull(),
     note: text('note').notNull().default(''),
+    /** bidding closed and the round was summed up (spec 0018 C) */
+    closedAt: ts('closed_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -192,6 +202,11 @@ export const ipoApplications = pgTable(
     shareMinor: bigint('share_minor', { mode: 'number' }),
     /** who said so last: 'owner' or 'partner' */
     reportedBy: text('reported_by').notNull().default('owner'),
+    /** every status it went through, newest last, so a change can be undone (spec 0018 A) */
+    history: jsonb('history')
+      .$type<{ status: string; at: string; by: 'owner' | 'partner' | 'auto' }[]>()
+      .notNull()
+      .default([]),
     appliedAt: ts('applied_at'),
     soldAt: ts('sold_at'),
     settledAt: ts('settled_at'),

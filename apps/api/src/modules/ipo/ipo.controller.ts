@@ -21,6 +21,9 @@ import {
   NewRound,
   PartnerAction,
   PartnerFields,
+  PoolMessageRequest,
+  PoolTemplates,
+  RosterSet,
   SourceFields,
 } from '@orvyn/contracts';
 import { z } from 'zod';
@@ -204,6 +207,44 @@ export class IpoController {
   @Get('pool/rounds/:id')
   round(@Auth() a: AuthContext, @Param('id', id) rid: string) {
     return this.pool.roundView(a.userId, rid);
+  }
+
+  /** Add people or move them, one or many (spec 0018 A). */
+  @Put('pool/rounds/:id/partners')
+  roster(@Auth() a: AuthContext, @Param('id', id) rid: string, @Body(new ZodPipe(RosterSet)) b: RosterSet) {
+    return this.pool.setRoster(a.userId, rid, b);
+  }
+
+  @Delete('pool/rounds/:id/partners/:partnerId')
+  unroster(@Auth() a: AuthContext, @Param('id', id) rid: string, @Param('partnerId', id) pid: string) {
+    return this.pool.removeFromRound(a.userId, rid, pid);
+  }
+
+  /** The WhatsApp message for each person, in my words (spec 0018 D). */
+  @Post('pool/rounds/:id/messages')
+  @HttpCode(200)
+  messages(
+    @Auth() a: AuthContext,
+    @Param('id', id) rid: string,
+    @Body(new ZodPipe(PoolMessageRequest)) b: PoolMessageRequest,
+  ) {
+    return this.pool.messages(a.userId, rid, b);
+  }
+
+  @Get('pool/templates')
+  templates(@Auth() a: AuthContext) {
+    return this.pool.templates(a.userId);
+  }
+
+  @Put('pool/templates')
+  saveTemplates(@Auth() a: AuthContext, @Body(new ZodPipe(PoolTemplates)) b: PoolTemplates) {
+    return this.pool.saveTemplates(a.userId, b);
+  }
+
+  @Post('pool/applications/:id/undo')
+  @HttpCode(200)
+  undo(@Auth() a: AuthContext, @Param('id', id) aid: string) {
+    return this.pool.undo(a.userId, aid);
   }
 
   @Put('pool/applications/:id')

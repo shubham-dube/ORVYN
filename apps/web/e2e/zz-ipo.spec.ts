@@ -46,15 +46,14 @@ test('IPO desk and Pool: an IPO typed in, a partner funded by card, and they con
   await pa.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('region', { name: 'Partners' }).getByText('25% of the gain')).toBeVisible();
 
-  // apply from my accounts → the plan says Ravi needs the whole amount
+  // plan with my partners (spec 0018) → Ravi already said yes; the plan says he needs the whole amount
   await page.goto('/ipo');
   await page.getByRole('link', { name: 'Mega Power' }).click();
-  await page.getByRole('button', { name: 'Apply from my accounts' }).click();
-  await page
-    .getByRole('dialog', { name: 'Apply to Mega Power' })
-    .getByRole('button', { name: 'Plan it' })
-    .click();
-  const ravi = page.getByRole('region', { name: 'Ravi' });
+  await page.getByRole('button', { name: 'Plan with my partners' }).click();
+  const plan = page.getByRole('dialog', { name: 'Plan Mega Power with your partners' });
+  await plan.getByRole('radio', { name: 'Already said yes' }).click();
+  await plan.getByRole('button', { name: 'Open the round' }).click();
+  const ravi = page.getByRole('group', { name: 'Ravi' });
   await expect(ravi.getByText('needs')).toBeVisible();
   await ravi.getByRole('button', { name: 'Record transfer' }).click();
   const money = page.getByRole('dialog', { name: 'Record money' });
@@ -78,5 +77,5 @@ test('IPO desk and Pool: an IPO typed in, a partner funded by card, and they con
 
   await page.goto('/ipo?tab=pool');
   await page.getByRole('link', { name: /Mega Power/ }).click();
-  await expect(page.getByRole('region', { name: 'Ravi' }).getByText('said so themselves')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Ravi' }).getByText('said so themselves')).toBeVisible();
 });

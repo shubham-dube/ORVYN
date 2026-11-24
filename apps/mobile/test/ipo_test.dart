@@ -105,6 +105,39 @@ void main() {
         'netMinor': 0,
         'toSendMinor': 1494800,
         'feesIfCheapestMinor': 37370,
+        'closed': false,
+        'closesAt': '5 pm, Fri 21 Nov',
+        'board': {
+          'stages': {'not_asked': 0, 'asked': 0, 'will_apply': 2, 'applied': 0, 'mandate': 0, 'out': 0},
+          'applied': 0,
+          'mandates': 0,
+          'missed': <dynamic>[],
+          'noReply': <dynamic>[],
+          'mandatePending': <dynamic>[],
+        },
+        'roster': [
+          {
+            'partner': {'id': 'p1', 'name': 'Ravi', 'upi': '', 'phone': '', 'relation': ''},
+            'applicationId': 'a1',
+            'status': 'planned',
+            'stage': 'will_apply',
+            'record': {'applied': 3, 'of': 4, 'missed': 1, 'lastMissed': 'Tiny Foods', 'missedLast': true},
+          },
+          {
+            'partner': {'id': 'p2', 'name': 'Amit', 'upi': '', 'phone': '', 'relation': ''},
+            'applicationId': 'a2',
+            'status': 'planned',
+            'stage': 'will_apply',
+            'record': {'applied': 0, 'of': 0, 'missed': 0, 'lastMissed': null, 'missedLast': false},
+          },
+          {
+            'partner': {'id': 'p3', 'name': 'Neha', 'upi': '', 'phone': '9876543210', 'relation': ''},
+            'applicationId': null,
+            'status': null,
+            'stage': null,
+            'record': {'applied': 0, 'of': 0, 'missed': 0, 'lastMissed': null, 'missedLast': false},
+          },
+        ],
         'applications': [
           {
             'id': 'a1',
@@ -154,6 +187,11 @@ void main() {
       updates.add(r.body);
       return {'ok': true};
     });
+    final moved = <dynamic>[];
+    h.server.on('PUT /ipo/pool/rounds/r1/partners', (r) {
+      moved.add(r.body);
+      return {'ok': true};
+    });
     await h.pump(tester);
     tester.view.physicalSize = const Size(1170, 4000);
     addTearDown(tester.view.reset);
@@ -184,8 +222,21 @@ void main() {
     await tapIt(tester, find.text('Open your round'));
     expect(find.text('Already holds enough — nothing to send.'), findsOneWidget);
     expect(find.text('Needs ₹14,948 — cheapest: HDFC card cash'), findsOneWidget);
-    await tapIt(tester, find.widgetWithText(TextButton, 'Applied').first);
-    expect(updates.single, {'status': 'applied'});
+    // the board: who missed last time, who isn't in yet (spec 0018)
+    expect(find.text('0 of 2 applied · 0 mandates'), findsOneWidget);
+    expect(find.text('missed Tiny Foods last time'), findsOneWidget);
+    expect(find.text('Not in this round'), findsOneWidget);
+    await tapIt(tester, find.byKey(const Key('act-a1-applied')));
+    expect(moved.single, {
+      'partnerIds': ['p1'],
+      'status': 'applied',
+    });
+    // someone added later starts at To ask
+    await tapIt(tester, find.byKey(const Key('act-p3-to_ask')));
+    expect(moved.last, {
+      'partnerIds': ['p3'],
+      'status': 'to_ask',
+    });
     await finish(tester);
   });
 

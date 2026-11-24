@@ -1,5 +1,5 @@
 import { type ReminderWay, waysOf } from '@orvyn/contracts';
-import { type SendInput } from './notify.service';
+import type { SendInput } from './notify.service';
 
 /** Hard notifications and alarms come back every 5 minutes, up to 6 times, until acknowledged (D22). */
 export const HARD_REPEAT = { everyMin: 5, times: 6 } as const;

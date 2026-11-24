@@ -669,6 +669,7 @@ export class ConnectionsService {
             userId: r.ownerId,
             module: 'today',
             kind: 'connection',
+            type: 'today.tools',
             title: n.title,
             body: n.body,
             url: n.url,
@@ -681,6 +682,7 @@ export class ConnectionsService {
             userId: r.ownerId,
             module: 'today',
             kind: 'connection',
+            type: 'today.tools',
             title: `${fresh.length - 3} more new in ${r.provider === 'github' ? 'GitHub' : 'ClickUp'}`,
             url: '/today',
           });
@@ -740,6 +742,7 @@ export class ConnectionsService {
         userId: r.ownerId,
         module: 'today',
         kind: 'connection',
+        type: 'today.tools',
         title: ping.title,
         body: `${p.repo} #${p.number}`,
         url: p.url,

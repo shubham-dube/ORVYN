@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/calendar.dart' show urlOpenerProvider;
 import '../app/state.dart';
+import '../core/api.dart' show ApiError;
 import '../design/controls.dart';
 import '../design/glass.dart';
 import '../design/theme.dart';
@@ -289,7 +290,7 @@ class _Tile extends StatelessWidget {
     final l = context.orv;
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(color: l.c.track.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -1021,7 +1022,7 @@ class IpoDetailScreen extends ConsumerWidget {
                           )
                         else if (d['status'] == 'open' || d['status'] == 'upcoming')
                           OrvButton(
-                            label: 'Apply from my accounts',
+                            label: 'Plan with my partners',
                             icon: LucideIcons.users,
                             onPressed: () => showGlassSheet<void>(
                               context,
@@ -1982,7 +1983,7 @@ class _PoolBody extends ConsumerWidget {
               if ((s['rounds'] as List).isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text('Open an IPO in the Desk and choose “Apply from my accounts”.', style: OrvText.muted(l)),
+                  child: Text('Open an IPO in the Desk and choose “Plan with my partners”.', style: OrvText.muted(l)),
                 ),
               for (final r in (s['rounds'] as List).cast<J>())
                 InkWell(
@@ -2344,6 +2345,7 @@ class StartRoundSheet extends ConsumerStatefulWidget {
 
 class _StartRoundSheetState extends ConsumerState<StartRoundSheet> {
   Set<String>? _chosen;
+  String _start = 'to_ask';
 
   @override
   Widget build(BuildContext context) {
@@ -2351,69 +2353,188 @@ class _StartRoundSheetState extends ConsumerState<StartRoundSheet> {
     final partners = (ref.watch(poolPartnersProvider).value ?? const []).where((p) => p['active'] == true).toList();
     _chosen ??= partners.isEmpty ? null : {for (final p in partners) p['id'] as String};
     return StickySheet(
-      title: 'Apply to ${widget.issueName}',
+      title: 'Plan ${widget.issueName}',
       footer: Align(
         alignment: Alignment.centerRight,
         child: OrvButton(
-          label: 'Plan it',
+          label: (_chosen ?? const {}).isEmpty ? 'Open it empty' : 'Open the round',
           variant: ButtonVariant.primary,
-          onPressed: (_chosen ?? const {}).isEmpty
-              ? null
-              : () async {
-                  final r = await ref.read(apiProvider).post<J>('/ipo/pool/rounds', {
-                    'issueId': widget.issueId,
-                    'partnerIds': _chosen!.toList(),
-                  });
-                  ref.invalidate(ipoIssueProvider(widget.issueId));
-                  if (!context.mounted) return;
-                  Navigator.of(context).pop();
-                  await context.push('/ipo/pool/rounds/${r['id']}');
-                },
+          onPressed: () async {
+            final r = await ref.read(apiProvider).post<J>('/ipo/pool/rounds', {
+              'issueId': widget.issueId,
+              'status': _start,
+              'partnerIds': (_chosen ?? const <String>{}).toList(),
+            });
+            ref.invalidate(ipoIssueProvider(widget.issueId));
+            if (!context.mounted) return;
+            Navigator.of(context).pop();
+            await context.push('/ipo/pool/rounds/${r['id']}');
+          },
         ),
       ),
       children: [
+        Text(
+          'Everyone is on the round’s board. Pick who’s in now — or nobody, and add people as you ask them.',
+          style: OrvText.muted(l),
+        ),
+        const SizedBox(height: 10),
         if (partners.isEmpty) Text('Add partners first in My Pool.', style: OrvText.muted(l)),
+        if (partners.isNotEmpty)
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final (k, label) in const [('to_ask', 'They start at To ask'), ('planned', 'Already said yes')])
+                ChoiceChip(
+                  label: Text(label),
+                  selected: _start == k,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => _start = k),
+                ),
+            ],
+          ),
         for (final p in partners)
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(p['name'] as String, style: OrvText.body(l)),
-            value: _chosen?.contains(p['id']) ?? false,
-            onChanged: (v) => setState(() => v == true ? _chosen!.add(p['id'] as String) : _chosen!.remove(p['id'])),
+          Row(
+            children: [
+              Checkbox(
+                value: _chosen?.contains(p['id']) ?? false,
+                onChanged: (v) =>
+                    setState(() => v == true ? _chosen!.add(p['id'] as String) : _chosen!.remove(p['id'])),
+              ),
+              Expanded(child: Text(p['name'] as String, style: OrvText.body(l))),
+            ],
           ),
       ],
     );
   }
 }
 
-// ------------------------------------------------------------------ one round
+// ------------------------------------------------------------------ one round (spec 0018: the roster)
 
 const _word = {
-  'planned': 'Planned',
+  'to_ask': 'To ask',
+  'asked': 'Asked',
+  'planned': 'Will apply',
   'funded': 'Money sent',
   'applied': 'Applied',
-  'mandate': 'Mandate accepted',
+  'mandate': 'Mandate done',
   'allotted': 'Allotted',
   'not_allotted': 'Not allotted',
   'sold': 'Sold',
   'settled': 'Settled',
+  'declined': 'Can’t this time',
+  'no_reply': 'No reply',
+  'missed': 'Missed',
+};
+const _menuStatuses = [
+  'to_ask',
+  'asked',
+  'planned',
+  'funded',
+  'applied',
+  'mandate',
+  'allotted',
+  'not_allotted',
+  'declined',
+  'no_reply',
+  'missed',
+];
+const _stages = [
+  ('not_asked', 'Not asked', 'not asked yet'),
+  ('asked', 'Asked', 'waiting for an answer'),
+  ('will_apply', 'Will apply', 'said yes · money to sort'),
+  ('applied', 'Applied', 'mandate to approve'),
+  ('mandate', 'Mandate done', 'all set'),
+  ('out', 'Not applying', 'can’t, no reply, missed'),
+];
+const _messageWord = {
+  'ask': 'Will you apply?',
+  'apply': 'Apply now',
+  'mandate': 'Approve the mandate',
+  'allotment': 'Did you get it?',
+  'settle': 'Send back',
 };
 
-class RoundScreen extends ConsumerWidget {
+Color _stageTone(OrvLook l, String stage) => switch (stage) {
+  'not_asked' => l.c.faint,
+  'asked' => l.c.warning,
+  'will_apply' => l.accent,
+  'applied' => Color.lerp(l.accent, l.c.success, 0.5)!,
+  'mandate' => l.c.success,
+  _ => l.c.danger,
+};
+
+/// The next step from where someone is: (label, status to move to | null, message kind | null).
+List<(String, String?, String?)> _next(String? status, bool phone) {
+  List<(String, String?, String?)> wa(String kind, String label) => phone ? [(label, null, kind)] : const [];
+  return switch (status) {
+    null => [('Add', 'to_ask', null)],
+    'to_ask' => [...wa('ask', 'Ask'), ('Will apply', 'planned', null), ('Can’t', 'declined', null)],
+    'asked' => [('Will apply', 'planned', null), ('Can’t', 'declined', null), ...wa('ask', 'Ask again')],
+    'planned' || 'funded' => [('Applied', 'applied', null), ...wa('apply', 'Send details')],
+    'applied' => [('Mandate done', 'mandate', null), ...wa('mandate', 'Remind')],
+    'mandate' => [('Allotted', 'allotted', null), ('Not allotted', 'not_allotted', null)],
+    'sold' => wa('settle', 'Ask to send back'),
+    'declined' || 'no_reply' || 'missed' => [('Will apply after all', 'planned', null)],
+    _ => const [],
+  };
+}
+
+String _record(J rec) {
+  final of = (rec['of'] as num? ?? 0).toInt();
+  if (of == 0) return 'new to the Pool';
+  final missed = (rec['missed'] as num? ?? 0).toInt();
+  return 'applied ${rec['applied']} of $of${missed > 0 ? ' · missed $missed' : ''}';
+}
+
+/// One IPO with my partners (spec 0018): everyone on a board by stage, moved one at a time or many at once, forward
+/// or back with Undo; WhatsApp in my words; and the summary at the close.
+class RoundScreen extends ConsumerStatefulWidget {
   const RoundScreen({super.key, required this.id});
   final String id;
-
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final r = ref.watch(poolRoundProvider(id)).value;
-    final partners = ref.watch(poolPartnersProvider).value ?? const [];
-    final sources = ref.watch(poolSourcesProvider).value ?? const [];
-    final api = ref.read(apiProvider);
-    Future<void> update(J a, Map<String, dynamic> body) async {
-      await api.put<dynamic>('/ipo/pool/applications/${a['id']}', body);
+  ConsumerState<RoundScreen> createState() => _RoundScreenState();
+}
+
+class _RoundScreenState extends ConsumerState<RoundScreen> {
+  final _picked = <String>{};
+  bool _showOut = false;
+
+  String get id => widget.id;
+
+  Future<void> _call(Future<dynamic> Function() f) async {
+    final toaster = Toaster.of(context);
+    try {
+      await f();
+    } on ApiError catch (e) {
+      toaster.show(e.message, tone: ToastTone.danger);
+    } finally {
       ref.invalidate(poolRoundProvider(id));
       ref.invalidate(poolSummaryProvider);
     }
+  }
 
+  Future<void> _move(List<String> ids, String status) async {
+    await _call(
+      () => ref.read(apiProvider).put<dynamic>('/ipo/pool/rounds/$id/partners', {'partnerIds': ids, 'status': status}),
+    );
+    if (mounted) setState(_picked.clear);
+  }
+
+  Future<void> _message(String pid, String kind) async {
+    final api = ref.read(apiProvider);
+    final open = ref.read(urlOpenerProvider);
+    await _call(() async {
+      final r = await api.post<List<dynamic>>('/ipo/pool/rounds/$id/messages', {
+        'partnerIds': [pid],
+        'kind': kind,
+      });
+      await open(Uri.parse((r.first as Map)['url'] as String));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = ref.watch(poolRoundProvider(id)).value;
     return OrvModule(
       module: 'ipo',
       child: Builder(
@@ -2421,42 +2542,129 @@ class RoundScreen extends ConsumerWidget {
           final l = context.orv;
           if (r == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
           final issue = r['issue'] as J;
+          final roster = [for (final x in (r['roster'] as List? ?? const [])) Map<String, dynamic>.from(x as Map)];
+          final apps = {for (final a in (r['applications'] as List).cast<J>()) (a['partner'] as J)['id'] as String: a};
+          // an older server: no roster yet — the people in the round are the roster
+          if (roster.isEmpty) {
+            for (final a in apps.values) {
+              roster.add({
+                'partner': a['partner'],
+                'applicationId': a['id'],
+                'status': a['status'],
+                'stage': a['stage'] ?? 'will_apply',
+                'record': const {'applied': 0, 'of': 0, 'missed': 0},
+              });
+            }
+          }
+          final inRound = roster.where((x) => x['status'] != null).toList();
+          final outside = roster.where((x) => x['status'] == null).toList();
+          final board = (r['board'] as J?) ?? const {};
+          final stages = (board['stages'] as Map?) ?? const {};
+          final total = inRound.length;
+          final closed = r['closed'] == true;
+          final closesAt = r['closesAt'] as String?;
           return Scaffold(
-            body: SafeArea(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
-                children: [
-                  Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Back',
-                        icon: Icon(LucideIcons.arrowLeft, color: l.c.text),
-                        onPressed: () => context.canPop() ? context.pop() : context.go('/ipo'),
-                      ),
-                      Expanded(
-                        child: PageTitle(
-                          issue['name'] as String,
-                          overline:
-                              '${r['applied']}/${r['accounts']} applied · closes ${_day(issue['closeDate'] as String?)}',
+            bottomNavigationBar: _picked.isEmpty
+                ? null
+                : SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                      child: Glass(
+                        level: GlassLevel.float,
+                        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${_picked.length} picked',
+                                style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              tooltip: 'Move the picked people',
+                              onSelected: (s) => _move(_picked.toList(), s),
+                              itemBuilder: (_) => [
+                                for (final s in _menuStatuses) PopupMenuItem(value: s, child: Text(_word[s]!)),
+                              ],
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Text(
+                                  'Move to…',
+                                  style: OrvText.body(l).copyWith(color: l.accent, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'WhatsApp the picked people',
+                              icon: Icon(LucideIcons.messageCircle, color: l.accent),
+                              onPressed: () {
+                                final ids = [
+                                  for (final x in inRound.followedBy(outside))
+                                    if (_picked.contains((x['partner'] as Map)['id']) &&
+                                        ((x['partner'] as Map)['phone'] as String? ?? '').isNotEmpty)
+                                      (x['partner'] as Map)['id'] as String,
+                                ];
+                                if (ids.isEmpty) return;
+                                showGlassSheet<void>(context, (_) => _QueueSheet(roundId: id, ids: ids)).then((_) {
+                                  ref.invalidate(poolRoundProvider(id));
+                                  if (mounted) setState(_picked.clear);
+                                });
+                              },
+                            ),
+                            IconButton(
+                              tooltip: 'Clear the picks',
+                              icon: Icon(LucideIcons.x, color: l.c.muted),
+                              onPressed: () => setState(_picked.clear),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                  Glass(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        Expanded(child: _fact(l, 'To send', _m(r['toSendMinor'] as num))),
-                        Expanded(child: _fact(l, 'Card cost', _m(r['feesIfCheapestMinor'] as num))),
-                        Expanded(child: _fact(l, 'Net to you', _m(r['netMinor'] as num))),
-                      ],
                     ),
                   ),
-                  for (final a in (r['applications'] as List).cast<J>()) ...[
-                    const SizedBox(height: 10),
+            body: SafeArea(
+              child: RefreshIndicator(
+                color: l.accent,
+                onRefresh: () async => ref.invalidate(poolRoundProvider(id)),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
+                  children: [
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Back',
+                          icon: Icon(LucideIcons.arrowLeft, color: l.c.text),
+                          onPressed: () => context.canPop() ? context.pop() : context.go('/ipo'),
+                        ),
+                        Expanded(
+                          child: PageTitle(
+                            issue['name'] as String,
+                            overline: closed
+                                ? 'Bids closed'
+                                : closesAt != null
+                                ? 'Bids close $closesAt'
+                                : 'closes ${_day(issue['closeDate'] as String?)}',
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: IconButton(
+                            tooltip: 'Edit the WhatsApp messages',
+                            icon: Icon(LucideIcons.pencilLine, color: l.c.muted, size: 19),
+                            onPressed: () => showGlassSheet<void>(
+                              context,
+                              (_) => _TemplatesSheet(
+                                sample: roster.isEmpty ? 'Ravi' : (roster.first['partner'] as Map)['name'] as String,
+                                issue: issue,
+                                closesAt: closesAt,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // the round at a glance
                     Glass(
-                      blur: false,
-                      padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+                      padding: const EdgeInsets.all(14),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -2464,140 +2672,795 @@ class RoundScreen extends ConsumerWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  (a['partner'] as J)['name'] as String,
+                                  total == 0
+                                      ? 'Nobody in this round yet'
+                                      : '${board['applied'] ?? r['applied']} of $total applied · ${board['mandates'] ?? 0} mandates',
                                   style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
                                 ),
                               ),
-                              if (a['reportedBy'] == 'partner') OrvBadge('said so', tone: l.accent),
-                              const SizedBox(width: 6),
-                              OrvBadge(_word[a['status']] ?? a['status'] as String),
+                              if (outside.isNotEmpty)
+                                OrvButton(
+                                  label: 'Add all ${outside.length}',
+                                  small: true,
+                                  icon: LucideIcons.userPlus,
+                                  onPressed: () =>
+                                      _move([for (final x in outside) (x['partner'] as Map)['id'] as String], 'to_ask'),
+                                ),
                             ],
                           ),
-                          Text(
-                            '${a['lots']} lot · ${_m(a['amountMinor'] as num)} · holds ${_m(a['holdsMinor'] as num)}',
-                            style: OrvText.muted(l).copyWith(fontSize: 12.5),
-                          ),
-                          if ((a['needMinor'] as num) > 0)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Needs ${_m(a['needMinor'] as num)}${a['suggestion'] == null ? '' : ' — cheapest: ${(a['suggestion'] as J)['source']}'}',
-                                style: OrvText.body(l).copyWith(fontSize: 13.5, color: l.c.warning),
-                              ),
-                            )
-                          else if (['planned', 'funded'].contains(a['status']))
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Already holds enough — nothing to send.',
-                                style: OrvText.body(l).copyWith(fontSize: 13.5),
+                          if (total > 0) ...[
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(OrvTokens.radiusFull),
+                              child: SizedBox(
+                                height: 9,
+                                child: Row(
+                                  children: [
+                                    for (final (k, _, _) in _stages)
+                                      if (((stages[k] as num?) ?? 0) > 0)
+                                        Expanded(
+                                          flex: (stages[k] as num).toInt(),
+                                          child: ColoredBox(color: _stageTone(l, k)),
+                                        ),
+                                  ],
+                                ),
                               ),
                             ),
-                          if (a['gainMinor'] != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Gain ${_m(a['gainMinor'] as num)} · their share ${_m(a['shareMinor'] as num? ?? 0)} · back ${_m(a['backMinor'] as num)}',
-                                style: OrvText.body(l).copyWith(fontSize: 13.5),
-                              ),
-                            ),
+                          ],
+                          const SizedBox(height: 8),
                           Wrap(
-                            spacing: 2,
+                            spacing: 12,
+                            runSpacing: 4,
                             children: [
-                              if ((a['needMinor'] as num) > 0)
-                                TextButton(
-                                  onPressed: () => showGlassSheet<void>(
-                                    context,
-                                    (_) => MoneySheet(
-                                      partners: partners,
-                                      sources: sources,
-                                      partnerId: (a['partner'] as J)['id'] as String,
-                                      sourceId: (a['suggestion'] as J?)?['sourceId'] as String?,
-                                      amount: (a['needMinor'] as num) / 100,
-                                      roundId: id,
+                              for (final (k, label, _) in _stages)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 7,
+                                      height: 7,
+                                      decoration: BoxDecoration(color: _stageTone(l, k), shape: BoxShape.circle),
                                     ),
-                                  ),
-                                  child: const Text('Record transfer'),
+                                    const SizedBox(width: 5),
+                                    Text('$label ${stages[k] ?? 0}', style: OrvText.muted(l).copyWith(fontSize: 12)),
+                                  ],
                                 ),
-                              if (['planned', 'funded'].contains(a['status']))
-                                TextButton(
-                                  onPressed: () => update(a, {'status': 'applied'}),
-                                  child: const Text('Applied'),
-                                ),
-                              if (a['status'] == 'applied')
-                                TextButton(
-                                  onPressed: () => update(a, {'status': 'mandate'}),
-                                  child: const Text('Mandate'),
-                                ),
-                              if (['applied', 'mandate'].contains(a['status'])) ...[
-                                TextButton(
-                                  onPressed: () => update(a, {'allottedLots': 1}),
-                                  child: const Text('Allotted'),
-                                ),
-                                TextButton(
-                                  onPressed: () => update(a, {'status': 'not_allotted'}),
-                                  child: const Text('Not allotted'),
-                                ),
-                              ],
-                              if (a['status'] == 'allotted')
-                                TextButton(
-                                  onPressed: () => showGlassSheet<void>(
-                                    context,
-                                    (_) => _SaleSheet(
-                                      suggested:
-                                          (issue['listingPrice'] as num?) ??
-                                          ((issue['priceMax'] as num?) != null && issue['gmp'] != null
-                                              ? (issue['priceMax'] as num) + (issue['gmp'] as num)
-                                              : null),
-                                      onSave: (price) => update(a, {'soldPrice': price, 'saleCosts': 20}),
-                                    ),
-                                  ),
-                                  child: const Text('Sold…'),
-                                ),
-                              if (a['status'] == 'sold')
-                                TextButton(
-                                  onPressed: () async {
-                                    await api.post<dynamic>('/ipo/pool/applications/${a['id']}/settle', {
-                                      'returned': (a['backMinor'] as num) / 100,
-                                    });
-                                    ref.invalidate(poolRoundProvider(id));
-                                    ref.invalidate(poolSummaryProvider);
-                                  },
-                                  child: const Text('Settle (all back)'),
-                                ),
-                              if ((a['partner'] as J)['phone'] != '' && ['planned', 'funded'].contains(a['status']))
-                                IconButton(
-                                  tooltip: 'Ask on WhatsApp',
-                                  icon: Icon(LucideIcons.messageCircle, size: 18, color: l.accent),
-                                  onPressed: () async {
-                                    final link = await api.post<J>(
-                                      '/ipo/pool/partners/${(a['partner'] as J)['id']}/link',
-                                    );
-                                    final digits = ((a['partner'] as J)['phone'] as String).replaceAll(
-                                      RegExp(r'\D'),
-                                      '',
-                                    );
-                                    final text =
-                                        'Hi ${(a['partner'] as J)['name']}, please apply to the ${issue['name']} IPO: ${a['lots']} lot (${_m(a['amountMinor'] as num)}) before ${_day(issue['closeDate'] as String?)}. Tap here when done: ${link['url']}';
-                                    await ref.read(urlOpenerProvider)(
-                                      Uri.parse(
-                                        'https://wa.me/${digits.length == 10 ? '91$digits' : digits}?text=${Uri.encodeComponent(text)}',
-                                      ),
-                                    );
-                                  },
-                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(child: _fact(l, 'To send', _m(r['toSendMinor'] as num))),
+                              Expanded(child: _fact(l, 'Card cost', _m(r['feesIfCheapestMinor'] as num))),
+                              Expanded(child: _fact(l, 'Net to you', _m(r['netMinor'] as num))),
                             ],
                           ),
                         ],
                       ),
                     ),
+                    if (closed) _CloseCard(board: board),
+                    for (final (k, label, hint) in _stages)
+                      if (inRound.any((x) => x['stage'] == k)) ...[
+                        const SizedBox(height: 14),
+                        InkWell(
+                          onTap: k == 'out' ? () => setState(() => _showOut = !_showOut) : null,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 9,
+                                height: 9,
+                                decoration: BoxDecoration(color: _stageTone(l, k), shape: BoxShape.circle),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(label, style: OrvText.heading(l).copyWith(fontSize: 15)),
+                              const SizedBox(width: 6),
+                              OrvBadge('${inRound.where((x) => x['stage'] == k).length}'),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  hint,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: OrvText.muted(l).copyWith(fontSize: 12),
+                                ),
+                              ),
+                              if (k == 'out')
+                                Icon(
+                                  _showOut ? LucideIcons.chevronUp : LucideIcons.chevronDown,
+                                  size: 17,
+                                  color: l.c.muted,
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (k != 'out' || _showOut) ...[
+                          const SizedBox(height: 6),
+                          Glass(
+                            blur: false,
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            child: Column(
+                              children: [
+                                for (final x in inRound.where((x) => x['stage'] == k))
+                                  _PersonTile(
+                                    x: x,
+                                    a: apps[(x['partner'] as Map)['id']],
+                                    issue: issue,
+                                    roundId: id,
+                                    picked: _picked.contains((x['partner'] as Map)['id']),
+                                    picking: _picked.isNotEmpty,
+                                    onPick: () => setState(() {
+                                      final pid = (x['partner'] as Map)['id'] as String;
+                                      _picked.contains(pid) ? _picked.remove(pid) : _picked.add(pid);
+                                    }),
+                                    onMove: (s) => _move([(x['partner'] as Map)['id'] as String], s),
+                                    onMessage: (kind) => _message((x['partner'] as Map)['id'] as String, kind),
+                                    call: _call,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    if (outside.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Text('Not in this round', style: OrvText.heading(l).copyWith(fontSize: 15)),
+                          const SizedBox(width: 6),
+                          OrvBadge('${outside.length}'),
+                          const SizedBox(width: 8),
+                          Text('add them as you ask', style: OrvText.muted(l).copyWith(fontSize: 12)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Glass(
+                        blur: false,
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Column(
+                          children: [
+                            for (final x in outside)
+                              _PersonTile(
+                                x: x,
+                                a: null,
+                                issue: issue,
+                                roundId: id,
+                                picked: _picked.contains((x['partner'] as Map)['id']),
+                                picking: _picked.isNotEmpty,
+                                onPick: () => setState(() {
+                                  final pid = (x['partner'] as Map)['id'] as String;
+                                  _picked.contains(pid) ? _picked.remove(pid) : _picked.add(pid);
+                                }),
+                                onMove: (s) => _move([(x['partner'] as Map)['id'] as String], s),
+                                onMessage: (kind) => _message((x['partner'] as Map)['id'] as String, kind),
+                                call: _call,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Text(
+                      'Tap someone for every status and Undo · long-press to pick several.',
+                      style: OrvText.muted(l).copyWith(fontSize: 11.5),
+                    ),
                   ],
-                ],
+                ),
               ),
             ),
           );
         },
       ),
+    );
+  }
+}
+
+/// One person: where they are, their record, the next step; tap for everything, long-press to pick.
+class _PersonTile extends ConsumerWidget {
+  const _PersonTile({
+    required this.x,
+    required this.a,
+    required this.issue,
+    required this.roundId,
+    required this.picked,
+    required this.picking,
+    required this.onPick,
+    required this.onMove,
+    required this.onMessage,
+    required this.call,
+  });
+  final J x;
+  final J? a;
+  final J issue;
+  final String roundId;
+  final bool picked;
+  final bool picking;
+  final VoidCallback onPick;
+  final void Function(String status) onMove;
+  final void Function(String kind) onMessage;
+  final Future<void> Function(Future<dynamic> Function()) call;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final p = Map<String, dynamic>.from(x['partner'] as Map);
+    final status = x['status'] as String?;
+    final rec = Map<String, dynamic>.from((x['record'] as Map?) ?? const {});
+    final phone = (p['phone'] as String? ?? '').isNotEmpty;
+    final next = _next(status, phone);
+    final a = this.a;
+    final need = (a?['needMinor'] as num?) ?? 0;
+    return Semantics(
+      container: true,
+      label: p['name'] as String,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(OrvTokens.radiusSm),
+        onLongPress: onPick,
+        onTap: picking ? onPick : (a == null ? null : () => _openPerson(context, ref)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 10, 4, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  if (picking)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Icon(
+                        picked ? LucideIcons.squareCheck : LucideIcons.square,
+                        size: 20,
+                        color: picked ? l.accent : l.c.muted,
+                      ),
+                    ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                p['name'] as String,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            if (status != null) ...[
+                              const SizedBox(width: 6),
+                              Text(_word[status] ?? status, style: OrvText.muted(l).copyWith(fontSize: 12)),
+                            ],
+                            if (a?['reportedBy'] == 'partner') ...[
+                              const SizedBox(width: 6),
+                              OrvBadge('said so', tone: l.accent),
+                            ],
+                          ],
+                        ),
+                        Text(
+                          [
+                            if (a != null) '${a['lots']} lot · ${_m(a['amountMinor'] as num)}',
+                            _record(rec),
+                          ].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: OrvText.muted(l).copyWith(fontSize: 12),
+                        ),
+                        if (rec['missedLast'] == true && rec['lastMissed'] != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: OrvBadge('missed ${rec['lastMissed']} last time', tone: l.c.warning),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (!picking && next.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: OrvButton(
+                        key: Key('act-${a?['id'] ?? p['id']}-${next.first.$2 ?? next.first.$3}'),
+                        label: next.first.$1,
+                        small: true,
+                        icon: next.first.$3 != null ? LucideIcons.messageCircle : null,
+                        variant: ButtonVariant.primary,
+                        onPressed: () => _do(next.first, ref),
+                      ),
+                    ),
+                ],
+              ),
+              if (a != null && ['planned', 'funded'].contains(status))
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          need > 0
+                              ? 'Needs ${_m(need)}${a['suggestion'] == null ? '' : ' — cheapest: ${(a['suggestion'] as J)['source']}'}'
+                              : 'Already holds enough — nothing to send.',
+                          style: OrvText.body(l).copyWith(fontSize: 13, color: need > 0 ? l.c.warning : null),
+                        ),
+                      ),
+                      if (need > 0)
+                        TextButton(
+                          onPressed: () => showGlassSheet<void>(
+                            context,
+                            (_) => MoneySheet(
+                              partners: ref.read(poolPartnersProvider).value ?? const [],
+                              sources: ref.read(poolSourcesProvider).value ?? const [],
+                              partnerId: p['id'] as String,
+                              sourceId: (a['suggestion'] as J?)?['sourceId'] as String?,
+                              amount: need / 100,
+                              roundId: roundId,
+                            ),
+                          ),
+                          child: const Text('Record transfer'),
+                        ),
+                    ],
+                  ),
+                ),
+              if (a?['gainMinor'] != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Gain ${_m(a!['gainMinor'] as num)} · their share ${_m(a['shareMinor'] as num? ?? 0)} · back ${_m(a['backMinor'] as num)}',
+                    style: OrvText.body(l).copyWith(fontSize: 13),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _do((String, String?, String?) act, WidgetRef ref) {
+    final a = this.a;
+    if (act.$3 != null) return onMessage(act.$3!);
+    if (act.$2 == 'allotted' && a != null) {
+      call(() => ref.read(apiProvider).put<dynamic>('/ipo/pool/applications/${a['id']}', {'allottedLots': a['lots']}));
+      return;
+    }
+    onMove(act.$2!);
+  }
+
+  void _openPerson(BuildContext context, WidgetRef ref) {
+    final a = this.a!;
+    final p = x['partner'] as Map;
+    final status = x['status'] as String?;
+    final api = ref.read(apiProvider);
+    showGlassSheet<void>(
+      context,
+      (sheet) => StickySheet(
+        title: p['name'] as String,
+        footer: Row(
+          children: [
+            if (a['canUndo'] == true)
+              OrvButton(
+                label: 'Undo',
+                small: true,
+                icon: LucideIcons.rotateCcw,
+                onPressed: () {
+                  Navigator.of(sheet).pop();
+                  call(() => api.post<dynamic>('/ipo/pool/applications/${a['id']}/undo'));
+                },
+              ),
+            const Spacer(),
+            if (!['sold', 'settled'].contains(status))
+              TextButton(
+                onPressed: () {
+                  Navigator.of(sheet).pop();
+                  call(() => api.delete<dynamic>('/ipo/pool/rounds/$roundId/partners/${p['id']}'));
+                },
+                child: Text('Take out', style: TextStyle(color: sheet.orv.c.danger)),
+              ),
+          ],
+        ),
+        children: [
+          Text(
+            '${_word[status] ?? status} · ${_record(Map<String, dynamic>.from((x['record'] as Map?) ?? const {}))}',
+            style: OrvText.muted(sheet.orv),
+          ),
+          const SizedBox(height: 12),
+          if ((p['phone'] as String? ?? '').isNotEmpty) ...[
+            Text('WHATSAPP', style: OrvText.label(sheet.orv).copyWith(fontSize: 10.5)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final e in _messageWord.entries)
+                  OrvButton(
+                    label: e.value,
+                    small: true,
+                    icon: LucideIcons.messageCircle,
+                    onPressed: () {
+                      Navigator.of(sheet).pop();
+                      onMessage(e.key);
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          if (!['sold', 'settled'].contains(status)) ...[
+            Text('SET THE STATUS', style: OrvText.label(sheet.orv).copyWith(fontSize: 10.5)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final s in _menuStatuses)
+                  ChoiceChip(
+                    label: Text(_word[s]!),
+                    selected: s == status,
+                    showCheckmark: false,
+                    onSelected: s == status
+                        ? null
+                        : (_) {
+                            Navigator.of(sheet).pop();
+                            if (s == 'allotted') {
+                              call(
+                                () =>
+                                    api.put<dynamic>('/ipo/pool/applications/${a['id']}', {'allottedLots': a['lots']}),
+                              );
+                            } else {
+                              onMove(s);
+                            }
+                          },
+                  ),
+              ],
+            ),
+          ],
+          if (status == 'allotted') ...[
+            const SizedBox(height: 14),
+            OrvButton(
+              label: 'Sold…',
+              variant: ButtonVariant.primary,
+              onPressed: () {
+                Navigator.of(sheet).pop();
+                showGlassSheet<void>(
+                  context,
+                  (_) => _SaleSheet(
+                    suggested:
+                        (issue['listingPrice'] as num?) ??
+                        ((issue['priceMax'] as num?) != null && issue['gmp'] != null
+                            ? (issue['priceMax'] as num) + (issue['gmp'] as num)
+                            : null),
+                    onSave: (price) => call(
+                      () =>
+                          api.put<dynamic>('/ipo/pool/applications/${a['id']}', {'soldPrice': price, 'saleCosts': 20}),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+          if (status == 'sold') ...[
+            const SizedBox(height: 14),
+            OrvButton(
+              label: 'Settle (all back)',
+              variant: ButtonVariant.primary,
+              onPressed: () {
+                Navigator.of(sheet).pop();
+                call(
+                  () => api.post<dynamic>('/ipo/pool/applications/${a['id']}/settle', {
+                    'returned': (a['backMinor'] as num) / 100,
+                  }),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CloseCard extends StatelessWidget {
+  const _CloseCard({required this.board});
+  final J board;
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    List<String> names(String k) => [for (final n in (board[k] as List? ?? const [])) n as String];
+    final missed = names('missed'), noReply = names('noReply'), pending = names('mandatePending');
+    Widget line(String label, List<String> who, Color tone) => who.isEmpty
+        ? const SizedBox.shrink()
+        : Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                OrvBadge(label, tone: tone),
+                const SizedBox(width: 8),
+                Expanded(child: Text(who.join(', '), style: OrvText.body(l).copyWith(fontSize: 13.5))),
+              ],
+            ),
+          );
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Glass(
+        level: GlassLevel.float,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('BIDS CLOSED', style: OrvText.label(l).copyWith(fontSize: 10.5)),
+            const SizedBox(height: 4),
+            Text(
+              '${board['applied'] ?? 0} applied · ${board['mandates'] ?? 0} mandates'
+              '${missed.length + noReply.length > 0 ? ' · ${missed.length + noReply.length} missed' : ''}',
+              style: OrvText.heading(l),
+            ),
+            line('Mandate pending', pending, l.c.warning),
+            line('Missed', missed, l.c.danger),
+            line('No reply', noReply, l.c.muted),
+            const SizedBox(height: 6),
+            Text(
+              missed.isEmpty && noReply.isEmpty
+                  ? 'Everyone who said yes got their bid in. 🎉'
+                  : 'They’ll show as “missed last time” in the next round.',
+              style: OrvText.muted(l).copyWith(fontSize: 12.5),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One tap per chat, in turn.
+class _QueueSheet extends ConsumerStatefulWidget {
+  const _QueueSheet({required this.roundId, required this.ids});
+  final String roundId;
+  final List<String> ids;
+  @override
+  ConsumerState<_QueueSheet> createState() => _QueueSheetState();
+}
+
+class _QueueSheetState extends ConsumerState<_QueueSheet> {
+  String _kind = 'ask';
+  List<J>? _msgs;
+  final _sent = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _msgs = null;
+      _sent.clear();
+    });
+    final r = await ref.read(apiProvider).post<List<dynamic>>('/ipo/pool/rounds/${widget.roundId}/messages', {
+      'partnerIds': widget.ids,
+      'kind': _kind,
+    });
+    if (mounted) setState(() => _msgs = [for (final x in r) Map<String, dynamic>.from(x as Map)]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final next = _msgs?.where((m) => !_sent.contains(m['partnerId'])).firstOrNull;
+    return StickySheet(
+      title: 'WhatsApp ${widget.ids.length} ${widget.ids.length == 1 ? 'person' : 'people'}',
+      footer: Align(
+        alignment: Alignment.centerRight,
+        child: OrvButton(label: 'Done', variant: ButtonVariant.primary, onPressed: () => Navigator.of(context).pop()),
+      ),
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final e in _messageWord.entries)
+              ChoiceChip(
+                label: Text(e.value),
+                selected: _kind == e.key,
+                showCheckmark: false,
+                onSelected: (_) {
+                  _kind = e.key;
+                  _load();
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_msgs == null) const LinearProgressIndicator(minHeight: 2),
+        for (final m in _msgs ?? const <J>[])
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+              border: Border.all(color: next?['partnerId'] == m['partnerId'] ? l.accent : l.c.edge),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(m['name'] as String, style: OrvText.body(l).copyWith(fontWeight: FontWeight.w700)),
+                    ),
+                    if (_sent.contains(m['partnerId']))
+                      OrvBadge('opened', tone: l.c.success)
+                    else
+                      OrvButton(
+                        label: 'Open chat',
+                        small: true,
+                        icon: LucideIcons.messageCircle,
+                        variant: next?['partnerId'] == m['partnerId'] ? ButtonVariant.primary : ButtonVariant.secondary,
+                        onPressed: () async {
+                          await ref.read(urlOpenerProvider)(Uri.parse(m['url'] as String));
+                          if (mounted) setState(() => _sent.add(m['partnerId'] as String));
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(m['text'] as String, style: OrvText.muted(l).copyWith(fontSize: 12.5)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The WhatsApp messages in my own words, with a preview (spec 0018 D).
+class _TemplatesSheet extends ConsumerStatefulWidget {
+  const _TemplatesSheet({required this.sample, required this.issue, required this.closesAt});
+  final String sample;
+  final J issue;
+  final String? closesAt;
+  @override
+  ConsumerState<_TemplatesSheet> createState() => _TemplatesSheetState();
+}
+
+class _TemplatesSheetState extends ConsumerState<_TemplatesSheet> {
+  J? _t;
+  String _kind = 'ask';
+  final _drafts = <String, TextEditingController>{};
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(apiProvider).get<J>('/ipo/pool/templates').then((t) {
+      if (!mounted) return;
+      setState(() {
+        _t = t;
+        for (final e in (t['templates'] as Map).entries) {
+          _drafts[e.key as String] = TextEditingController(text: e.value as String)..addListener(_redraw);
+        }
+      });
+    });
+  }
+
+  void _redraw() => setState(() {});
+
+  @override
+  void dispose() {
+    for (final c in _drafts.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final t = _t;
+    final c = _drafts[_kind];
+    final defaults = (t?['defaults'] as Map?) ?? const {};
+    final i = widget.issue;
+    final vars = {
+      'name': widget.sample.split(' ').first,
+      'ipo': i['name'] as String,
+      'lots': '1',
+      'amount': (i['priceMax'] as num?) != null && (i['lotSize'] as num?) != null
+          ? _m((i['priceMax'] as num) * (i['lotSize'] as num) * 100)
+          : '₹—',
+      'closes': widget.closesAt ?? 'it closes',
+      'link': 'https://orvyn.app/p/…',
+      'upi': 'ravi@okaxis',
+      'gmp': i['gmp'] == null ? 'not out yet' : '₹${i['gmp']}',
+      'back': '₹17,357',
+      'missedLast': '',
+    };
+    String preview(String s) => s
+        .replaceAllMapped(RegExp(r'\{(\w+)\}'), (m) => vars[m[1]] ?? m[0]!)
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+        .trim();
+    return StickySheet(
+      title: 'WhatsApp messages',
+      footer: Align(
+        alignment: Alignment.centerRight,
+        child: OrvButton(
+          label: 'Save',
+          variant: ButtonVariant.primary,
+          onPressed: t == null
+              ? null
+              : () async {
+                  final toaster = Toaster.of(context);
+                  final nav = Navigator.of(context);
+                  await ref.read(apiProvider).put<dynamic>('/ipo/pool/templates', {
+                    for (final e in _drafts.entries) e.key: e.value.text,
+                  });
+                  toaster.show('Saved — your words from now on', tone: ToastTone.success);
+                  nav.pop();
+                },
+        ),
+      ),
+      children: [
+        if (t == null) const LinearProgressIndicator(minHeight: 2),
+        if (t != null) ...[
+          Text('Write them your way. The {placeholders} fill in for each person.', style: OrvText.muted(l)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final e in _messageWord.entries)
+                ChoiceChip(
+                  label: Text('${e.value}${_drafts[e.key]?.text != defaults[e.key] ? ' •' : ''}'),
+                  selected: _kind == e.key,
+                  showCheckmark: false,
+                  onSelected: (_) => setState(() => _kind = e.key),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            key: Key('template-$_kind'),
+            controller: c,
+            minLines: 4,
+            maxLines: 8,
+            decoration: InputDecoration(labelText: '“${_messageWord[_kind]}”'),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              for (final p in (t['placeholders'] as List).cast<String>())
+                ActionChip(
+                  label: Text('{$p}', style: const TextStyle(fontSize: 11.5)),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => c?.text = '${c.text}{$p}',
+                ),
+            ],
+          ),
+          if (c != null && c.text != defaults[_kind])
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(LucideIcons.rotateCcw, size: 15),
+                label: const Text('ORVYN’s words'),
+                onPressed: () => c.text = defaults[_kind] as String,
+              ),
+            ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: l.c.success.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('PREVIEW · TO ${vars['name']!.toUpperCase()}', style: OrvText.label(l).copyWith(fontSize: 10)),
+                const SizedBox(height: 4),
+                Text(preview(c?.text ?? ''), style: OrvText.body(l).copyWith(fontSize: 14)),
+              ],
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

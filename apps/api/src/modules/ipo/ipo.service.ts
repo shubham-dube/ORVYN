@@ -92,6 +92,8 @@ export class IpoService implements OnModuleInit, OnModuleDestroy {
       async () => {
         await this.refresh().catch((e: Error) => this.log.warn(`refresh: ${e.message}`));
         await this.alertAll().catch((e: Error) => this.log.warn(`alerts: ${e.message}`));
+        const { today, hhmm } = this.clock();
+        await this.pool.closeDue(today, hhmm).catch((e: Error) => this.log.warn(`pool close: ${e.message}`));
       },
       { connection, concurrency: 1 },
     );
@@ -696,6 +698,7 @@ export class IpoService implements OnModuleInit, OnModuleDestroy {
         userId: ownerId,
         module: 'ipo',
         kind: 'ipo',
+        type: 'ipo.alert',
         title,
         body,
         url: extra.url ?? `/ipo/${i.id}`,
@@ -872,25 +875,30 @@ export class IpoService implements OnModuleInit, OnModuleDestroy {
       .where(and(eq(ipoRounds.ownerId, ownerId), eq(ipoIssues.closeDate, today)));
     let n = 0;
     for (const { round, issue } of rows) {
-      const waiting = await this.db
-        .select({ id: ipoApplications.id })
+      const apps = await this.db
+        .select({ status: ipoApplications.status })
         .from(ipoApplications)
-        .where(
-          and(eq(ipoApplications.roundId, round.id), inArray(ipoApplications.status, ['planned', 'funded'])),
-        );
-      if (!waiting.length) continue;
+        .where(eq(ipoApplications.roundId, round.id));
+      const waiting = apps.filter((a) => ['to_ask', 'asked', 'planned', 'funded'].includes(a.status)).length;
+      const mandates = apps.filter((a) => a.status === 'applied').length;
+      if (!waiting && !mandates) continue;
       const [row] = await this.db
         .insert(ipoAlerts)
         .values({ ownerId, issueId: issue.id, day: today, reason: `pool:closes:${round.id}` })
         .onConflictDoNothing()
         .returning();
       if (!row) continue;
+      const parts = [
+        waiting ? `${waiting} ${waiting === 1 ? 'account hasn’t' : 'accounts haven’t'} applied` : '',
+        mandates ? `${mandates} ${mandates === 1 ? 'mandate' : 'mandates'} pending` : '',
+      ].filter(Boolean);
       await this.notify.send({
         userId: ownerId,
         module: 'ipo',
         kind: 'pool',
-        title: `${waiting.length} ${waiting.length === 1 ? 'account hasn’t' : 'accounts haven’t'} applied — ${issue.name} closes today`,
-        body: 'Bids close at 5 pm. Nudge them from the round.',
+        type: 'ipo.last_day',
+        title: `${parts.join(' · ')} — ${issue.name} closes today`,
+        body: 'Bids close at 5 pm, and the UPI mandate has to be approved by then. Nudge them from the round.',
         url: `/ipo/pool/rounds/${round.id}`,
         dedupeKey: `ipo:pool:closes:${round.id}`,
         priority: 'high',

@@ -70,8 +70,23 @@ export interface InboxView {
   important: InboxItemView[];
   updates: InboxItemView[];
   rest: InboxItemView[];
-  boxes: { connectionId: string; account: string; provider: string; unread: number; problem?: string }[];
+  boxes: {
+    connectionId: string;
+    account: string;
+    provider: string;
+    unread: number;
+    /** of those, how many matter (spec 0018: the count that's worth a badge) */
+    important?: number;
+    problem?: string;
+  }[];
   refreshedAt: string | null;
+}
+
+/** For badges (spec 0018, D-0018-6): the mail that matters, not every unread. */
+export interface InboxCounts {
+  important: number;
+  unread: number;
+  boxes: { account: string; unread: number; important: number }[];
 }
 
 export const InboxActBody = z.object({ action: z.enum(['done', 'pin', 'unpin', 'remind']) });

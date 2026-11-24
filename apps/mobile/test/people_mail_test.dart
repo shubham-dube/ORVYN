@@ -161,7 +161,7 @@ void main() {
     await settle(tester);
     await tester.tap(find.bySemanticsLabel('Open Mail'));
     await settle(tester, 20);
-    expect(find.text('3 unread · 2 mailboxes'), findsOneWidget);
+    expect(find.text('2 need you · 3 unread'), findsOneWidget);
     expect(find.text('Raj needs the invoice by Friday, and your HDFC bill is ready.'), findsOneWidget);
     expect(find.text('Raj needs the invoice by Friday'), findsOneWidget);
     expect(find.text('₹18,230'), findsWidgets);

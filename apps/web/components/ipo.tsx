@@ -766,7 +766,7 @@ export function IssueDetailView({
             </Link>
           ) : d.status === 'open' || d.status === 'upcoming' ? (
             <Button variant="secondary" size="sm" onClick={onStartRound}>
-              <Users size={14} /> Apply from my accounts
+              <Users size={14} /> Plan with my partners
             </Button>
           ) : null}
         </div>

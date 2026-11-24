@@ -66,12 +66,25 @@ export class NotifyController {
       userId: a.userId,
       module: 'today',
       kind: 'reminder.try',
+      type: 'today.task_reminder',
+      own: true,
       title: 'Sample reminder',
       body: 'This is how a reminder will reach you.',
       url: '/today',
       dedupeKey: 'try-reminder',
       ...deliveryFor(body.ways, false),
     });
+    return { ok: true };
+  }
+
+  /** "Send me a sample" of one type, through the ways set for it (spec 0019). */
+  @Post('sample')
+  @HttpCode(200)
+  async sample(
+    @Auth() a: AuthContext,
+    @Body(new ZodPipe(z.object({ type: z.string().max(60) }))) body: { type: string },
+  ) {
+    await this.notify.sample(a.userId, body.type);
     return { ok: true };
   }
 

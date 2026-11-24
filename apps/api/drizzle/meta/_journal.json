@@ -211,6 +211,20 @@
       "when": 1795461417114,
       "tag": "0029_home_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1795466289415,
+      "tag": "0030_pool_roster",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1795468090158,
+      "tag": "0031_notify_rules",
+      "breakpoints": true
     }
   ]
 }

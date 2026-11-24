@@ -5,6 +5,7 @@ import { AiService } from '../src/modules/ai/ai.service';
 import type { FakeModel } from '../src/modules/ai/fake.model';
 import { BriefOutside } from '../src/modules/brief/brief.outside';
 import { BriefService } from '../src/modules/brief/brief.service';
+import { ConnectionsService } from '../src/modules/connections/connections.service';
 import { IpoService } from '../src/modules/ipo/ipo.service';
 import { RemindersService } from '../src/modules/today/reminders.service';
 import { call, type Harness, OWNER, signIn, startApp } from './harness';
@@ -132,6 +133,57 @@ describe('the Brief (spec 0009)', () => {
     expect(theirs.sections.map((s: any) => s.kind)).toEqual(['focus', 'agenda']);
     expect(JSON.stringify(theirs)).toContain('Friend secret task');
     expect(JSON.stringify(theirs)).not.toContain('Standup');
+  });
+
+  it('from your tools: what I’m working on in ClickUp, as Today shows it, and the reviews waiting (spec 0018)', async () => {
+    const c = h.app.get(ConnectionsService);
+    const task = (id: string, name: string, status: string, working: boolean, due: string | null) =>
+      ({
+        id,
+        name,
+        status,
+        statusColor: '#7c3aed',
+        working,
+        list: 'App',
+        due,
+        url: `https://app.clickup.com/t/${id}`,
+      }) as any;
+    const [cu, gh] = [c.clickupTasks, c.githubWork];
+    c.clickupTasks = async () => [
+      task('t1', 'Payment screen', 'development', true, at(1, '18:00')),
+      task('t2', 'Onboarding art', 'design', true, at(-2, '18:00')),
+      task('t3', 'Old ticket', 'backlog', false, null),
+    ];
+    c.githubWork = async () =>
+      [
+        {
+          kind: 'issue',
+          title: 'Crash on login',
+          repo: 'acme/app',
+          number: 7,
+          url: 'https://github.com/acme/app/issues/7',
+        },
+        {
+          kind: 'review',
+          title: 'Add payments',
+          repo: 'acme/app',
+          number: 9,
+          url: 'https://github.com/acme/app/pull/9',
+        },
+      ] as any;
+    try {
+      const w = (await brief.build(me.user.id)).sections.find((x) => x.kind === 'work') as any;
+      // the working ones only, soonest first; the overdue one says so
+      expect(w.tasks.map((t: any) => [t.name, t.status, t.overdue])).toEqual([
+        ['Onboarding art', 'design', true],
+        ['Payment screen', 'development', false],
+      ]);
+      expect(w.clickup).toBe(3);
+      expect(w.github.map((g: any) => g.kind)).toEqual(['review', 'issue']);
+    } finally {
+      c.clickupTasks = cu;
+      c.githubWork = gh;
+    }
   });
 
   it('without the Brief module the server refuses', async () => {

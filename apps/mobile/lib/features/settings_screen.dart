@@ -19,6 +19,7 @@ import '../design/toast.dart';
 import 'common.dart';
 import 'connections.dart';
 import 'delivery_panel.dart';
+import 'notify_rules.dart';
 
 final devicesProvider = FutureProvider.autoDispose<List<DeviceView>>((ref) async {
   final list = await ref.read(apiProvider).get<List<dynamic>>('/me/devices');
@@ -90,7 +91,7 @@ class SettingsScreen extends ConsumerWidget {
             _Row(
               LucideIcons.bell,
               'Notifications',
-              'Where alerts reach you, quiet hours',
+              'What reaches you and how, quiet hours',
               () => open('notifications'),
               semantics: 'Notification settings',
             ),
@@ -552,8 +553,17 @@ class _Notifications extends ConsumerWidget {
         Divider(height: 1, color: l.c.hairline),
         const SizedBox(height: 10),
         switch (settings) {
-          AsyncData(:final value) => _QuietHours(settings: value, onSave: save),
-          AsyncError() => Text('Couldn’t load quiet hours.', style: OrvText.muted(l)),
+          AsyncData(:final value) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _QuietHours(settings: value, onSave: save),
+              const SizedBox(height: 14),
+              Divider(height: 1, color: l.c.hairline),
+              const SizedBox(height: 12),
+              NotifyRules(settings: value, onSave: save),
+            ],
+          ),
+          AsyncError() => Text('Couldn’t load notification settings.', style: OrvText.muted(l)),
           _ => const SizedBox(height: 40),
         },
       ],

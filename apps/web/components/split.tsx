@@ -97,12 +97,25 @@ function Owe({ v, big }: { v: number; big?: boolean }) {
 
 // ------------------------------------------------------------------ groups
 
+/** the last list this tab saw, shown at once on the way back */
+let lastGroups: GroupSummary[] | null = null;
+
 export function SplitHome() {
-  const [groups, setGroups] = useState<GroupSummary[] | null>(null);
+  const [groups, setGroups] = useState<GroupSummary[] | null>(lastGroups);
+  const [failed, setFailed] = useState(false);
   const [creating, setCreating] = useState(false);
   const router = useRouter();
-  const load = useCallback(() => api<GroupSummary[]>('/split/groups').then(setGroups), []);
-  useEffect(() => void load().catch(() => setGroups([])), [load]);
+  const load = useCallback(() => {
+    setFailed(false);
+    return api<GroupSummary[]>('/split/groups').then(
+      (g) => {
+        lastGroups = g;
+        setGroups(g);
+      },
+      () => setFailed(true),
+    );
+  }, []);
+  useEffect(() => void load(), [load]);
   const owe = (groups ?? []).filter((g) => g.myBalance < 0).reduce((s, g) => s - g.myBalance, 0);
   const get = (groups ?? []).filter((g) => g.myBalance > 0).reduce((s, g) => s + g.myBalance, 0);
   return (
@@ -126,7 +139,14 @@ export function SplitHome() {
           <p className="text-[22px] font-semibold text-orv-danger">{m(owe)}</p>
         </Glass>
       </div>
-      {groups === null ? (
+      {groups === null && failed ? (
+        <Glass level="pane" className="p-6 text-center">
+          <p className="text-[15px] font-semibold">Couldn’t load your groups</p>
+          <Button className="mt-3" size="sm" onClick={() => void load()}>
+            Try again
+          </Button>
+        </Glass>
+      ) : groups === null ? (
         <SkeletonRows rows={3} label="Loading groups" />
       ) : !groups.length ? (
         <Glass level="pane" className="p-6 text-center">

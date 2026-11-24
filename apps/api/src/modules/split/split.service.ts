@@ -97,10 +97,8 @@ export class SplitService {
       .select({ id: users.id, name: users.name, email: users.email })
       .from(users)
       .where(eq(users.disabled, false));
-    const out: typeof rows = [];
-    for (const r of rows)
-      if (r.id !== userId && (await this.access.principal(r.id))?.entitlements.has('split')) out.push(r);
-    return out;
+    const ps = await Promise.all(rows.map((r) => this.access.principal(r.id)));
+    return rows.filter((r, i) => r.id !== userId && ps[i]?.entitlements.has('split'));
   }
 
   async create(userId: string, b: NewSplitGroup) {
@@ -147,6 +145,7 @@ export class SplitService {
         userId: id,
         module: 'split',
         kind: 'split',
+        type: 'split.added',
         title: `${await this.nameOf(userId)} added you to “${b.name}”`,
         body: 'Shared expenses, and who owes whom.',
         url: `/split/${g!.id}`,
@@ -159,39 +158,75 @@ export class SplitService {
       .select({ groupId: splitMembers.groupId })
       .from(splitMembers)
       .where(and(eq(splitMembers.userId, userId), isNull(splitMembers.removedAt)));
-    const out = [];
-    for (const { groupId } of mine) {
-      const v = await this.view(userId, groupId);
-      const me = v.members.find((m) => m.userId === userId)!;
-      out.push({
-        id: v.id,
-        name: v.name,
-        kind: v.kind,
-        members: v.members.length,
-        totalMinor: v.totalMinor,
-        myBalance: me.balance,
-        lastAt: v.expenses[0]?.createdAt ?? v.createdAt,
-        archived: v.archived,
-      });
-    }
-    return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+    const ids = mine.map((m) => m.groupId);
+    if (!ids.length) return [];
+    const [groups, members, expenses, settlements] = await Promise.all([
+      this.db.select().from(splitGroups).where(inArray(splitGroups.id, ids)),
+      this.db
+        .select()
+        .from(splitMembers)
+        .where(inArray(splitMembers.groupId, ids))
+        .orderBy(splitMembers.createdAt),
+      this.db
+        .select()
+        .from(splitExpenses)
+        .where(and(inArray(splitExpenses.groupId, ids), isNull(splitExpenses.deletedAt)))
+        .orderBy(desc(splitExpenses.date), desc(splitExpenses.createdAt)),
+      this.db
+        .select()
+        .from(splitSettlements)
+        .where(and(inArray(splitSettlements.groupId, ids), isNull(splitSettlements.deletedAt)))
+        .orderBy(desc(splitSettlements.date), desc(splitSettlements.createdAt)),
+    ]);
+    return groups
+      .map((g) => {
+        const v = this.computeFrom(
+          g,
+          members.filter((m) => m.groupId === g.id),
+          expenses.filter((e) => e.groupId === g.id),
+          settlements.filter((x) => x.groupId === g.id),
+        );
+        const me = v.members.find((m) => m.userId === userId);
+        return {
+          id: v.id,
+          name: v.name,
+          kind: v.kind,
+          members: v.members.length,
+          totalMinor: v.totalMinor,
+          myBalance: me?.balance ?? 0,
+          lastAt: v.expenses[0]?.createdAt ?? v.createdAt,
+          archived: v.archived,
+        };
+      })
+      .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
   }
 
   /** Everything about a group, computed from its expenses and payments. */
   async compute(groupId: string) {
-    const [g] = await this.db.select().from(splitGroups).where(eq(splitGroups.id, groupId));
+    const [[g], members, expenses, settlements] = await Promise.all([
+      this.db.select().from(splitGroups).where(eq(splitGroups.id, groupId)),
+      this.members(groupId, true),
+      this.db
+        .select()
+        .from(splitExpenses)
+        .where(and(eq(splitExpenses.groupId, groupId), isNull(splitExpenses.deletedAt)))
+        .orderBy(desc(splitExpenses.date), desc(splitExpenses.createdAt)),
+      this.db
+        .select()
+        .from(splitSettlements)
+        .where(and(eq(splitSettlements.groupId, groupId), isNull(splitSettlements.deletedAt)))
+        .orderBy(desc(splitSettlements.date), desc(splitSettlements.createdAt)),
+    ]);
     if (!g) throw notFound();
-    const members = await this.members(groupId, true);
-    const expenses = await this.db
-      .select()
-      .from(splitExpenses)
-      .where(and(eq(splitExpenses.groupId, groupId), isNull(splitExpenses.deletedAt)))
-      .orderBy(desc(splitExpenses.date), desc(splitExpenses.createdAt));
-    const settlements = await this.db
-      .select()
-      .from(splitSettlements)
-      .where(and(eq(splitSettlements.groupId, groupId), isNull(splitSettlements.deletedAt)))
-      .orderBy(desc(splitSettlements.date), desc(splitSettlements.createdAt));
+    return this.computeFrom(g, members, expenses, settlements);
+  }
+
+  private computeFrom(
+    g: typeof splitGroups.$inferSelect,
+    members: (typeof splitMembers.$inferSelect)[],
+    expenses: (typeof splitExpenses.$inferSelect)[],
+    settlements: (typeof splitSettlements.$inferSelect)[],
+  ) {
     const net = balances(
       members.map((m) => m.id),
       expenses.map((e) => ({ paid: e.paid, owed: e.shares })),
@@ -267,13 +302,15 @@ export class SplitService {
 
   async view(userId: string, groupId: string) {
     await this.me(userId, groupId);
-    const v = await this.compute(groupId);
-    const activity = await this.db
-      .select()
-      .from(splitActivity)
-      .where(eq(splitActivity.groupId, groupId))
-      .orderBy(desc(splitActivity.createdAt))
-      .limit(30);
+    const [v, activity] = await Promise.all([
+      this.compute(groupId),
+      this.db
+        .select()
+        .from(splitActivity)
+        .where(eq(splitActivity.groupId, groupId))
+        .orderBy(desc(splitActivity.createdAt))
+        .limit(30),
+    ]);
     return { ...v, activity: activity.map((a) => ({ text: a.text, at: a.createdAt.toISOString() })) };
   }
 
@@ -408,6 +445,7 @@ export class SplitService {
         userId: m.userId,
         module: 'split',
         kind: 'expense',
+        type: 'split.expense',
         title: `${who} ${verb} ${title} · ${formatMoney(total)}`,
         body: `${g!.name} · your share ${formatMoney(p.amount)}`,
         url: `/split/${groupId}`,
@@ -527,6 +565,7 @@ export class SplitService {
           userId: m.userId,
           module: 'split',
           kind: 'settlement',
+          type: 'split.settlement',
           title: `${from.name} paid ${to.name} ${formatMoney(P(s.amount))}`,
           body: `Recorded in ${(await this.db.select().from(splitGroups).where(eq(splitGroups.id, groupId)))[0]!.name}`,
           url: `/split/${groupId}`,
@@ -566,6 +605,7 @@ export class SplitService {
         userId: m.userId,
         module: 'split',
         kind: 'reminder',
+        type: 'split.reminder',
         title: `${group.name}: you owe ${formatMoney(-m.balance)}`,
         body: `Settle up: ${lines}`,
         url: `/split/${groupId}`,

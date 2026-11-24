@@ -95,6 +95,8 @@ export const notifySettings = pgTable('notify_settings', {
     .array()
     .notNull()
     .default(sql`'{urgent}'::text[]`),
+  /** per type: on/off and the ways (spec 0019) */
+  rules: jsonb('rules').$type<Record<string, { on: boolean; ways: string[] }>>().notNull().default({}),
   mutedModules: text('muted_modules')
     .array()
     .notNull()

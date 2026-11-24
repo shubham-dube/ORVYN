@@ -1,6 +1,12 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
-import { type NotificationView, type NotifySettings, type RegisterPushRequest } from '@orvyn/contracts';
+import {
+  NOTIFY_TYPE,
+  type NotificationView,
+  type NotifySettings,
+  type NotifyWay,
+  type RegisterPushRequest,
+} from '@orvyn/contracts';
 import { Queue, Worker } from 'bullmq';
 import { and, desc, eq, isNull, lt, ne, sql } from 'drizzle-orm';
 import { badRequest, notFound } from '../../common/errors';
@@ -13,12 +19,17 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { notifications, notifySettings, pushTargets, type StoredAction } from './notify.schema';
 import { outcomeOf, PUSH_SENDER, type PushPayload, type PushSender } from './push-sender';
 import { msUntilQuietEnds } from './quiet-hours';
+import { deliveryFor } from './ways';
 import { WhatsAppService } from './whatsapp.service';
 
 export interface SendInput {
   userId: string;
   module: string;
   kind: string;
+  /** what it is, from the catalog (spec 0019): the person's rule for it decides the ways */
+  type?: string;
+  /** the ways were chosen on the item itself (a task's reminder, a document's expiry): they win over the rule */
+  own?: boolean;
   title: string;
   body?: string;
   url?: string | null;
@@ -97,7 +108,38 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ------------------------------------------------------------------ sending
-  async send(input: SendInput): Promise<NotificationView> {
+  /**
+   * The person's rule for this type (spec 0019, D-0019-2): off → nothing reaches them (kept dismissed, so dedupe and
+   * actions still behave); otherwise the rule's ways — or the type's default — decide push, urgent, alarm and copies.
+   * Ways set on the item itself (`own`) win.
+   */
+  private async applyRule(input: SendInput): Promise<{ input: SendInput; off: boolean }> {
+    const info = input.type ? NOTIFY_TYPE.get(input.type) : undefined;
+    if (!info || input.own || info.managedIn) return { input, off: false };
+    const rule = (await this.settings(input.userId)).rules[info.key];
+    if (rule && !rule.on && !info.locked) return { input, off: true };
+    const ways: NotifyWay[] = rule ? rule.ways : info.ways;
+    const d = deliveryFor(ways.length ? ways : undefined);
+    const rank = { low: 0, normal: 1, high: 2, urgent: 3 } as const;
+    const priority =
+      d.priority && rank[d.priority] > rank[input.priority ?? 'normal']
+        ? d.priority
+        : (input.priority ?? 'normal');
+    return {
+      input: {
+        ...input,
+        priority,
+        alarm: input.alarm || d.alarm,
+        repeat: input.repeat ?? d.repeat,
+        // in-app only: nothing pushed; copies as chosen
+        via: { push: ways.length ? d.via!.push : false, email: d.via!.email, whatsapp: d.via!.whatsapp },
+      },
+      off: false,
+    };
+  }
+
+  async send(original: SendInput): Promise<NotificationView> {
+    const { input, off } = await this.applyRule(original);
     const values = {
       ownerId: input.userId,
       module: input.module,
@@ -114,6 +156,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       via: input.via ?? null,
       repeatEveryMin: input.repeat?.everyMin ?? null,
       repeatLeft: input.repeat?.times ?? 0,
+      ...(off ? { dismissedAt: new Date() } : {}),
     };
     const [row] = input.dedupeKey
       ? await this.db
@@ -135,7 +178,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
               repeatEveryMin: values.repeatEveryMin,
               repeatLeft: values.repeatLeft,
               readAt: null,
-              dismissedAt: null,
+              dismissedAt: off ? new Date() : null,
               updatedAt: new Date(),
             },
           })
@@ -145,6 +188,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
           .values({ id: newId(), ...values })
           .returning();
     const view = toView(row!);
+    if (off) return view;
     await this.realtime.toUser(
       input.userId,
       { type: 'notify.new', notification: view },
@@ -482,16 +526,51 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       quietHours: s?.quietHours ?? null,
       emailFor: (s?.emailFor ?? ['urgent']) as NotifySettings['emailFor'],
       mutedModules: s?.mutedModules ?? [],
+      rules: (s?.rules ?? {}) as NotifySettings['rules'],
     };
+  }
+
+  /** "Send me a sample" (D-0019-7): a marked sample of one type, through its ways — once a minute at most. */
+  async sample(ownerId: string, type: string) {
+    const info = NOTIFY_TYPE.get(type);
+    if (!info) throw notFound();
+    const [last] = await this.db
+      .select({ at: notifications.updatedAt })
+      .from(notifications)
+      .where(and(eq(notifications.ownerId, ownerId), eq(notifications.dedupeKey, `sample:${type}`)));
+    if (last && Date.now() - last.at.getTime() < 60_000)
+      throw badRequest('too_soon', 'One sample a minute — check the one just sent.');
+    return this.send({
+      userId: ownerId,
+      module: info.module,
+      kind: 'sample',
+      type,
+      title: `Sample · ${info.label}`,
+      body: `This is how “${info.label}” reaches you. ${info.when}.`,
+      url: '/settings#notifications',
+      dedupeKey: `sample:${type}`,
+      actions: [{ id: 'ok', label: 'Got it' }],
+    });
   }
 
   async saveSettings(ownerId: string, s: NotifySettings): Promise<NotifySettings> {
     await this.db
       .insert(notifySettings)
-      .values({ ownerId, quietHours: s.quietHours, emailFor: s.emailFor, mutedModules: s.mutedModules })
+      .values({
+        ownerId,
+        quietHours: s.quietHours,
+        emailFor: s.emailFor,
+        mutedModules: s.mutedModules,
+        rules: cleanRules(s.rules),
+      })
       .onConflictDoUpdate({
         target: notifySettings.ownerId,
-        set: { quietHours: s.quietHours, emailFor: s.emailFor, mutedModules: s.mutedModules },
+        set: {
+          quietHours: s.quietHours,
+          emailFor: s.emailFor,
+          mutedModules: s.mutedModules,
+          rules: cleanRules(s.rules),
+        },
       });
     return this.settings(ownerId);
   }
@@ -547,6 +626,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       userId: p.userId,
       module: 'core',
       kind: 'security.new_device',
+      type: 'security.new_device',
       title: 'New sign-in',
       body: `${p.deviceName} (${p.platform}) just signed in. Not you? Sign it out in Devices.`,
       url: '/settings/devices',
@@ -555,6 +635,20 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       actions: [{ id: 'review', label: 'Review', open: '/settings/devices' }],
     });
   }
+}
+
+/** Only known types; security stays on; an alarm only where it makes sense; a rule that is the default goes. */
+function cleanRules(rules: NotifySettings['rules'] | undefined): NotifySettings['rules'] {
+  const out: NotifySettings['rules'] = {};
+  for (const [k, r] of Object.entries(rules ?? {})) {
+    const info = NOTIFY_TYPE.get(k);
+    if (!info || info.managedIn) continue;
+    const ways = [...new Set(r.ways)].filter((w) => w !== 'alarm' || info.alarm);
+    const on = info.locked ? true : r.on;
+    const same = on && ways.length === info.ways.length && ways.every((w) => info.ways.includes(w));
+    if (!same) out[k] = { on, ways };
+  }
+  return out;
 }
 
 function toView(n: typeof notifications.$inferSelect): NotificationView {

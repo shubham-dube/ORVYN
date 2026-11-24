@@ -299,6 +299,7 @@ export class CalendarService implements OnModuleInit, OnModuleDestroy {
           userId: a.ownerId,
           module: 'today',
           kind: 'system',
+          type: 'today.calendar',
           title: 'Reconnect Google Calendar',
           body: `${a.email} needs to be connected again to keep syncing.`,
           url: '/settings',

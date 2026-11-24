@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/calendar.dart' show urlOpenerProvider;
 import '../app/state.dart';
 import '../design/controls.dart';
 import '../design/glass.dart';
@@ -515,10 +516,7 @@ class _Section extends ConsumerWidget {
                   child: Container(
                     margin: const EdgeInsets.only(right: 6),
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: l.c.track.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
+                    decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(14)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -550,9 +548,25 @@ class _Section extends ConsumerWidget {
           rows.add(row(d['title'] as String, d['days'] == 0 ? 'today' : 'in ${d['days']} d', l.c.warning));
         }
       case 'work':
-        if ((section['reviews'] as int) > 0) rows.add(row('Reviews waiting for you', '${section['reviews']}'));
-        if ((section['issues'] as int) > 0) rows.add(row('GitHub issues assigned', '${section['issues']}'));
-        if ((section['clickup'] as int) > 0) rows.add(row('ClickUp tasks', '${section['clickup']}'));
+        final tasks = [for (final t in (section['tasks'] as List? ?? const [])) Map<String, dynamic>.from(t as Map)];
+        final gh = [for (final g in (section['github'] as List? ?? const [])) Map<String, dynamic>.from(g as Map)];
+        for (final t in tasks) {
+          rows.add(_WorkRow(t: t));
+        }
+        for (final g in gh) {
+          rows.add(
+            _WorkRow(
+              t: {
+                'name': '${g['kind'] == 'review' ? 'Review: ' : ''}${g['title']}',
+                'status': '${(g['repo'] as String).split('/').last} #${g['number']}',
+                'url': g['url'],
+                'github': true,
+              },
+            ),
+          );
+        }
+        final more = (section['clickup'] as int) - tasks.length;
+        if (more > 0) rows.add(row('$more more open in ClickUp', null));
       case 'mail':
         for (final b in (section['boxes'] as List).cast<Map<String, dynamic>>()) {
           rows.add(row(b['account'] as String, '${b['unread']} unread'));
@@ -646,7 +660,7 @@ class _FocusRowState extends ConsumerState<_FocusRow> {
     return Container(
       margin: const EdgeInsets.only(top: 6),
       padding: const EdgeInsets.fromLTRB(10, 9, 6, 9),
-      decoration: BoxDecoration(color: l.c.track.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
           Container(
@@ -761,7 +775,7 @@ class _IpoRow extends ConsumerWidget {
       child: Container(
         margin: const EdgeInsets.only(top: 6),
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(color: l.c.track.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(14)),
+        decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(14)),
         child: Row(
           children: [
             Expanded(
@@ -1151,6 +1165,71 @@ class BriefCard extends ConsumerWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// A task I'm working on (a working status in ClickUp, as Today shows it) or a GitHub review; tap opens it.
+class _WorkRow extends ConsumerWidget {
+  const _WorkRow({required this.t});
+  final Map<String, dynamic> t;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l = context.orv;
+    final hex = t['statusColor'] as String?;
+    final tone = hex != null && RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch(hex)
+        ? Color(int.parse('FF${hex.substring(1)}', radix: 16))
+        : l.accent;
+    final due = t['due'] == null ? null : DateTime.tryParse(t['due'] as String)?.toLocal();
+    final overdue = t['overdue'] == true;
+    final url = t['url'] as String?;
+    return InkWell(
+      borderRadius: BorderRadius.circular(OrvTokens.radiusSm),
+      onTap: url == null ? null : () => ref.read(urlOpenerProvider)(Uri.parse(url)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            if (t['github'] == true)
+              Icon(LucideIcons.gitPullRequest, size: 14, color: l.c.muted)
+            else
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: tone, shape: BoxShape.circle),
+              ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    t['name'] as String,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrvText.body(l).copyWith(fontSize: 14.5, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    [t['status'], if (t['list'] != null) t['list']].join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrvText.muted(l).copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (due != null)
+              Text(
+                overdue ? 'overdue' : MaterialLocalizations.of(context).formatShortMonthDay(due),
+                style: OrvText.muted(l).copyWith(
+                  fontSize: 12,
+                  color: overdue ? l.c.danger : null,
+                  fontWeight: overdue ? FontWeight.w700 : null,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

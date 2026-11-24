@@ -28,6 +28,17 @@ export class InboxController {
     return this.inbox.get(a.userId, fresh === '1');
   }
 
+  /** Small, for the Mail badge in the sidebar and the launcher. */
+  @Get('counts')
+  async counts(@Auth() a: AuthContext) {
+    const v = await this.inbox.get(a.userId, false);
+    return {
+      important: v.important.length,
+      unread: v.boxes.reduce((s, b) => s + b.unread, 0),
+      boxes: v.boxes.map((b) => ({ account: b.account, unread: b.unread, important: b.important ?? 0 })),
+    };
+  }
+
   @Post('refresh')
   @HttpCode(200)
   refresh(@Auth() a: AuthContext) {

@@ -10,7 +10,7 @@ import '../design/theme.dart';
 import '../drop/drop.dart';
 import '../library/library.dart';
 import '../vault/vault.dart';
-import 'tools.dart' show mailProvider;
+import 'home_cards.dart' show inboxProvider;
 
 /// One module as the launcher shows it.
 class LauncherModule {
@@ -87,11 +87,10 @@ class ModuleLauncher extends ConsumerWidget {
         case 'assistant':
           return 'Ask anything';
         case 'mail':
-          final n = (ref.watch(mailProvider).value ?? const []).fold<int>(
-            0,
-            (a, b) => a + ((b['unread'] as num?)?.toInt() ?? 0),
-          );
-          return n == 0 ? 'All read' : '$n unread';
+          final boxes = (ref.watch(inboxProvider).value?['boxes'] as List? ?? const []).cast<Map<String, dynamic>>();
+          final important = boxes.fold<int>(0, (a, b) => a + ((b['important'] as num?)?.toInt() ?? 0));
+          final n = boxes.fold<int>(0, (a, b) => a + ((b['unread'] as num?)?.toInt() ?? 0));
+          return important > 0 ? '$important need you' : (n == 0 ? 'All read' : '$n unread');
         case 'people':
           return 'Invites, access';
         case 'brief':

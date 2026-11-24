@@ -59,6 +59,7 @@ class HomeHero extends ConsumerWidget {
     final brief = home?['brief'] as Map?;
     final w = brief?['weather'] as Map?;
     return Container(
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(OrvTokens.radiusXl),
@@ -165,10 +166,10 @@ class NowNext extends ConsumerWidget {
             .firstOrNull;
     if (current == null && next == null && task == null) return const SizedBox.shrink();
     Widget tile(String label, String title, String sub, int tone, String? link) => Container(
-      margin: const EdgeInsets.only(top: 10),
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
       decoration: BoxDecoration(
-        color: tone == 0 ? l.c.success.withValues(alpha: 0.12) : l.c.track.withValues(alpha: 0.7),
+        color: tone == 0 ? l.c.success.withValues(alpha: 0.12) : l.c.track,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -213,27 +214,30 @@ class NowNext extends ConsumerWidget {
         ],
       ),
     );
-    return Column(
-      children: [
-        if (current != null)
-          tile(
-            'Now',
-            current.title,
-            'ends in ${_mins(current.end!.difference(now))}${loc(current).isEmpty ? '' : ' · ${loc(current)}'}',
-            0,
-            joinUrl(loc(current)),
-          ),
-        if (next != null)
-          tile(
-            next.start!.difference(now).inMinutes < 15 ? 'Starting soon' : 'Next',
-            next.title,
-            '${_hm(next.start!.toLocal())} · in ${_mins(next.start!.difference(now))}',
-            1,
-            next.start!.difference(now).inMinutes < 30 ? joinUrl(loc(next)) : null,
-          ),
-        if (current == null && task != null)
-          tile('Next task', task.t.title, '${_hm(task.at)} · in ${_mins(task.at.difference(now))}', 2, null),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        children: [
+          if (current != null)
+            tile(
+              'Now',
+              current.title,
+              'ends in ${_mins(current.end!.difference(now))}${loc(current).isEmpty ? '' : ' · ${loc(current)}'}',
+              0,
+              joinUrl(loc(current)),
+            ),
+          if (next != null)
+            tile(
+              next.start!.difference(now).inMinutes < 15 ? 'Starting soon' : 'Next',
+              next.title,
+              '${_hm(next.start!.toLocal())} · in ${_mins(next.start!.difference(now))}',
+              1,
+              next.start!.difference(now).inMinutes < 30 ? joinUrl(loc(next)) : null,
+            ),
+          if (current == null && task != null)
+            tile('Next task', task.t.title, '${_hm(task.at)} · in ${_mins(task.at.difference(now))}', 2, null),
+        ],
+      ),
     );
   }
 }
@@ -277,7 +281,7 @@ class NeedsYouCard extends ConsumerWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Glass(
         level: GlassLevel.float,
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
@@ -714,7 +718,7 @@ class InboxPreview extends ConsumerWidget {
     final top = [for (final x in (ib['top'] as List)) Map<String, dynamic>.from(x as Map)];
     final accounts = {for (final m in top) m['account'] as String}.toList();
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Glass(
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
         child: Column(
@@ -774,7 +778,7 @@ class LiveCard extends ConsumerWidget {
     final now = DateTime.now();
     final today = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Glass(
         padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
         child: Column(
@@ -796,10 +800,7 @@ class LiveCard extends ConsumerWidget {
                       child: Container(
                         margin: const EdgeInsets.only(right: 6, bottom: 8),
                         padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: l.c.track.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        decoration: BoxDecoration(color: l.c.track, borderRadius: BorderRadius.circular(14)),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

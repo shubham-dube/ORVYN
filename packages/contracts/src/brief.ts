@@ -93,6 +93,19 @@ export interface BriefWork {
   reviews: number;
   clickup: number;
   clickupDueToday: number;
+  /** what I'm working on in ClickUp — the working statuses (Design, Development, In progress…), as Today shows them */
+  tasks: {
+    id: string;
+    name: string;
+    status: string;
+    statusColor: string | null;
+    list: string;
+    due: string | null;
+    overdue: boolean;
+    url: string;
+  }[];
+  /** reviews asked of me, then issues assigned */
+  github: { kind: 'review' | 'issue'; title: string; repo: string; number: number; url: string }[];
 }
 export interface BriefMail {
   kind: 'mail';

@@ -131,7 +131,14 @@ class SplitListScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 if (groups.isLoading && list.isEmpty) const LinearProgressIndicator(minHeight: 2),
-                if (!groups.isLoading && list.isEmpty)
+                if (groups.hasError && list.isEmpty)
+                  Row(
+                    children: [
+                      Expanded(child: Text('Couldn’t load your groups.', style: OrvText.muted(l))),
+                      OrvButton(label: 'Try again', small: true, onPressed: () => ref.invalidate(splitGroupsProvider)),
+                    ],
+                  ),
+                if (!groups.isLoading && !groups.hasError && list.isEmpty)
                   Text('No groups yet. Make one for a trip or a party — friends or guests.', style: OrvText.muted(l)),
                 for (final g in list)
                   Padding(

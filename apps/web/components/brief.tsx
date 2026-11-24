@@ -513,12 +513,70 @@ export function BriefSections({
       case 'work':
         return (
           <Card key="work" icon={<GitPullRequest size={15} />} title={SECTION_NAME.work} href="/today">
-            {s.reviews ? <Row left="Reviews waiting for you" right={s.reviews} /> : null}
-            {s.issues ? <Row left="GitHub issues assigned" right={s.issues} /> : null}
-            {s.clickup ? (
+            {(s.tasks ?? []).length ? (
+              <ul className="flex flex-col">
+                {s.tasks.map((t) => (
+                  <li key={t.id}>
+                    <a
+                      href={t.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="-mx-2 flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-orv-track/60"
+                    >
+                      <span
+                        aria-hidden
+                        className="h-2 w-2 shrink-0 rounded-full bg-orv-accent"
+                        style={t.statusColor ? { background: t.statusColor } : undefined}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[14px] font-medium">{t.name}</span>
+                        <span className="block truncate text-[12px] text-orv-muted">
+                          {t.status} · {t.list}
+                        </span>
+                      </span>
+                      {t.due ? (
+                        <span
+                          className={cn(
+                            'shrink-0 text-[12px] tabular-nums',
+                            t.overdue ? 'font-semibold text-orv-danger' : 'text-orv-muted',
+                          )}
+                        >
+                          {t.overdue
+                            ? 'overdue'
+                            : new Date(t.due).toLocaleDateString(undefined, {
+                                day: 'numeric',
+                                month: 'short',
+                              })}
+                        </span>
+                      ) : null}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {(s.github ?? []).map((g) => (
+              <a
+                key={g.url}
+                href={g.url}
+                target="_blank"
+                rel="noreferrer"
+                className="-mx-2 flex items-center gap-2.5 rounded-[10px] px-2 py-1.5 hover:bg-orv-track/60"
+              >
+                <GitPullRequest size={14} className="shrink-0 text-orv-muted" aria-hidden />
+                <span className="min-w-0 flex-1 truncate text-[14px]">
+                  {g.kind === 'review' ? 'Review: ' : ''}
+                  {g.title}
+                </span>
+                <span className="shrink-0 text-[12px] text-orv-muted">
+                  {g.repo.split('/').pop()} #{g.number}
+                </span>
+              </a>
+            ))}
+            {s.clickup > (s.tasks ?? []).length ? (
               <Row
-                left="ClickUp tasks"
-                right={s.clickupDueToday ? `${s.clickup} · ${s.clickupDueToday} due` : s.clickup}
+                muted
+                left={`${s.clickup - (s.tasks ?? []).length} more open in ClickUp`}
+                right={s.clickupDueToday ? `${s.clickupDueToday} due today` : undefined}
               />
             ) : null}
           </Card>

@@ -2,6 +2,7 @@
 
 import { AiUsage } from '@/components/ai-usage';
 import { DeliveryCheck } from '@/components/delivery-check';
+import { NotifyRules } from '@/components/notify-rules';
 import { StorageHealth } from '@/components/storage-health';
 import type { ContactChannels, DeviceView, NotifySettings } from '@orvyn/contracts';
 import {
@@ -188,7 +189,7 @@ function Notifications() {
   }, []);
   const save = async (s: NotifySettings) => {
     setSettings(s);
-    await api('/notifications/settings', { method: 'PUT', body: s });
+    setSettings(await api<NotifySettings>('/notifications/settings', { method: 'PUT', body: s }));
   };
   const quiet = settings?.quietHours;
   return (
@@ -285,6 +286,16 @@ function Notifications() {
               </p>
             </div>
           ) : null}
+          <NotifyRules
+            settings={settings}
+            onSave={async (s) => {
+              try {
+                await save(s);
+              } catch (e) {
+                toast({ title: e instanceof ApiError ? e.message : 'Couldn’t save', tone: 'danger' });
+              }
+            }}
+          />
         </div>
       ) : (
         <SkeletonRows rows={1} icon={false} label="Loading notification settings" />

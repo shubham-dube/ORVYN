@@ -41,6 +41,233 @@ export const ContactChannels = z.object({
 });
 export type ContactChannels = z.infer<typeof ContactChannels>;
 
+// ------------------------------------------------------------------ the catalog (spec 0019)
+
+/** The ways a notification can reach me besides the in-app inbox (D22, D-0019-1). */
+export const NOTIFY_WAYS = ['push', 'urgent', 'alarm', 'email', 'whatsapp'] as const;
+export type NotifyWay = (typeof NOTIFY_WAYS)[number];
+
+export interface NotifyTypeInfo {
+  key: string;
+  module: string;
+  label: string;
+  /** when it fires, in plain words */
+  when: string;
+  /** the ways out of the box; [] = in-app only */
+  ways: NotifyWay[];
+  /** can't be turned off (security) */
+  locked?: boolean;
+  /** an alarm makes sense here (reminders, deadlines) */
+  alarm?: boolean;
+  /** set on each item instead (a task's reminders, a document's expiry): shown, linked, not set here */
+  managedIn?: { label: string; href: string };
+}
+
+/** Every notification ORVYN sends, by module (D-0019-3). A test fails if code sends a type that isn't here. */
+export const NOTIFY_CATALOG: NotifyTypeInfo[] = [
+  {
+    key: 'security.new_device',
+    module: 'core',
+    label: 'New sign-in',
+    when: 'A device signs in to your account',
+    ways: ['push', 'email'],
+    locked: true,
+  },
+  {
+    key: 'today.task_reminder',
+    module: 'today',
+    label: 'Task reminders',
+    when: 'At each reminder time of a task',
+    ways: ['push'],
+    alarm: true,
+    managedIn: { label: 'Today → Reminders, or on each task', href: '/settings#reminders' },
+  },
+  {
+    key: 'today.event_reminder',
+    module: 'today',
+    label: 'Event reminders',
+    when: 'Before each event, as set',
+    ways: ['push'],
+    alarm: true,
+    managedIn: { label: 'Today → Reminders, or on each event', href: '/settings#reminders' },
+  },
+  {
+    key: 'today.digest',
+    module: 'today',
+    label: 'The day’s list',
+    when: 'Your dated tasks, at the digest time',
+    ways: ['push'],
+  },
+  {
+    key: 'today.calendar',
+    module: 'today',
+    label: 'Calendar needs reconnecting',
+    when: 'Google stopped accepting the calendar link',
+    ways: ['push', 'email'],
+  },
+  {
+    key: 'today.tools',
+    module: 'today',
+    label: 'From your tools',
+    when: 'GitHub reviews and issues for you; ClickUp tasks due or assigned',
+    ways: ['push'],
+  },
+  {
+    key: 'brief.ready',
+    module: 'brief',
+    label: 'Your Brief is ready',
+    when: 'The morning Brief, at its time',
+    ways: ['push'],
+  },
+  {
+    key: 'brief.slipped',
+    module: 'brief',
+    label: 'Things slipped',
+    when: '3 or more overdue tasks, once a day',
+    ways: ['push'],
+  },
+  {
+    key: 'brief.budget',
+    module: 'brief',
+    label: 'Budget nudge',
+    when: 'A budget at 80% with a third of the month left, or used up',
+    ways: ['push'],
+  },
+  {
+    key: 'brief.payments',
+    module: 'brief',
+    label: 'Payments to look at',
+    when: '5 or more payments waiting for a look',
+    ways: ['push'],
+  },
+  {
+    key: 'brief.drop',
+    module: 'brief',
+    label: 'Drop is filling up',
+    when: '3 or more things waiting in Drop',
+    ways: ['push'],
+  },
+  {
+    key: 'inbox.important',
+    module: 'inbox',
+    label: 'Important mail',
+    when: 'New mail that needs you: a reply, a bill, a security alert',
+    ways: ['push'],
+  },
+  {
+    key: 'money.review',
+    module: 'money',
+    label: 'A payment to file',
+    when: 'A payment read from your phone that ORVYN can’t file alone; money in waits for a yes',
+    ways: ['push'],
+  },
+  {
+    key: 'money.filed',
+    module: 'money',
+    label: 'Filed for you',
+    when: 'ORVYN filed a payment by your rule (a quiet note with Change)',
+    ways: [],
+  },
+  {
+    key: 'money.recurring',
+    module: 'money',
+    label: 'Bill or subscription due',
+    when: 'A recurring payment is due',
+    ways: ['push'],
+    alarm: true,
+  },
+  {
+    key: 'library.expiry',
+    module: 'library',
+    label: 'Document expiring',
+    when: 'A passport, insurance or licence nearing its date',
+    ways: ['push'],
+    managedIn: { label: 'Library → each document', href: '/library' },
+  },
+  {
+    key: 'chat.message',
+    module: 'chat',
+    label: 'New message',
+    when: 'A message in a chat you haven’t muted',
+    ways: ['push'],
+  },
+  {
+    key: 'split.added',
+    module: 'split',
+    label: 'Added to a group',
+    when: 'Someone adds you to a group',
+    ways: ['push'],
+  },
+  {
+    key: 'split.expense',
+    module: 'split',
+    label: 'New expense',
+    when: 'Someone adds an expense you’re in',
+    ways: ['push'],
+  },
+  {
+    key: 'split.settlement',
+    module: 'split',
+    label: 'Payment recorded',
+    when: 'Someone settles up with you',
+    ways: ['push'],
+  },
+  {
+    key: 'split.reminder',
+    module: 'split',
+    label: 'You owe',
+    when: 'Someone reminds you what you owe',
+    ways: ['push'],
+  },
+  {
+    key: 'ipo.alert',
+    module: 'ipo',
+    label: 'IPO alerts',
+    when: 'Opening, closing, GMP moves, allotment and listing — as the desk’s filters say',
+    ways: ['push'],
+  },
+  {
+    key: 'ipo.partner',
+    module: 'ipo',
+    label: 'A partner reported',
+    when: 'A partner taps “I applied”, “mandate”, “allotted” or “sold” on their link',
+    ways: ['push'],
+  },
+  {
+    key: 'ipo.last_day',
+    module: 'ipo',
+    label: 'Last day: not applied yet',
+    when: '10 am on the close day, if accounts haven’t applied or mandates are pending',
+    ways: ['push'],
+    alarm: true,
+  },
+  {
+    key: 'ipo.closed',
+    module: 'ipo',
+    label: 'Bids closed',
+    when: 'The round’s summary at 5 pm on the close day',
+    ways: ['push'],
+  },
+];
+export const NOTIFY_TYPE = new Map(NOTIFY_CATALOG.map((t) => [t.key, t]));
+export const NOTIFY_MODULES: Record<string, string> = {
+  core: 'Security',
+  today: 'Today',
+  brief: 'Brief',
+  inbox: 'Mail',
+  money: 'Money',
+  library: 'Library',
+  chat: 'Chat',
+  split: 'Split',
+  ipo: 'IPO',
+};
+
+export const NotifyRule = z.object({
+  on: z.boolean().default(true),
+  ways: z.array(z.enum(NOTIFY_WAYS)).max(5).default([]),
+});
+export type NotifyRule = z.infer<typeof NotifyRule>;
+
 export const NotifySettings = z.object({
   quietHours: z
     .object({
@@ -51,6 +278,11 @@ export const NotifySettings = z.object({
     .nullable(),
   emailFor: z.array(Priority).default(['urgent']),
   mutedModules: z.array(z.string()).default([]),
+  /** per type: on/off and the ways (spec 0019); a type without a rule uses its default */
+  rules: z
+    .record(z.string().max(60), NotifyRule)
+    .default({})
+    .refine((r) => Object.keys(r).length <= 100, 'Too many rules'),
 });
 export type NotifySettings = z.infer<typeof NotifySettings>;
 

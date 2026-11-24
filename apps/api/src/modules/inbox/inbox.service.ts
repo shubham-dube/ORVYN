@@ -394,6 +394,10 @@ export class InboxService implements OnModuleInit, OnModuleDestroy {
     out.updates.sort((a, b) => Number(b.pinned) - Number(a.pinned) || byAt(a, b));
     out.rest.sort(byAt);
     const [s] = await this.db.select().from(inboxSettings).where(eq(inboxSettings.ownerId, ownerId));
+    out.boxes = out.boxes.map((b) => ({
+      ...b,
+      important: out.important.filter((m) => m.account === b.account).length,
+    }));
     out.catchUp = out.important.length ? (s?.catchUp ?? null) : null;
     out.refreshedAt = s?.refreshedAt?.toISOString() ?? null;
     return out;
@@ -484,6 +488,7 @@ export class InboxService implements OnModuleInit, OnModuleDestroy {
         userId: ownerId,
         module: 'inbox',
         kind: 'mail',
+        type: 'inbox.important',
         title,
         body: `${r.summary || r.subject}${r.account ? ` · ${r.account}` : ''}`,
         url: '/mail',

@@ -39,8 +39,8 @@ export class MailService {
   }
 
   /** Dev/test only (the controller is not registered in production). */
-  latestTo(email: string): (Mail & { at: Date }) | undefined {
-    return [...this.outbox].reverse().find((m) => m.to === email);
+  latestTo(email: string, subject?: RegExp): (Mail & { at: Date }) | undefined {
+    return [...this.outbox].reverse().find((m) => m.to === email && (!subject || subject.test(m.subject)));
   }
 }
 

@@ -159,6 +159,7 @@ export class RecurringService implements OnModuleInit, OnModuleDestroy {
           userId: r.ownerId,
           module: 'money',
           kind: 'recurring.due',
+          type: 'money.recurring',
           title: `${r.title} · ${formatMoney(r.amountMinor, r.currency)} due`,
           body:
             r.direction === 'credit'

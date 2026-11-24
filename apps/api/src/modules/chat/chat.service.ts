@@ -13,7 +13,20 @@ import type {
   SendMessage,
 } from '@orvyn/contracts';
 import { BadChatData, decryptFile, openMessageWithKey } from '@orvyn/vault-crypto';
-import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, notExists, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  notExists,
+  sql,
+} from 'drizzle-orm';
 import sodium from 'libsodium-wrappers';
 import { badRequest, forbidden, notFound } from '../../common/errors';
 import { ENV, type Env } from '../../config/env';
@@ -147,9 +160,8 @@ export class ChatService {
       .select({ id: users.id })
       .from(users)
       .where(and(ne(users.id, ownerId), eq(users.disabled, false)));
-    const out: string[] = [];
-    for (const r of rows) if ((await this.access.principal(r.id))?.entitlements.has('chat')) out.push(r.id);
-    return out;
+    const ps = await Promise.all(rows.map((r) => this.access.principal(r.id)));
+    return rows.filter((_, i) => ps[i]?.entitlements.has('chat')).map((r) => r.id);
   }
 
   async people(ownerId: string) {
@@ -292,94 +304,126 @@ export class ChatService {
   }
 
   async view(ownerId: string, conversationId: string): Promise<ConversationView> {
-    const me = await this.member(ownerId, conversationId);
-    const [c] = await this.db
-      .select()
-      .from(chatConversations)
-      .where(eq(chatConversations.id, conversationId));
-    const members = await this.db
-      .select({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        lastReadAt: chatMembers.lastReadAt,
-        lastDeliveredAt: chatMembers.lastDeliveredAt,
-      })
-      .from(chatMembers)
-      .innerJoin(users, eq(users.id, chatMembers.ownerId))
-      .where(and(eq(chatMembers.conversationId, conversationId), isNull(chatMembers.leftAt)));
-    const seen = new Date(me.joinedAt.getTime() - 1000);
-    const [{ n } = { n: '0' }] = await this.db
-      .select({ n: sql<string>`count(*)` })
-      .from(chatMessages)
-      .where(
-        and(
-          eq(chatMessages.conversationId, conversationId),
-          ne(chatMessages.senderId, ownerId),
-          eq(chatMessages.kind, 'msg'),
-          isNull(chatMessages.deletedAt),
-          gt(chatMessages.createdAt, me.lastReadAt && me.lastReadAt > seen ? me.lastReadAt : seen),
-          this.notHidden(ownerId),
+    await this.member(ownerId, conversationId);
+    const [v] = await this.conversationViews(ownerId, [conversationId]);
+    if (!v) throw notFound();
+    return v;
+  }
+
+  /**
+   * Many conversations at once, in a fixed number of queries (not a few per chat): the database is a round trip away,
+   * so the list costs the same with 3 chats or 60.
+   */
+  private async conversationViews(ownerId: string, ids: string[]): Promise<ConversationView[]> {
+    if (!ids.length) return [];
+    const mine = and(
+      eq(chatMembers.conversationId, chatMessages.conversationId),
+      eq(chatMembers.ownerId, ownerId),
+    );
+    const [mes, convs, members, unread, lasts] = await Promise.all([
+      this.db
+        .select()
+        .from(chatMembers)
+        .where(
+          and(
+            inArray(chatMembers.conversationId, ids),
+            eq(chatMembers.ownerId, ownerId),
+            isNull(chatMembers.leftAt),
+          ),
         ),
-      );
-    const [last] = await this.db
-      .select()
-      .from(chatMessages)
-      .where(
-        and(
-          eq(chatMessages.conversationId, conversationId),
-          gt(chatMessages.createdAt, seen),
-          this.notHidden(ownerId),
-        ),
-      )
-      .orderBy(desc(chatMessages.createdAt))
-      .limit(1);
-    let pinnedMessage: ConversationView['pinnedMessage'] = null;
-    if (c!.pinnedMessageId) {
-      const [p] = await this.db.select().from(chatMessages).where(eq(chatMessages.id, c!.pinnedMessageId));
-      if (p && !p.deletedAt) {
-        const pv = await this.preview(p);
-        pinnedMessage = { id: p.id, senderId: p.senderId, text: pv.text, attachment: pv.attachment };
-      }
+      this.db.select().from(chatConversations).where(inArray(chatConversations.id, ids)),
+      this.db
+        .select({
+          conversationId: chatMembers.conversationId,
+          id: users.id,
+          name: users.name,
+          email: users.email,
+          lastReadAt: chatMembers.lastReadAt,
+          lastDeliveredAt: chatMembers.lastDeliveredAt,
+        })
+        .from(chatMembers)
+        .innerJoin(users, eq(users.id, chatMembers.ownerId))
+        .where(and(inArray(chatMembers.conversationId, ids), isNull(chatMembers.leftAt))),
+      this.db
+        .select({ id: chatMessages.conversationId, n: sql<string>`count(*)` })
+        .from(chatMessages)
+        .innerJoin(chatMembers, mine)
+        .where(
+          and(
+            inArray(chatMessages.conversationId, ids),
+            ne(chatMessages.senderId, ownerId),
+            eq(chatMessages.kind, 'msg'),
+            isNull(chatMessages.deletedAt),
+            sql`${chatMessages.createdAt} > greatest(coalesce(${chatMembers.lastReadAt}, '-infinity'::timestamptz), ${chatMembers.joinedAt} - interval '1 second')`,
+            this.notHidden(ownerId),
+          ),
+        )
+        .groupBy(chatMessages.conversationId),
+      this.db
+        .selectDistinctOn([chatMessages.conversationId], getTableColumns(chatMessages))
+        .from(chatMessages)
+        .innerJoin(chatMembers, mine)
+        .where(
+          and(
+            inArray(chatMessages.conversationId, ids),
+            sql`${chatMessages.createdAt} > ${chatMembers.joinedAt} - interval '1 second'`,
+            this.notHidden(ownerId),
+          ),
+        )
+        .orderBy(chatMessages.conversationId, desc(chatMessages.createdAt)),
+    ]);
+    const pinIds = convs.map((c) => c.pinnedMessageId).filter((x): x is string => !!x);
+    const others = [...new Set(members.map((m) => m.id).filter((id) => id !== ownerId))];
+    const [pins, presence] = await Promise.all([
+      pinIds.length ? this.db.select().from(chatMessages).where(inArray(chatMessages.id, pinIds)) : [],
+      this.realtime.presence(others),
+    ]);
+    const meOf = new Map(mes.map((m) => [m.conversationId, m]));
+    const out: ConversationView[] = [];
+    for (const c of convs) {
+      const me = meOf.get(c.id);
+      if (!me) continue;
+      const here = members.filter((m) => m.conversationId === c.id);
+      const other = here.find((m) => m.id !== ownerId);
+      const last = lasts.find((l) => l.conversationId === c.id);
+      const p = c.pinnedMessageId ? pins.find((x) => x.id === c.pinnedMessageId && !x.deletedAt) : undefined;
+      const pv = p ? await this.preview(p) : null;
+      out.push({
+        id: c.id,
+        kind: c.kind,
+        title: c.kind === 'direct' ? other?.name || other?.email.split('@')[0] || 'Chat' : c.title,
+        adminId: c.adminId,
+        members: here.map(({ conversationId: _, ...m }) => ({
+          ...m,
+          lastReadAt: m.lastReadAt?.toISOString() ?? null,
+          lastDeliveredAt: m.lastDeliveredAt?.toISOString() ?? null,
+          ...(presence.get(m.id) ?? { online: m.id === ownerId, lastSeenAt: null }),
+        })),
+        muted: me.muted,
+        pinned: me.pinned,
+        unread: Number(unread.find((u) => u.id === c.id)?.n ?? 0),
+        lastAt: c.lastAt?.toISOString() ?? null,
+        splitGroupId: c.splitGroupId,
+        last: last
+          ? {
+              id: last.id,
+              senderId: last.senderId,
+              kind: last.kind,
+              ...(await this.preview(last)),
+              at: last.createdAt.toISOString(),
+            }
+          : null,
+        pinnedMessage:
+          p && pv ? { id: p.id, senderId: p.senderId, text: pv.text, attachment: pv.attachment } : null,
+      });
     }
-    const presence = await this.realtime.presence(members.map((m) => m.id).filter((id) => id !== ownerId));
-    const other = members.find((m) => m.id !== ownerId);
-    return {
-      id: c!.id,
-      kind: c!.kind,
-      title: c!.kind === 'direct' ? other?.name || other?.email.split('@')[0] || 'Chat' : c!.title,
-      adminId: c!.adminId,
-      members: members.map((m) => ({
-        ...m,
-        lastReadAt: m.lastReadAt?.toISOString() ?? null,
-        lastDeliveredAt: m.lastDeliveredAt?.toISOString() ?? null,
-        ...(presence.get(m.id) ?? { online: m.id === ownerId, lastSeenAt: null }),
-      })),
-      muted: me.muted,
-      pinned: me.pinned,
-      unread: Number(n),
-      lastAt: c!.lastAt?.toISOString() ?? null,
-      splitGroupId: c!.splitGroupId,
-      last: last
-        ? {
-            id: last.id,
-            senderId: last.senderId,
-            kind: last.kind,
-            ...(await this.preview(last)),
-            at: last.createdAt.toISOString(),
-          }
-        : null,
-      pinnedMessage,
-    };
+    return out;
   }
 
   /** My conversations, pinned first, then newest. Fetching them means my app has them: ✓✓ delivered. */
   async list(ownerId: string): Promise<ConversationView[]> {
-    const out: ConversationView[] = [];
-    for (const id of await this.myConversationIds(ownerId)) {
-      await this.delivered(ownerId, id).catch(() => undefined);
-      out.push(await this.view(ownerId, id));
-    }
+    const out = await this.conversationViews(ownerId, await this.myConversationIds(ownerId));
+    void this.deliveredAll(ownerId, out).catch((e: Error) => this.log.debug(`delivered: ${e.message}`));
     return out.sort(
       (a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastAt ?? '').localeCompare(a.lastAt ?? ''),
     );
@@ -501,6 +545,37 @@ export class ChatService {
       ownerId,
     );
     return { ok: true };
+  }
+
+  /** The list was fetched: every chat with something newer than my ✓✓ gets it, in one update. */
+  private async deliveredAll(ownerId: string, list: ConversationView[]) {
+    const due = list.filter((c) => {
+      const me = c.members.find((m) => m.id === ownerId);
+      return c.lastAt && (!me?.lastDeliveredAt || me.lastDeliveredAt < c.lastAt);
+    });
+    if (!due.length) return;
+    const at = new Date();
+    await this.db
+      .update(chatMembers)
+      .set({ lastDeliveredAt: at })
+      .where(
+        and(
+          eq(chatMembers.ownerId, ownerId),
+          inArray(
+            chatMembers.conversationId,
+            due.map((c) => c.id),
+          ),
+        ),
+      );
+    for (const c of due)
+      for (const m of c.members)
+        if (m.id !== ownerId)
+          await this.realtime.toUser(m.id, {
+            type: 'chat.delivered',
+            conversationId: c.id,
+            userId: ownerId,
+            at: at.toISOString(),
+          });
   }
 
   async typing(ownerId: string, conversationId: string) {
@@ -831,6 +906,7 @@ export class ChatService {
         userId: r.ownerId,
         module: 'chat',
         kind: 'message',
+        type: 'chat.message',
         title: c!.kind === 'group' ? c!.title : await name(senderId),
         body: lines.join('\n'),
         url: `/chat/${conversationId}`,
