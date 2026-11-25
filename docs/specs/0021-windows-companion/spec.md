@@ -1,6 +1,6 @@
 # 0021 — ORVYN for Windows, complete
 
-Status: **Approved with changes, next** · 2026-11-25 · Builds on specs 0001, 0002, 0007 and 0020 (its activity record).
+Status: **Step 1 built, not deployed; steps 2–4 next** · 2026-11-25 · Builds on specs 0001, 0002, 0007 and 0020 (its activity record).
 
 ## Goal
 
@@ -44,6 +44,15 @@ this tray; **no Vault here** (the extension and web have it). Security is for ke
 - A session needs the PIN set at the PC; five wrong tries lock it until someone is at the PC. Idle for 15 minutes ends it.
 - The tray shows a clear mark while a session is open, with End. Every session is logged on the PC.
 - Runs as me, never as administrator.
+
+## Step 1 as built
+
+- Titles of browsers and password managers never leave the PC (pages come from the extension, which is off in private
+  windows). Keyboard and mouse hooks only count. Playing sound with nobody touching anything counts as watching.
+- A device asks `/notifications/missed` on connecting and every 15 minutes; more than five are summed up in one toast.
+- Muted modules, quiet hours and in-app-only types no longer pop up on the PC or in Chrome (they did); tests always do.
+- A failed toast reply says so with the text; it is not sent again by itself, as it may have arrived.
+- Not checked yet: the real tray app on a real desktop, and AC8.
 
 ## Acceptance criteria
 

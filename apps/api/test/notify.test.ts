@@ -97,6 +97,41 @@ describe('delivery', () => {
     expect(sender.to(LAPTOP_PUSH).length).toBe(before); // disabled until the browser re-subscribes
   });
 
+  it('a device that was away gets each missed one once, and nothing meant for the inbox only (spec 0021 #5)', async () => {
+    const n = h.app.get(NotifyService);
+    const missed = async (who: SessionResponse, since?: string) =>
+      (
+        await call<any>(
+          h,
+          'GET',
+          `/notifications/missed${since ? `?since=${encodeURIComponent(since)}` : ''}`,
+          {
+            token: who.accessToken,
+          },
+        )
+      ).body;
+    const first = await missed(laptop);
+    expect(first.items).toEqual([]); // a new device doesn't replay the past
+    const say = (over: object) =>
+      n.send({ userId: phone.user.id, module: 'core', kind: 'note', title: 'x', ...over });
+    const chat = { title: 'Chat', dedupeKey: 'missed:chat' };
+    await say(chat);
+    await say({ title: 'Own', sourceDeviceId: laptop.deviceId });
+    expect((await say({ title: 'Inbox only', via: { push: false } })).silent).toBe(true);
+    const mine = (m: any) =>
+      m.items.map((i: any) => i.title).filter((t: string) => ['Chat', 'Own', 'Inbox only'].includes(t));
+    const a = await missed(laptop, first.until);
+    expect(mine(a)).toEqual(['Chat']);
+    const before = a.items.find((i: any) => i.title === 'Chat');
+    expect(mine(await missed(laptop, new Date(Date.now() + 3_600_000).toISOString()))).toEqual([]);
+    await say(chat); // the same conversation speaks again
+    const again = (await missed(laptop, a.until)).items.find((i: any) => i.title === 'Chat');
+    expect(again.id).toBe(before.id);
+    expect(again.updatedAt).not.toBe(before.updatedAt); // how the device knows it is new
+    await call(h, 'POST', `/notifications/${before.id}/read`, { token: phone.accessToken });
+    expect(mine(await missed(laptop, first.until))).toEqual([]);
+  });
+
   it('cannot read or dismiss someone else’s notifications', async () => {
     const inv = await call<any>(h, 'POST', '/admin/invites', {
       token: phone.accessToken,

@@ -127,6 +127,9 @@ pub const SHORTCUTS: [&str; 3] = ["Ctrl+Shift+Space", "Ctrl+Alt+Space", "Alt+Shi
 pub struct Prefs {
     /// None until chosen (then the first suggestion is offered); Some("") = off
     pub quick_add_shortcut: Option<String>,
+    /// My Day on this PC; on until switched off
+    #[serde(default)]
+    pub track: Option<bool>,
 }
 
 impl Prefs {
@@ -208,12 +211,14 @@ mod tests {
         );
         Prefs {
             quick_add_shortcut: Some("Alt+Shift+T".into()),
+            track: None,
         }
         .save(&path)
         .unwrap();
         assert_eq!(Prefs::load(&path).shortcut(), Some("Alt+Shift+T"));
         Prefs {
             quick_add_shortcut: Some(String::new()),
+            track: None,
         }
         .save(&path)
         .unwrap();

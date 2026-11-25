@@ -11,13 +11,15 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::{mpsc, Mutex};
 
-use crate::api::{Client, DeviceInfo};
-use crate::live::{self, LiveEvent, ServerMessage};
+use crate::activity::{Queue, Sample, Tracker};
+use crate::api::{ApiError, Client, DeviceInfo};
+use crate::live::{self, LiveEvent, Notification, ServerMessage};
 use crate::loopback::Loopback;
-use crate::notify::{self, Choice};
+use crate::notify::{self, Choice, Shown};
 use crate::pkce::Pkce;
 use crate::quickadd::{self, Hlc, Prefs, SHORTCUTS};
 use crate::store::{KeyringStore, MemoryStore, TokenStore};
+use crate::watch::Watcher;
 
 pub const API_URL: &str = match option_env!("ORVYN_API_URL") {
     Some(u) => u,
@@ -38,12 +40,19 @@ struct State {
     items: Items,
     hlc: std::sync::Mutex<Hlc>,
     prefs_path: std::path::PathBuf,
+    shown: std::sync::Mutex<Shown>,
+    tracker: std::sync::Mutex<Tracker>,
+    queue: Mutex<Queue>,
+    /// looking at the PC while this is here
+    watcher: std::sync::Mutex<Option<Watcher>>,
+    samples: mpsc::Sender<Sample>,
 }
 
 struct Items {
     status: MenuItem<Wry>,
     connect: MenuItem<Wry>,
     test: MenuItem<Wry>,
+    track: CheckMenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
     autostart: CheckMenuItem<Wry>,
     /// one per suggested shortcut, then "Off"
@@ -108,6 +117,7 @@ pub fn run() {
                 .app_config_dir()
                 .map(|d| d.join("prefs.json"))
                 .unwrap_or_default();
+            notify::register(h);
             let prefs = Prefs::load(&prefs_path);
             let current = prefs.shortcut().map(str::to_owned);
             let mut shortcuts = vec![];
@@ -134,6 +144,14 @@ pub fn run() {
                 connect: MenuItem::with_id(h, "connect", "Connect to ORVYN…", true, None::<&str>)?,
                 test: MenuItem::with_id(h, "test", "Send a test notification", false, None::<&str>)?,
                 pause: CheckMenuItem::with_id(h, "pause", "Pause notifications for 1 hour", true, false, None::<&str>)?,
+                track: CheckMenuItem::with_id(
+                    h,
+                    "track",
+                    "Track my day on this PC",
+                    true,
+                    prefs.track.unwrap_or(true),
+                    None::<&str>,
+                )?,
                 autostart: CheckMenuItem::with_id(
                     h,
                     "autostart",
@@ -145,6 +163,7 @@ pub fn run() {
                 shortcuts,
             };
             let open = MenuItem::with_id(h, "open", "Open ORVYN", true, None::<&str>)?;
+            let day = MenuItem::with_id(h, "day", "My day", true, None::<&str>)?;
             let add = MenuItem::with_id(h, "add", "Add to Today…", true, None::<&str>)?;
             let shortcut_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = items
                 .shortcuts
@@ -160,11 +179,13 @@ pub fn run() {
                     &items.status,
                     &sep()?,
                     &open,
+                    &day,
                     &add,
                     &shortcut_menu,
                     &items.connect,
                     &items.test,
                     &sep()?,
+                    &items.track,
                     &items.pause,
                     &items.autostart,
                     &sep()?,
@@ -179,7 +200,14 @@ pub fn run() {
                 .on_menu_event(|app, e| on_menu(app.clone(), e.id().as_ref()))
                 .build(app)?;
 
+            let dir = prefs_path.parent().map(std::path::Path::to_owned).unwrap_or_default();
+            let (samples, looks) = mpsc::channel(16);
             let state = Arc::new(State {
+                shown: std::sync::Mutex::new(Shown::load(&dir.join("shown.json"))),
+                tracker: std::sync::Mutex::default(),
+                queue: Mutex::new(Queue::load(&dir.join("activity.json"))),
+                watcher: std::sync::Mutex::new(None),
+                samples,
                 client: Arc::new(Client::new(API_URL, store)),
                 live_task: Mutex::new(None),
                 connecting: AtomicBool::new(false),
@@ -190,6 +218,7 @@ pub fn run() {
                 prefs_path,
             });
             app.manage(state.clone());
+            tauri::async_runtime::spawn(record(state.clone(), looks));
 
             // the quick-add box: made once, hidden until the shortcut (or the tray) asks for it
             let qa = WebviewWindowBuilder::new(app, "quick-add", WebviewUrl::App("quick-add.html".into()))
@@ -243,7 +272,10 @@ fn on_menu(app: AppHandle, id: &str) {
         "connect" if s.client.has_session() => {
             tauri::async_runtime::spawn(async move {
                 stop_live(&s).await;
+                stop_tracking(&s);
+                let _ = flush(&s).await; // what was recorded is the person's: it goes before they leave
                 s.client.sign_out().await;
+                leave(&s).await;
                 refresh_menu(&s);
             });
         }
@@ -262,6 +294,24 @@ fn on_menu(app: AppHandle, id: &str) {
                     .await;
             });
         }
+        "day" => {
+            let _ = app.opener().open_url(format!("{WEB_URL}/day"), None::<&str>);
+        }
+        "track" => {
+            let mut p = Prefs::load(&s.prefs_path);
+            let on = !p.track.unwrap_or(true);
+            p.track = Some(on);
+            let _ = p.save(&s.prefs_path);
+            let _ = s.items.track.set_checked(on);
+            if on {
+                start_tracking(&s);
+            } else {
+                stop_tracking(&s);
+                tauri::async_runtime::spawn(async move {
+                    let _ = flush(&s).await;
+                });
+            }
+        }
         "pause" => {
             let until = if s.paused_until.load(Ordering::Relaxed) > now() {
                 0
@@ -277,7 +327,13 @@ fn on_menu(app: AppHandle, id: &str) {
             let _ = if on { al.enable() } else { al.disable() };
             let _ = s.items.autostart.set_checked(al.is_enabled().unwrap_or(false));
         }
-        "quit" => app.exit(0),
+        "quit" => {
+            tauri::async_runtime::spawn(async move {
+                stop_tracking(&s);
+                let _ = tokio::time::timeout(Duration::from_secs(3), flush(&s)).await;
+                app.exit(0);
+            });
+        }
         "add" => show_quick_add(&app),
         id if id.starts_with("sc:") => set_shortcut(&app, &s, id),
         _ => {}
@@ -306,10 +362,9 @@ fn set_shortcut(app: &AppHandle, s: &State, id: &str) {
         ok = gs.register(*sc).is_ok();
     }
     let chosen = if ok { choice.map(|c| c.to_string()) } else { None };
-    let _ = (Prefs {
-        quick_add_shortcut: Some(chosen.clone().unwrap_or_default()),
-    })
-    .save(&s.prefs_path);
+    let mut p = Prefs::load(&s.prefs_path);
+    p.quick_add_shortcut = Some(chosen.clone().unwrap_or_default());
+    let _ = p.save(&s.prefs_path);
     for (i, item) in s.items.shortcuts.iter().enumerate() {
         let on = match &chosen {
             Some(c) => SHORTCUTS.get(i) == Some(&c.as_str()),
@@ -398,76 +453,242 @@ async fn connect(app: AppHandle, s: Arc<State>) {
 
 fn start_live(app: AppHandle, s: Arc<State>) {
     refresh_menu(&s);
+    if Prefs::load(&s.prefs_path).track.unwrap_or(true) {
+        start_tracking(&s);
+    }
     let (tx, mut rx) = mpsc::channel::<LiveEvent>(64);
     let client = s.client.clone();
     let st = s.clone();
     tauri::async_runtime::spawn(async move {
         let task = tauri::async_runtime::spawn(live::run(client, tx));
         *st.live_task.lock().await = Some(task);
-        while let Some(ev) = rx.recv().await {
+        let mut again = tokio::time::interval(CATCH_UP_EVERY);
+        again.tick().await; // the first tick is at once; connecting catches up
+        loop {
+            let ev = tokio::select! {
+                ev = rx.recv() => match ev { Some(ev) => ev, None => break },
+                _ = again.tick() => {
+                    catch_up(&app, &st).await;
+                    continue;
+                }
+            };
             match ev {
-                LiveEvent::Connected => st.live.store(true, Ordering::Relaxed),
+                LiveEvent::Connected => {
+                    st.live.store(true, Ordering::Relaxed);
+                    catch_up(&app, &st).await;
+                }
                 LiveEvent::Disconnected => st.live.store(false, Ordering::Relaxed),
                 LiveEvent::SignedOut => {
                     st.live.store(false, Ordering::Relaxed);
                     st.client.forget().await;
+                    leave(&st).await;
                 }
                 LiveEvent::Message(ServerMessage::SessionRevoked) => {
                     stop_live(&st).await;
                     st.client.forget().await;
+                    leave(&st).await;
                 }
-                LiveEvent::Message(ServerMessage::NotifyNew { notification }) => {
-                    if st.paused_until.load(Ordering::Relaxed) <= now() || notification.priority == "urgent" {
-                        let (app2, st2, n) = (app.clone(), st.clone(), notification.clone());
-                        notify::show(&app, &notification, move |choice| {
-                            let (app3, st3, n3) = (app2.clone(), st2.clone(), n.clone());
-                            tauri::async_runtime::spawn(async move {
-                                match choice {
-                                    Choice::Open => {
-                                        let to = url::Url::parse(WEB_URL)
-                                            .and_then(|u| u.join(n3.url.as_deref().unwrap_or("/")));
-                                        if let Ok(to) = to {
-                                            let _ = app3.opener().open_url(to.as_str(), None::<&str>);
-                                        }
-                                        let _ = st3
-                                            .client
-                                            .call::<serde_json::Value>(
-                                                reqwest::Method::POST,
-                                                &format!("/notifications/{}/read", n3.id),
-                                                Some(serde_json::json!({})),
-                                            )
-                                            .await;
-                                    }
-                                    Choice::Dismiss => {
-                                        let _ = st3
-                                            .client
-                                            .call::<serde_json::Value>(
-                                                reqwest::Method::POST,
-                                                &format!("/notifications/{}/dismiss", n3.id),
-                                                Some(serde_json::json!({})),
-                                            )
-                                            .await;
-                                    }
-                                    Choice::Action(a) => {
-                                        let _ = st3
-                                            .client
-                                            .call::<serde_json::Value>(
-                                                reqwest::Method::POST,
-                                                &format!("/notifications/{}/actions/{}", n3.id, a),
-                                                Some(serde_json::json!({})),
-                                            )
-                                            .await;
-                                    }
-                                }
-                            });
-                        });
-                    }
+                LiveEvent::Message(ServerMessage::NotifyNew { notification }) => pop(&app, &st, &notification),
+                LiveEvent::Message(ServerMessage::NotifyRead { id } | ServerMessage::NotifyDismissed { id }) => {
+                    notify::clear(&app, &id)
                 }
                 LiveEvent::Message(_) => {}
             }
             refresh_menu(&st);
         }
     });
+}
+
+/// After quiet hours and after a pause too, not only after a lost connection.
+const CATCH_UP_EVERY: Duration = Duration::from_secs(15 * 60);
+/// A long absence shows the newest ones and says how many more wait.
+const CATCH_UP_MAX: usize = 5;
+
+#[derive(serde::Deserialize)]
+struct Missed {
+    items: Vec<Notification>,
+    until: String,
+}
+
+/// Whatever arrived while this PC slept or was offline, each once (spec 0021 #5).
+async fn catch_up(app: &AppHandle, s: &Arc<State>) {
+    if s.paused_until.load(Ordering::Relaxed) > now() {
+        return; // comes when the pause ends
+    }
+    let path = {
+        let shown = s.shown.lock().unwrap();
+        let q: String = match shown.since() {
+            Some(t) => url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("since", t)
+                .finish(),
+            None => String::new(),
+        };
+        format!("/notifications/missed?{q}")
+    };
+    let Ok(m) = s.client.call::<Missed>(reqwest::Method::GET, &path, None).await else {
+        return; // asked again later from the same moment
+    };
+    let new: Vec<_> = {
+        let mut shown = s.shown.lock().unwrap();
+        shown.set_since(m.until);
+        m.items.into_iter().filter(|n| shown.first(n)).collect()
+    };
+    let (urgent, rest): (Vec<_>, Vec<_>) = new.into_iter().partition(|n| n.alarm || n.priority == "urgent");
+    let more = rest.len().saturating_sub(CATCH_UP_MAX);
+    if more > 0 {
+        toast(
+            app,
+            s,
+            &note(
+                &format!("{more} more while you were away"),
+                "Open the inbox to see them.",
+                "/notifications",
+            ),
+        );
+    }
+    for n in rest.iter().skip(more).chain(&urgent) {
+        toast(app, s, n);
+    }
+}
+
+/// One that just arrived. Paused ones aren't marked as shown, so they come when the pause ends.
+fn pop(app: &AppHandle, s: &Arc<State>, n: &Notification) {
+    let paused = s.paused_until.load(Ordering::Relaxed) > now() && n.priority != "urgent";
+    if !n.silent && !paused && s.shown.lock().unwrap().first(n) {
+        toast(app, s, n);
+    }
+}
+
+/// A toast of the app's own (not on the server).
+fn note(title: &str, body: &str, url: &str) -> Notification {
+    Notification {
+        id: String::new(),
+        title: title.into(),
+        body: body.into(),
+        url: Some(url.into()),
+        priority: "normal".into(),
+        actions: vec![],
+        alarm: false,
+        silent: false,
+        updated_at: None,
+    }
+}
+
+fn toast(app: &AppHandle, s: &Arc<State>, n: &Notification) {
+    let (app2, st, n2) = (app.clone(), s.clone(), n.clone());
+    notify::show(app, n, move |choice| {
+        tauri::async_runtime::spawn(chosen(app2.clone(), st.clone(), n2.clone(), choice));
+    });
+}
+
+async fn chosen(app: AppHandle, s: Arc<State>, n: Notification, choice: Choice) {
+    let (what, body) = match &choice {
+        Choice::Open(to) => {
+            let to = to.as_deref().or(n.url.as_deref()).unwrap_or("/");
+            let to = url::Url::parse(WEB_URL).and_then(|u| u.join(to));
+            if let Some(to) = to.ok().filter(|u| matches!(u.scheme(), "https" | "http")) {
+                let _ = app.opener().open_url(to.as_str(), None::<&str>);
+            }
+            ("read".to_owned(), serde_json::json!({}))
+        }
+        Choice::Dismiss => ("dismiss".to_owned(), serde_json::json!({})),
+        Choice::Action(id, typed) => (
+            format!("actions/{id}"),
+            match typed {
+                Some(t) => serde_json::json!({ "text": t }),
+                None => serde_json::json!({}),
+            },
+        ),
+    };
+    if n.id.is_empty() {
+        return;
+    }
+    let done = s
+        .client
+        .call::<serde_json::Value>(
+            reqwest::Method::POST,
+            &format!("/notifications/{}/{what}", n.id),
+            Some(body),
+        )
+        .await;
+    // never silently lost: say so, with what was typed. Not sent again by itself: it may have arrived.
+    if let (Err(e), Choice::Action(_, typed)) = (done, choice) {
+        let why = match e {
+            ApiError::Http { code, .. } if code == "reply_required" => "Type an answer first.".to_owned(),
+            ApiError::Offline => "ORVYN didn’t answer, so it may not have arrived.".to_owned(),
+            _ => "It didn’t go through.".to_owned(),
+        };
+        let body = match typed {
+            Some(t) => format!("{why} You wrote: {t}"),
+            None => why,
+        };
+        toast(
+            &app,
+            &s,
+            &note(
+                &format!("Check this: {}", n.title),
+                &body,
+                n.url.as_deref().unwrap_or("/"),
+            ),
+        );
+    }
+}
+
+// ---------------------------------------------------------------- My Day
+
+fn start_tracking(s: &State) {
+    if s.client.has_session() {
+        let mut w = s.watcher.lock().unwrap();
+        if w.is_none() {
+            *w = Some(Watcher::start(s.samples.clone()));
+        }
+    }
+}
+
+fn stop_tracking(s: &State) {
+    let w = s.watcher.lock().unwrap().take();
+    drop(w);
+}
+
+/// Samples become spans; spans are sent every minute.
+async fn record(s: Arc<State>, mut looks: mpsc::Receiver<Sample>) {
+    let mut sent = std::time::Instant::now();
+    while let Some(look) = looks.recv().await {
+        if s.watcher.lock().unwrap().is_none() {
+            continue; // the last look of a watcher that was just stopped
+        }
+        let closed = s.tracker.lock().unwrap().step(&look);
+        if let Some(span) = closed {
+            s.queue.lock().await.add(span);
+        }
+        if sent.elapsed() >= Duration::from_secs(60) {
+            sent = std::time::Instant::now();
+            let open = s.tracker.lock().unwrap().open.clone();
+            let mut q = s.queue.lock().await;
+            if let Err(ApiError::Http { status: 403, .. }) = q.send(&s.client, open.as_ref()).await {
+                stop_tracking(&s);
+                let _ = s.items.track.set_text("Track my day (My Day isn’t on for you)");
+            }
+        }
+    }
+}
+
+/// Ends the span in progress and sends everything.
+async fn flush(s: &State) -> Result<(), ApiError> {
+    let last = s.tracker.lock().unwrap().stop();
+    let mut q = s.queue.lock().await;
+    if let Some(span) = last {
+        q.add(span);
+    }
+    q.send(&s.client, None).await
+}
+
+/// Signed out: nothing of this person stays for the next one.
+async fn leave(s: &State) {
+    stop_tracking(s);
+    s.tracker.lock().unwrap().open = None;
+    s.queue.lock().await.clear();
+    s.shown.lock().unwrap().clear();
 }
 
 async fn stop_live(s: &State) {

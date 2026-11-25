@@ -93,6 +93,15 @@ export class NotifyController {
     return this.notify.list(a.userId, before, Number(limit) || 50);
   }
 
+  @Get('missed')
+  missed(
+    @Auth() a: AuthContext,
+    @Query(new ZodPipe(z.object({ since: z.string().datetime({ offset: true }).optional() })))
+    q: { since?: string },
+  ) {
+    return this.notify.missed(a.userId, a.deviceId, q.since ? new Date(q.since) : undefined);
+  }
+
   @Post(':id/read')
   @HttpCode(200)
   async read(@Auth() a: AuthContext, @Param('id') id: string) {

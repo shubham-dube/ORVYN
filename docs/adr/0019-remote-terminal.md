@@ -1,6 +1,6 @@
 # ADR-0019: Running commands on the PC from elsewhere
 
-- Status: Proposed (built with spec 0021 step 3)
+- Status: Accepted 2026-11-25 (built with spec 0021 step 3)
 - Date: 2026-11-25
 - Related: ADR-0004, spec 0021
 

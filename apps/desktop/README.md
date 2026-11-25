@@ -1,12 +1,14 @@
 # ORVYN for Windows (Tauri 2)
 
-A tray companion: starts with Windows (optional), shows ORVYN notifications as Windows toasts with **Open** and
-**Dismiss**, and stays connected live. No window, no password: it connects through the web app.
+A tray companion: starts with Windows (optional), shows ORVYN notifications as Windows toasts, and stays connected live. No window, no password: it connects through the web app.
 
 - Connect: tray → _Connect to ORVYN…_ opens your browser at `/connect`; approve; the browser hands a one-time code to
   the app on `127.0.0.1` (PKCE, RFC 8252). The refresh token goes to **Windows Credential Manager**.
 - Tray menu: status, Open ORVYN, Connect / Disconnect, Send a test notification, Pause notifications for 1 hour
   (urgent ones still come through), Start with Windows, Quit.
+- **My day:** which program is in front and whether anyone is there (spec 0021). Keys and clicks are counted, never read.
+  Tray → _Track my day on this PC_ switches it off.
+- **Toasts** carry the notification's own buttons and a box to reply in; alarms ring; after sleep each missed one comes once.
 - Sign it out from any device (Settings → Security) and it disconnects immediately.
 - Quick add from anywhere: press your shortcut (tray → _Quick add shortcut_: Ctrl+Shift+Space until you pick one,
   or Off), type the way you would anywhere in ORVYN — “call mom tomorrow 6pm”, “pay rent every month on the 1st

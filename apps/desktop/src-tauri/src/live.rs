@@ -22,6 +22,14 @@ pub struct Notification {
     pub priority: String,
     #[serde(default)]
     pub actions: Vec<NotifyAction>,
+    /// rings until someone acts
+    #[serde(default)]
+    pub alarm: bool,
+    /// in the inbox only (muted, quiet hours, in-app): nothing pops up
+    #[serde(default)]
+    pub silent: bool,
+    #[serde(default)]
+    pub updated_at: Option<String>,
 }
 
 /// A button on a notification (Done, Snooze 10 min, …). `open` = it opens a page instead of doing something.
@@ -31,13 +39,14 @@ pub struct NotifyAction {
     pub label: String,
     #[serde(default)]
     pub open: Option<String>,
+    #[serde(default)]
+    pub reply: Option<ReplyBox>,
 }
 
-impl Notification {
-    /// Buttons that do something on the server (shown on the toast; the toast body opens ORVYN).
-    pub fn doing_actions(&self) -> Vec<&NotifyAction> {
-        self.actions.iter().filter(|a| a.open.is_none()).take(5).collect()
-    }
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReplyBox {
+    #[serde(default)]
+    pub placeholder: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -164,12 +173,8 @@ mod tests {
             panic!()
         };
         assert_eq!(
-            notification
-                .doing_actions()
-                .iter()
-                .map(|a| a.id.as_str())
-                .collect::<Vec<_>>(),
-            ["done", "snooze_10m"]
+            notification.actions.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(),
+            ["done", "snooze_10m", "open"]
         );
         let m: ServerMessage = serde_json::from_str(r#"{"type":"entitlements.changed","entitlements":[]}"#).unwrap();
         assert!(matches!(m, ServerMessage::Other));

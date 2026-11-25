@@ -2,13 +2,14 @@ import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } f
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import {
   NOTIFY_TYPE,
+  type MissedNotifications,
   type NotificationView,
   type NotifySettings,
   type NotifyWay,
   type RegisterPushRequest,
 } from '@orvyn/contracts';
 import { Queue, Worker } from 'bullmq';
-import { and, desc, eq, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { badRequest, notFound } from '../../common/errors';
 import { ENV, type Env } from '../../config/env';
 import { DB, type Db } from '../../db/db.module';
@@ -187,7 +188,11 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
           .insert(notifications)
           .values({ id: newId(), ...values })
           .returning();
-    const view = toView(row!);
+    const settings = await this.settings(input.userId);
+    const view: NotificationView = {
+      ...toView(row!),
+      silent: off || isSilent(row!, settings, msUntilQuietEnds(new Date(), settings.quietHours) > 0),
+    };
     if (off) return view;
     await this.realtime.toUser(
       input.userId,
@@ -448,7 +453,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     if (!n) throw notFound();
     const action = n.actions.find((a) => a.id === actionId);
     if (!action) throw badRequest('unknown_action', 'That action is not available.');
-    const typed = text?.trim().slice(0, 200);
+    const typed = text?.trim().slice(0, 500);
     if (action.reply && !typed) throw badRequest('reply_required', 'Type an answer first.');
     await this.events.emitAsync('notify.action', {
       ownerId,
@@ -475,6 +480,40 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     if (!r.length) throw notFound();
     await this.realtime.toUser(ownerId, { type: 'notify.dismissed', id }, everywhere ? undefined : deviceId);
     await this.queue.add('clear', { kind: 'clear', id, ownerId, type: 'dismiss' });
+  }
+
+  /**
+   * What this device should still pop up: unread, changed since it last looked, not raised by itself. In quiet hours
+   * only the urgent ones, and `until` stays put so the rest come when quiet hours end. The window overlaps the last one
+   * (the database and this server may disagree about the time), so a device skips an id + updatedAt it has shown.
+   */
+  async missed(ownerId: string, deviceId: string, since?: Date): Promise<MissedNotifications> {
+    const now = new Date();
+    if (!since) return { items: [], until: now.toISOString() };
+    const settings = await this.settings(ownerId);
+    const quiet = msUntilQuietEnds(now, settings.quietHours) > 0;
+    const rows = await this.db
+      .select()
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.ownerId, ownerId),
+          isNull(notifications.readAt),
+          isNull(notifications.dismissedAt),
+          gt(notifications.updatedAt, new Date(since.getTime() - MISSED_OVERLAP_MS)),
+          or(isNull(notifications.sourceDeviceId), ne(notifications.sourceDeviceId, deviceId)),
+        ),
+      )
+      .orderBy(asc(notifications.updatedAt))
+      .limit(200);
+    return {
+      items: rows.filter((r) => !isSilent(r, settings, quiet)).map((r) => toView(r)),
+      until: quiet
+        ? since.toISOString()
+        : rows.length === 200
+          ? rows.at(-1)!.updatedAt.toISOString()
+          : now.toISOString(),
+    };
   }
 
   /** Has this person ever been sent a notification with this key (read or not)? */
@@ -651,6 +690,15 @@ function cleanRules(rules: NotifySettings['rules'] | undefined): NotifySettings[
   return out;
 }
 
+const MISSED_OVERLAP_MS = 2 * 60_000;
+
+/** In the inbox only, the same rule push follows. */
+function isSilent(n: typeof notifications.$inferSelect, s: NotifySettings, quiet: boolean): boolean {
+  if (n.kind === 'test') return false; // asked for just now, to be seen
+  if (n.via?.push === false) return true;
+  return n.priority !== 'urgent' && (quiet || s.mutedModules.includes(n.module));
+}
+
 function toView(n: typeof notifications.$inferSelect): NotificationView {
   return {
     id: n.id,
@@ -663,6 +711,8 @@ function toView(n: typeof notifications.$inferSelect): NotificationView {
     priority: n.priority,
     alarm: n.alarm,
     createdAt: n.createdAt.toISOString(),
+    updatedAt: n.updatedAt.toISOString(),
+    silent: false,
     readAt: n.readAt?.toISOString() ?? null,
     dismissedAt: n.dismissedAt?.toISOString() ?? null,
   };

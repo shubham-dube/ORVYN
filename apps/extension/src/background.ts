@@ -183,6 +183,7 @@ async function onMessage(m: ServerMessage): Promise<void> {
     case 'notify.new':
       if (!notifications.some((n) => n.id === m.notification.id)) {
         notifications = [m.notification, ...notifications].slice(0, 50);
+        if (m.notification.silent) break; // in the inbox only
         chrome.notifications.create(m.notification.id, {
           type: 'basic',
           iconUrl: 'icons/icon-128.png',

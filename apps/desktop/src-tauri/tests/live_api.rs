@@ -1,9 +1,11 @@
 //! The desktop client against a real API (dev mailbox on). Run with:
 //!   ORVYN_LIVE_API=http://localhost:4100 cargo test --test live_api
 //! CI starts the API exactly like the web e2e (apps/web/e2e/start-api.mjs).
+use orvyn_desktop::activity::{Queue, Sample, Tracker};
 use orvyn_desktop::api::{Client, DeviceInfo};
-use orvyn_desktop::live::{self, LiveEvent, ServerMessage};
+use orvyn_desktop::live::{self, LiveEvent, Notification, ServerMessage};
 use orvyn_desktop::loopback::Loopback;
+use orvyn_desktop::notify::Shown;
 use orvyn_desktop::pkce::Pkce;
 use orvyn_desktop::quickadd::{self, Hlc};
 use orvyn_desktop::store::{MemoryStore, TokenStore};
@@ -161,6 +163,79 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
             break;
         }
     }
+
+    // 4b. what a PC that was away missed: each once, then nothing
+    let missed = |since: Option<String>| {
+        let client = client.clone();
+        async move {
+            let q = since.map(|t| format!("?since={t}")).unwrap_or_default();
+            let v: Value = client
+                .call(reqwest::Method::GET, &format!("/notifications/missed{q}"), None)
+                .await
+                .unwrap();
+            v
+        }
+    };
+    let start = missed(None).await["until"].as_str().unwrap().to_owned();
+    http.post(format!("{base}/notifications/test"))
+        .bearer_auth(&owner)
+        .json(&json!({}))
+        .send()
+        .await
+        .unwrap();
+    let m = missed(Some(start)).await;
+    let got: Vec<Notification> = serde_json::from_value(m["items"].clone()).unwrap();
+    let path = std::env::temp_dir().join(format!("orvyn-live-{}.json", std::process::id()));
+    let mut shown = Shown::load(&path);
+    assert!(got.iter().filter(|n| shown.first(n)).count() >= 1);
+    let after = missed(m["until"].as_str().map(str::to_owned)).await;
+    let after: Vec<Notification> = serde_json::from_value(after["items"].clone()).unwrap();
+    assert!(after.iter().all(|n| !shown.first(n)));
+    shown.clear();
+
+    // 4c. My Day: an hour in a program reaches the day, once, even when the running span is sent again and again
+    let end = chrono::Utc::now().timestamp_millis();
+    let (mut tracker, mut queue) = (Tracker::default(), Queue::load(&path));
+    for i in 0..=60 {
+        let closed = tracker.step(&Sample {
+            t: end - (60 - i) * 60_000,
+            app: "Code.exe".into(),
+            title: "a.rs - orvyn - Visual Studio Code".into(),
+            idle_ms: 0,
+            locked: false,
+            playing: false,
+            keys: 10,
+            clicks: 1,
+            scrolls: 0,
+        });
+        assert!(closed.is_none());
+        if i % 20 == 0 {
+            queue.send(&client, tracker.open.as_ref()).await.unwrap();
+        }
+    }
+    queue.add(tracker.stop().unwrap());
+    queue.send(&client, None).await.unwrap();
+    assert!(queue.is_empty());
+    let day = |ms: i64| {
+        chrono::DateTime::from_timestamp_millis(ms)
+            .unwrap()
+            .format("%Y-%m-%d")
+            .to_string()
+    };
+    let (mut ms, mut keys) = (0, 0);
+    let mut dates = vec![day(end - 3_600_000), day(end)];
+    dates.dedup(); // the hour may cross midnight
+    for date in dates {
+        let d: Value = client
+            .call(reqwest::Method::GET, &format!("/activity/day?date={date}&tz=UTC"), None)
+            .await
+            .unwrap();
+        ms += d["activeMs"].as_i64().unwrap();
+        keys += d["keys"].as_i64().unwrap();
+        assert!(d["places"].as_array().unwrap().iter().all(|p| p["place"] == "VS Code"));
+    }
+    assert!((ms - 3_600_000).abs() < 1000, "{ms}");
+    assert!((608..=612).contains(&keys), "{keys}");
 
     // 5. signing this PC out from the phone cuts it off live and it can't refresh
     let id = client.device_id.read().await.clone().unwrap();

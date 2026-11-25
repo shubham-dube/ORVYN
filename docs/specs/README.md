@@ -14,3 +14,4 @@
 | [0019-notifications-everywhere](0019-notifications-everywhere/spec.md) | Notifications set your way: every kind, its channels, a sample                       | In progress                     |
 | [0020-chrome-extension](0020-chrome-extension/spec.md)                 | ORVYN for Chrome, complete                                                           | In progress                     |
 | [0021-windows-companion](0021-windows-companion/spec.md)               | ORVYN for Windows, complete                                                          | In progress                     |
+| [0022](0022-pocket-cockpit/spec.md)                                    | Pocket Cockpit: PC from the phone, phone from the PC                                 | Approved, after the terminal    |

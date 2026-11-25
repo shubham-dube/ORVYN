@@ -92,6 +92,8 @@ export function describe(s: Pick<ActivitySpan, 'app' | 'host' | 'path' | 'title'
 const APPS: Record<string, string> = {
   code: 'VS Code',
   cursor: 'Cursor',
+  antigravity: 'Antigravity',
+  studio64: 'Android Studio',
   devenv: 'Visual Studio',
   chrome: 'Chrome',
   msedge: 'Edge',
@@ -127,10 +129,14 @@ const APPS: Record<string, string> = {
 function describeApp(app: string, title: string): { place: string; what: string } {
   const exe = app.replace(/\.exe$/i, '');
   const name = APPS[exe.toLowerCase()] ?? (exe || 'Computer');
-  if (/^(code|cursor|devenv|idea64|pycharm64|webstorm64)$/i.test(exe)) {
+  if (/^(code|cursor|antigravity|devenv|idea64|pycharm64|webstorm64)$/i.test(exe)) {
     // "● spec.md - orvyn - Visual Studio Code" → project first
     const p = title.replace(/^[●•]\s*/, '').split(' - ');
     if (p.length >= 3) return { place: name, what: `${p.at(-2)} · ${p[0]}` };
+  }
+  if (/^studio64$/i.test(exe)) {
+    // "orvyn – MainActivity.kt [orvyn.app.main]" is already project first
+    return { place: name, what: title.replace(/\s*\[[^\]]*\]$/, '').replace(/\s+–\s+/, ' · ') || name };
   }
   const tail = new RegExp(`\\s*[-–—|]\\s*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
   return { place: name, what: title.replace(tail, '').trim() || name };
@@ -180,7 +186,7 @@ const BY_HOST: [RegExp, ActivityCategory][] = [
 ];
 const BY_APP: [RegExp, ActivityCategory][] = [
   [
-    /^(code|cursor|devenv|idea64|pycharm64|webstorm64|windowsterminal|powershell|pwsh|cmd|postman|docker desktop|dbeaver)$/i,
+    /^(code|cursor|antigravity|studio64|devenv|idea64|pycharm64|webstorm64|windowsterminal|powershell|pwsh|cmd|postman|docker desktop|dbeaver)$/i,
     'code',
   ],
   [/^(zoom|teams|ms-teams)$/i, 'meeting'],

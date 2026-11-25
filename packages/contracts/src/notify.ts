@@ -23,10 +23,20 @@ export const NotificationView = z.object({
   /** rings like an alarm on devices that can (D22) */
   alarm: z.boolean().default(false),
   createdAt: z.string(),
+  /** moves when the same notification speaks again (a second chat message) */
+  updatedAt: z.string().optional(),
+  /** kept in the inbox only: switched to in-app, its module muted, or quiet hours. Nothing pops up. */
+  silent: z.boolean().default(false),
   readAt: z.string().nullable(),
   dismissedAt: z.string().nullable(),
 });
 export type NotificationView = z.infer<typeof NotificationView>;
+
+/** What a device that was away hasn't shown yet (spec 0021 #5). `until` is the next `since`. */
+export interface MissedNotifications {
+  items: NotificationView[];
+  until: string;
+}
 
 /** Where a person can be reached besides the apps (D23). The number is only ever shown masked. */
 export const ContactChannels = z.object({
