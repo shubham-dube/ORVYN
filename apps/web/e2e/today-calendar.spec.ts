@@ -50,7 +50,7 @@ test('calendar: a repeating event, changing and cancelling one occurrence, dragg
   await cal.getByRole('radio', { name: 'Day' }).click();
 
   // a task without a time waits in "To place"; dragging it onto the river gives it one
-  await page.getByLabel('New task').fill('Draft the newsletter');
+  await page.getByLabel('New task', { exact: true }).fill('Draft the newsletter');
   await page.keyboard.press('Enter');
   const toPlace = page.getByLabel('To place');
   await expect(toPlace.getByText('Draft the newsletter')).toBeVisible();

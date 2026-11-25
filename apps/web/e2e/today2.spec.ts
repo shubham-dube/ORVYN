@@ -15,7 +15,7 @@ test('Tasks: steps, tags, repeat, projects, search, saved filters, board, and bu
   await page.waitForLoadState('networkidle');
 
   // a task with everything on it: the sheet stays short, each thing opens from its pill or "+" row (spec 0012 A3)
-  await page.getByLabel('New task').fill('Plan offsite');
+  await page.getByLabel('New task', { exact: true }).fill('Plan offsite');
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Plan offsite' }).first().click();
   const sheet = page.getByRole('dialog', { name: 'Task' });
@@ -106,7 +106,7 @@ test('Tasks: steps, tags, repeat, projects, search, saved filters, board, and bu
   // select: two tasks into the project at once, from the floating bar
   await page.getByRole('radio', { name: 'List' }).click();
   for (const t of ['Buy milk today', 'Buy bread today']) {
-    await page.getByLabel('New task').fill(t);
+    await page.getByLabel('New task', { exact: true }).fill(t);
     await page.keyboard.press('Enter');
     await expect(page.getByRole('button', { name: t.replace(' today', '') }).first()).toBeVisible();
   }

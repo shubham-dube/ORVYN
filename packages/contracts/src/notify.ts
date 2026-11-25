@@ -349,5 +349,7 @@ export const ServerMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat.typing'), conversationId: z.string(), userId: z.string() }),
   z.object({ type: z.literal('chat.read'), conversationId: z.string(), userId: z.string(), at: z.string() }),
   z.object({ type: z.literal('split.changed'), groupId: z.string() }),
+  /** from another device of mine, to or from the PC (spec 0021); only they can read `d` */
+  z.object({ type: z.literal('pc'), from: z.string(), s: z.string(), d: z.string() }),
 ]);
 export type ServerMessage = z.infer<typeof ServerMessage>;

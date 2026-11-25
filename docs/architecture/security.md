@@ -23,7 +23,8 @@
 ## Vault — zero-knowledge (ADR-0004)
 
 - Library: **libsodium** (via `libsodium-wrappers-sumo` on web/extension/desktop); in Flutter the pure-Dart
-  `cryptography` package with the same algorithms, checked against shared test vectors (D24, ADR-0014).
+  `cryptography` package with the same algorithms, checked against shared test vectors (D24, ADR-0014). On the PC:
+  RustCrypto `chacha20poly1305` and `argon2`, for the terminal only, with the same vectors (ADR-0019).
 - Chat: kept on the server and encrypted at rest with a key derived from `FILES_MASTER_KEY` (ADR-0016). Older
   messages were sealed to devices with X25519 + BLAKE2b and signed with Ed25519 (ADR-0014). They are carried over
   only after their signature is checked.

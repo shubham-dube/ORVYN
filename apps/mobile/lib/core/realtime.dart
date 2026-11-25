@@ -25,6 +25,7 @@ class Realtime {
   Timer? _timer;
   int _attempt = 0;
   bool _stopped = true;
+  bool _live = false;
 
   Stream<Map<String, dynamic>> get messages => _messages.stream;
   Stream<bool> get connected => _connected.stream;
@@ -41,7 +42,15 @@ class Realtime {
     _sub?.cancel();
     _ch?.sink.close();
     _ch = null;
+    _live = false;
     _connected.add(false);
+  }
+
+  /// False when there is no connection now. Only `pc` frames go this way; everything else is HTTP.
+  bool send(Map<String, dynamic> frame) {
+    if (!_live || _ch == null) return false;
+    _ch!.sink.add(jsonEncode(frame));
+    return true;
   }
 
   /// Reconnect now (app resumed, network came back).
@@ -64,6 +73,7 @@ class Realtime {
         final msg = jsonDecode(data as String) as Map<String, dynamic>;
         if (msg['type'] == 'hello') {
           _attempt = 0;
+          _live = true;
           _connected.add(true);
         }
         _messages.add(msg);
@@ -77,6 +87,7 @@ class Realtime {
   Future<void> _closed(WebSocketChannel ch, int? code) async {
     if (_stopped || !identical(_ch, ch)) return;
     _ch = null;
+    _live = false;
     _connected.add(false);
     if (code == 4401) {
       final s = await api.refresh();

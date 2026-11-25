@@ -13,6 +13,7 @@ export const MODULE_KEYS = [
   'jobs',
   'activity',
   'fill',
+  'pc',
 ] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 

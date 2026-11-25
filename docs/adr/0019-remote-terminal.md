@@ -17,10 +17,18 @@ its server, its database or Redis would own the PC.
 - The server only forwards opaque messages between two devices of the same person, behind a `pc` module switch, with size
   and rate limits. It stores none of them.
 - The PC is the only place to switch it on, set the PIN, pair, list and remove devices.
-- The browser keeps its key in IndexedDB, wrapped by the PIN (Argon2id). A wrong PIN is also counted on the PC.
+- The PIN is checked only on the PC (Argon2id), inside the encrypted session; the PC writes each try down before it
+  checks it and locks after five. It is never kept on the phone or in the browser.
+- The browser keeps its key in IndexedDB under an AES-GCM key that cannot be read out (Web Crypto); Android in its
+  Keystore-backed storage.
+- A session has a fresh random half from each side, so a recording replayed later opens nothing. The server only names
+  which device a message came from.
+
+Changed while building (2026-11-26): the key was to be wrapped by the PIN. Whoever copied it could then have tried every
+PIN at home; now each try must reach the PC, which allows five.
 
 ## Consequences
 
 Losing the phone means removing it at the PC. Clearing the browser's data means pairing again. A web app served by a
-compromised server could steal the key when the PIN is typed: the same limit as the web Vault. The native Android app
+compromised server could use the key and steal the PIN as it is typed: the same limit as the web Vault. The native Android app
 avoids it and is the stronger place to use this from.

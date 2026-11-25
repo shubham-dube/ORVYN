@@ -13,6 +13,7 @@ import {
   Shield,
   Wallet,
   Sparkles,
+  SquareTerminal,
   MessagesSquare,
   Receipt,
   Sunrise,
@@ -156,6 +157,9 @@ function Shell({ children }: { children: ReactNode }) {
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('activity')
       ? [{ href: '/day', label: 'My Day', icon: Activity }]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('pc')
+      ? [{ href: '/pc', label: 'My PC', icon: SquareTerminal }]
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('drop')
       ? [{ href: '/drop', label: 'Drop', icon: ArrowDownToLine }]

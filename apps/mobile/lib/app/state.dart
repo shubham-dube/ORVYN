@@ -205,6 +205,7 @@ class SessionController extends Notifier<SessionState> {
     final store = ref.read(storeProvider);
     await store.write('orvyn.me', null);
     await store.write('orvyn.device', null);
+    await store.write('orvyn.pcs', null); // the PCs this phone was paired with (spec 0021)
     await store.write('orvyn.vault.bio', null); // the Vault's fingerprint key goes with the session (spec 0015 A1)
     if (_api.accessToken != null) await _api.setSession(null);
     await store.writeRefreshToken(null);

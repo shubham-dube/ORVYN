@@ -9,6 +9,9 @@ A tray companion: starts with Windows (optional), shows ORVYN notifications as W
 - **My day:** which program is in front and whether anyone is there (spec 0021). Keys and clicks are counted, never read.
   Tray → _Track my day on this PC_ switches it off.
 - **Toasts** carry the notification's own buttons and a box to reply in; alarms ring; after sleep each missed one comes once.
+- **This PC from my phone:** a full terminal from the ORVYN app or the web, end-to-end encrypted (ADR-0019). Off until you
+  choose a PIN and switch it on here; a toast and the tray say when someone is in. Log: `terminal-log.txt` beside the
+  app's settings. Output and what is typed are never logged.
 - Sign it out from any device (Settings → Security) and it disconnects immediately.
 - Quick add from anywhere: press your shortcut (tray → _Quick add shortcut_: Ctrl+Shift+Space until you pick one,
   or Off), type the way you would anywhere in ORVYN — “call mom tomorrow 6pm”, “pay rent every month on the 1st

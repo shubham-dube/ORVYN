@@ -5,6 +5,7 @@ pub mod app;
 pub mod live;
 pub mod loopback;
 pub mod notify;
+pub mod pc;
 pub mod pkce;
 pub mod quickadd;
 pub mod store;

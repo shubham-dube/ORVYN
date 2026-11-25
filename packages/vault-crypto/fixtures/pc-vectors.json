@@ -1,0 +1,30 @@
+{
+  "key": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "nonce": "ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7",
+  "sid": "AAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBA",
+  "pairing": {
+    "text": "ORVYN-PC1.MjM0NTY3ODk6Ozw9.AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8.TXkgUEM",
+    "id": "MjM0NTY3ODk6Ozw9",
+    "name": "My PC"
+  },
+  "messages": [
+    {
+      "dir": "c",
+      "n": 0,
+      "plain": "{\"t\":\"auth\",\"pin\":\"example\"}",
+      "frame": "m.0.ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7B1GNksUM6PfzWL8ThB_Up3mBcBScTafA4DBG2krvfd6d13BAe8KT8ZmdHdY"
+    },
+    {
+      "dir": "p",
+      "n": 0,
+      "plain": "नमस्ते ✓",
+      "frame": "m.0.ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7nNdRUFuAaSY_0DiyRssZKf48cpN4v0KR15EdJeTgwscO9a_bK5s"
+    },
+    {
+      "dir": "p",
+      "n": 41,
+      "plain": "",
+      "frame": "m.41.ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7OOgxX1ZyhAhwA9gTtJ52sw"
+    }
+  ]
+}

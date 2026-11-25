@@ -1,6 +1,6 @@
 # 0021 — ORVYN for Windows, complete
 
-Status: **Step 1 built, not deployed; steps 2–4 next** · 2026-11-25 · Builds on specs 0001, 0002, 0007 and 0020 (its activity record).
+Status: **Step 1 live; Terminal anywhere (10) live; the rest of 3, then 2 and 4, next** · 2026-11-25 · Builds on specs 0001, 0002, 0007 and 0020 (its activity record).
 
 ## Goal
 
@@ -54,13 +54,25 @@ this tray; **no Vault here** (the extension and web have it). Security is for ke
 - A failed toast reply says so with the text; it is not sent again by itself, as it may have arrived.
 - Not checked yet: the real tray app on a real desktop, and AC8.
 
+## Terminal anywhere as built
+
+- Tray → _This PC from my phone_: PIN, switch, devices, log. Only that window can change them; it is hidden from screen
+  capture. A pairing code works once, for 10 minutes. Disconnecting ORVYN forgets every device and closes the shells.
+- Shells: PowerShell 7, PowerShell, Command Prompt, Git Bash, whichever are installed; up to eight. They end when
+  switched off, closed, or ORVYN quits; not when a phone leaves. The latest 256 KB is kept for whoever comes back.
+- Web: My PC. Android: Everything → My PC, with a camera scanner. Needs the `pc` switch (ADR-0005).
+- ORVYN running as administrator refuses to switch it on. Nothing typed while disconnected is sent later.
+- The relay takes 200 messages and 1 MB a second per socket and 64 KB a message; more is dropped and both ends start again.
+- AC3, AC4 and AC5 have tests (Rust, API, web, Android); AC6's reconnect too.
+- Not checked yet: a real phone with the real tray app, a full-screen program by hand (AC6), the camera scan.
+
 ## Acceptance criteria
 
 - [ ] AC1 A day merges PC and browser without counting a minute twice; no characters are ever stored (test).
 - [ ] AC2 A chat toast reply is sent once; every notification button works from the toast.
-- [ ] AC3 A message changed, repeated, reordered, or from an unpaired device runs nothing (tests).
-- [ ] AC4 The server's database and logs hold nothing readable from a terminal session (test).
-- [ ] AC5 Five wrong PINs lock it; removing a device at the PC ends its session at once (tests).
+- [x] AC3 A message changed, repeated, reordered, or from an unpaired device runs nothing (tests).
+- [x] AC4 The server's database and logs hold nothing readable from a terminal session (test).
+- [x] AC5 Five wrong PINs lock it; removing a device at the PC ends its session at once (tests).
 - [ ] AC6 A full-screen program (an editor, `top`) works in the phone browser; a dropped phone reconnects to the same session.
 - [ ] AC7 AI never runs a command: Run is always pressed (test).
 - [ ] AC8 Under 80 MB and 1% CPU idle over 10 minutes (measured).

@@ -24,6 +24,7 @@ const peopleModules = <(String, String, IconData)>[
   ('chat', 'Chat', LucideIcons.messageCircle),
   ('split', 'Split', LucideIcons.receipt),
   ('ipo', 'IPO', LucideIcons.trendingUp),
+  ('pc', 'My PC', LucideIcons.squareTerminal),
 ];
 
 final peopleProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {

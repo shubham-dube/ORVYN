@@ -58,7 +58,7 @@ test('working hours and reminders are mine: set once, change from a date, used o
 test('a task can have its own reminders, or none', async ({ page }) => {
   await signInWithEmail(page, OWNER);
   await page.goto('/today');
-  await page.getByLabel('New task').fill('Team call');
+  await page.getByLabel('New task', { exact: true }).fill('Team call');
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Team call' }).click();
   await page.getByLabel('Time', { exact: true }).fill('18:00');
@@ -78,7 +78,7 @@ test('a task can have its own reminders, or none', async ({ page }) => {
 test('with working hours set, the river shows free time and plans the day with reasons', async ({ page }) => {
   await signInWithEmail(page, OWNER);
   await page.goto('/today');
-  await page.getByLabel('New task').fill('Prepare slides 45 min');
+  await page.getByLabel('New task', { exact: true }).fill('Prepare slides 45 min');
   await page.keyboard.press('Enter');
   await page.getByRole('radio', { name: 'Calendar' }).click();
   const cal = page.getByRole('region', { name: 'Calendar' });
@@ -129,7 +129,7 @@ test('reminders can come any way: my defaults, a task of its own, and "try it no
 
   // a task of its own: hard notification only
   await page.goto('/today');
-  await page.getByLabel('New task').fill('Pick up the parcel');
+  await page.getByLabel('New task', { exact: true }).fill('Pick up the parcel');
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: 'Pick up the parcel' }).click();
   await page.getByLabel('Time', { exact: true }).fill('17:00');

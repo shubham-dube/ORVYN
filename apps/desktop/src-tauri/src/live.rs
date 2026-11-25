@@ -5,10 +5,14 @@ use rand::Rng;
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::api::{ApiError, Client};
+use crate::pc::Frame;
+
+/// What this PC sends to another device of mine, through the server (spec 0021).
+pub type Outgoing = Arc<Mutex<mpsc::UnboundedReceiver<Frame>>>;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +64,8 @@ pub enum ServerMessage {
     NotifyRead { id: String },
     #[serde(rename = "notify.dismissed")]
     NotifyDismissed { id: String },
+    #[serde(rename = "pc")]
+    Pc { from: String, s: String, d: String },
     #[serde(rename = "session.revoked")]
     SessionRevoked,
     #[serde(other)]
@@ -79,7 +85,7 @@ pub fn ws_url(api_url: &str) -> String {
 }
 
 /// Runs until the session ends (or the receiver is dropped).
-pub async fn run(client: Arc<Client>, tx: mpsc::Sender<LiveEvent>) {
+pub async fn run(client: Arc<Client>, tx: mpsc::Sender<LiveEvent>, out: Outgoing) {
     let mut attempt: u32 = 0;
     loop {
         let token = match client.access_token().await {
@@ -96,7 +102,7 @@ pub async fn run(client: Arc<Client>, tx: mpsc::Sender<LiveEvent>) {
                 }
             },
         };
-        let close_code = session(&client, &token, &tx, &mut attempt).await;
+        let close_code = session(&client, &token, &tx, &out, &mut attempt).await;
         if tx.is_closed() {
             return;
         }
@@ -111,7 +117,13 @@ pub async fn run(client: Arc<Client>, tx: mpsc::Sender<LiveEvent>) {
     }
 }
 
-async fn session(client: &Client, token: &str, tx: &mpsc::Sender<LiveEvent>, attempt: &mut u32) -> Option<u16> {
+async fn session(
+    client: &Client,
+    token: &str,
+    tx: &mpsc::Sender<LiveEvent>,
+    out: &Outgoing,
+    attempt: &mut u32,
+) -> Option<u16> {
     let Ok((ws, _)) = tokio_tungstenite::connect_async(ws_url(&client.api_url)).await else {
         return None;
     };
@@ -125,7 +137,20 @@ async fn session(client: &Client, token: &str, tx: &mpsc::Sender<LiveEvent>, att
     {
         return None;
     }
-    while let Some(msg) = read.next().await {
+    let mut out = out.lock().await;
+    while out.try_recv().is_ok() {} // meant for a connection that is gone: both ends start again
+    let mut live = false;
+    loop {
+        let msg = tokio::select! {
+            msg = read.next() => match msg { Some(m) => m, None => return None },
+            Some(f) = out.recv(), if live => {
+                let Ok(text) = serde_json::to_string(&f) else { continue };
+                if write.send(Message::Text(text.into())).await.is_err() {
+                    return None;
+                }
+                continue;
+            }
+        };
         match msg {
             Ok(Message::Text(t)) => {
                 let Ok(m) = serde_json::from_str::<ServerMessage>(&t) else {
@@ -133,6 +158,7 @@ async fn session(client: &Client, token: &str, tx: &mpsc::Sender<LiveEvent>, att
                 };
                 if matches!(m, ServerMessage::Hello) {
                     *attempt = 0;
+                    live = true;
                     let _ = tx.send(LiveEvent::Connected).await;
                 }
                 if tx.send(LiveEvent::Message(m)).await.is_err() {
@@ -144,7 +170,6 @@ async fn session(client: &Client, token: &str, tx: &mpsc::Sender<LiveEvent>, att
             Err(_) => return None,
         }
     }
-    None
 }
 
 async fn backoff(attempt: &mut u32) {

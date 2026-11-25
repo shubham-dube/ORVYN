@@ -8,6 +8,7 @@ import '../features/split_screen.dart';
 import '../features/ipo_screen.dart';
 import '../features/brief_screen.dart';
 import '../features/mail_screen.dart';
+import '../features/pc_screen.dart';
 import '../features/people_screen.dart';
 import '../features/assistant_screen.dart';
 import '../features/drop_screen.dart';
@@ -67,6 +68,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, s) => SettingsSectionScreen(section: s.pathParameters['section']!),
       ),
       GoRoute(path: '/people', builder: (_, _) => const PeopleScreen()),
+      GoRoute(path: '/pc', builder: (_, _) => const PcScreen()),
       GoRoute(path: '/mail', builder: (_, _) => const MailScreen()),
       GoRoute(path: '/clickup', builder: (_, _) => const ClickUpScreen()),
       GoRoute(path: '/prs', builder: (_, _) => const PrsScreen()),

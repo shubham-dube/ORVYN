@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-module="core">
+  <head>
+    <meta charset="utf-8" />
+    <title>This PC from my phone</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="pc.css" />
+  </head>
+  <body>
+    <main>
+      <h1>This PC from my phone</h1>
+      <p class="muted">
+        A full terminal on this PC, from the ORVYN app or orvyn on the web. ORVYN’s server only passes on what
+        it cannot read: the key is made here and shown once. Everything below can be changed only on this PC.
+      </p>
+      <p id="status" role="status" aria-live="polite"></p>
+
+      <section id="locked" hidden>
+        <h2>Locked</h2>
+        <p>Someone gave five wrong PINs. If that wasn’t you, remove the device below.</p>
+        <button id="unlock">Unlock</button>
+      </section>
+
+      <section>
+        <h2>1 · PIN</h2>
+        <form id="pin-form">
+          <label for="pin" id="pin-label">Choose a PIN (6 characters or more)</label>
+          <div class="row">
+            <input
+              id="pin"
+              type="password"
+              autocomplete="new-password"
+              minlength="6"
+              maxlength="64"
+              required
+            />
+            <button type="submit">Save</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h2>2 · Switch</h2>
+        <div class="row">
+          <p id="switch-text"></p>
+          <button id="switch"></button>
+        </div>
+      </section>
+
+      <section>
+        <h2>3 · Devices</h2>
+        <ul id="devices"></ul>
+        <button id="pair">Add a device</button>
+        <div id="code" hidden>
+          <div id="qr" role="img" aria-label="Pairing code"></div>
+          <p>
+            In the ORVYN app: My PC → Scan. With a browser: My PC → paste the text. It works for one device,
+            for 10 minutes, and is not shown again. Don’t send it through chat or mail.
+          </p>
+          <div class="row">
+            <button id="copy">Copy as text</button>
+            <button id="hide">Hide</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>What happened</h2>
+        <button id="end" hidden>End open sessions</button>
+        <pre id="log"></pre>
+      </section>
+    </main>
+    <script src="pc.js"></script>
+  </body>
+</html>

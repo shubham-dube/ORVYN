@@ -1,11 +1,15 @@
 //! The desktop client against a real API (dev mailbox on). Run with:
 //!   ORVYN_LIVE_API=http://localhost:4100 cargo test --test live_api
 //! CI starts the API exactly like the web e2e (apps/web/e2e/start-api.mjs).
+use futures_util::{SinkExt, StreamExt};
 use orvyn_desktop::activity::{Queue, Sample, Tracker};
 use orvyn_desktop::api::{Client, DeviceInfo};
 use orvyn_desktop::live::{self, LiveEvent, Notification, ServerMessage};
 use orvyn_desktop::loopback::Loopback;
 use orvyn_desktop::notify::Shown;
+use orvyn_desktop::pc::pairs::{MemoryKeys, Pairs};
+use orvyn_desktop::pc::seal::{unb64, Channel};
+use orvyn_desktop::pc::Remote;
 use orvyn_desktop::pkce::Pkce;
 use orvyn_desktop::quickadd::{self, Hlc};
 use orvyn_desktop::store::{MemoryStore, TokenStore};
@@ -145,7 +149,9 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
 
     // 4. live: a notification sent from the phone arrives on the PC
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
-    let task = tokio::spawn(live::run(client.clone(), tx));
+    let (frames, outgoing) = tokio::sync::mpsc::unbounded_channel();
+    let outgoing = Arc::new(tokio::sync::Mutex::new(outgoing));
+    let task = tokio::spawn(live::run(client.clone(), tx, outgoing));
     loop {
         if matches!(next(&mut rx).await, LiveEvent::Connected) {
             break;
@@ -236,6 +242,91 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
     }
     assert!((ms - 3_600_000).abs() < 1000, "{ms}");
     assert!((608..=612).contains(&keys), "{keys}");
+
+    // 4d. a terminal on this PC from the phone, through the server (ADR-0019)
+    let dir = std::env::temp_dir().join(format!("orvyn-live-pc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let remote = Remote::new(
+        Pairs::load(dir.join("pc.json"), Box::<MemoryKeys>::default()),
+        dir.join("log.txt"),
+        "Test PC".into(),
+        frames,
+        Box::new(|_| ()),
+        Box::new(|| chrono::Utc::now().timestamp_millis()),
+    );
+    remote.set_pin("826193").unwrap();
+    remote.set_on(true).unwrap();
+    tokio::spawn(remote.clone().run());
+    let code = remote.new_code().unwrap();
+    let code: Vec<_> = code.split('.').collect();
+    let key: [u8; 32] = unb64(code[2]).unwrap().try_into().unwrap();
+    let (phone, _) = tokio_tungstenite::connect_async(live::ws_url(&base)).await.unwrap();
+    let (mut to_pc, mut from_pc) = phone.split();
+    let text = |v: Value| tokio_tungstenite::tungstenite::Message::Text(v.to_string().into());
+    to_pc
+        .send(text(json!({ "type": "auth", "token": owner })))
+        .await
+        .unwrap();
+    let s = "live-test-session-1";
+    let mut chan: Option<Channel> = None;
+    let (mut pc, mut id, mut seen) = (String::new(), String::new(), String::new());
+    let done = tokio::time::timeout(Duration::from_secs(40), async {
+        while !seen.contains("live-42") {
+            let m: Value = tokio::select! {
+                ev = rx.recv() => {
+                    if let Some(LiveEvent::Message(ServerMessage::Pc { from, s, d })) = ev {
+                        remote.handle(&from, &s, &d);
+                    }
+                    continue;
+                }
+                m = from_pc.next() => match m.unwrap().unwrap() {
+                    tokio_tungstenite::tungstenite::Message::Text(t) => serde_json::from_str(&t).unwrap(),
+                    _ => continue,
+                },
+            };
+            let mut ask = vec![];
+            if m["type"] == "hello" {
+                to_pc
+                    .send(text(json!({ "type": "pc", "s": s, "d": format!("o.{}", code[1]) })))
+                    .await
+                    .unwrap();
+            } else if m["type"] == "pc" {
+                pc = m["from"].as_str().unwrap().into();
+                let d = m["d"].as_str().unwrap();
+                if let Some(half) = d.strip_prefix("r.") {
+                    chan = Some(Channel::new(key, format!("{s}.{half}"), 'c'));
+                    ask.push(json!({ "t": "auth", "pin": "826193", "name": "Phone" }));
+                } else {
+                    let said: Value = serde_json::from_str(&chan.as_mut().unwrap().open(d).unwrap()).unwrap();
+                    match said["t"].as_str().unwrap() {
+                        "hello" => ask.push(json!({ "t": "new", "cols": 80, "rows": 24 })),
+                        "opened" => {
+                            id = said["id"].as_str().unwrap().into();
+                            ask.push(json!({ "t": "in", "id": id, "d": "echo live-$(40+2)\r" }));
+                        }
+                        "out" => {
+                            seen.push_str(said["d"].as_str().unwrap());
+                            ask.push(json!({ "t": "ack", "id": id, "end": said["end"] }));
+                        }
+                        other => panic!("{other}"),
+                    }
+                }
+            }
+            for a in ask {
+                let d = chan.as_mut().unwrap().seal(&a.to_string());
+                to_pc
+                    .send(text(json!({ "type": "pc", "to": pc, "s": s, "d": d })))
+                    .await
+                    .unwrap();
+            }
+        }
+    })
+    .await;
+    if cfg!(windows) {
+        assert!(done.is_ok(), "{seen:?}");
+    }
+    remote.set_on(false).unwrap();
+    drop(to_pc);
 
     // 5. signing this PC out from the phone cuts it off live and it can't refresh
     let id = client.device_id.read().await.clone().unwrap();

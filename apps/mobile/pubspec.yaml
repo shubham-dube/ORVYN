@@ -1,7 +1,7 @@
 name: orvyn
 description: "A new Flutter project."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.2.0+2
 
 environment:
   sdk: ^3.14.0
@@ -23,10 +23,12 @@ dependencies:
   go_router: ^18.1.4
   home_widget: ^0.10.0
   image_picker: ^1.2.4
+  kterm: ^1.6.0
   local_auth: ^3.0.2
   lucide_icons_flutter: ^4.0.3
   material_ui: ^1.1.0
   meta: ^1.19.0
+  mobile_scanner: ^7.5.0
   open_filex: ^5.0.0
   package_info_plus: ^10.2.2
   path: ^1.9.1

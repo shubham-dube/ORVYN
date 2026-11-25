@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pc",
+  "description": "This PC from my phone: a local page that calls the app's own commands and hears when something changed.",
+  "windows": ["pc"],
+  "permissions": ["core:event:default"]
+}

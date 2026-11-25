@@ -16,7 +16,7 @@ test('Today: add, complete, and the task follows you to another device — live,
   await expect(other.getByRole('heading', { name: 'Today', level: 1 })).toBeVisible();
 
   // a day written: today (with nothing about a day it would wait in the Inbox, spec 0012 A5)
-  await page.getByLabel('New task').fill('Pay electricity bill today');
+  await page.getByLabel('New task', { exact: true }).fill('Pay electricity bill today');
   await page.keyboard.press('Enter');
   const todayList = page.getByRole('list', { name: 'Today' });
   await expect(todayList.getByText('Pay electricity bill')).toBeVisible();
@@ -28,8 +28,8 @@ test('Today: add, complete, and the task follows you to another device — live,
 
   // offline on the first device: still works, syncs when back
   await page.context().setOffline(true);
-  await page.getByLabel('New task').fill('Call the plumber');
-  await page.getByLabel('New task').press('Enter');
+  await page.getByLabel('New task', { exact: true }).fill('Call the plumber');
+  await page.getByLabel('New task', { exact: true }).press('Enter');
   await expect(page.getByRole('list', { name: 'Inbox' }).getByText('Call the plumber')).toBeVisible();
   await expect(page.getByText(/waiting to sync/)).toBeVisible();
   await page.context().setOffline(false);
@@ -80,7 +80,7 @@ test('the command bar turns anything typed into a task, from any page', async ({
 test('type naturally: chips show what was understood, and removing one keeps the words', async ({ page }) => {
   await signInWithEmail(page, OWNER);
   await page.goto('/today');
-  const add = page.getByLabel('New task');
+  const add = page.getByLabel('New task', { exact: true });
 
   await add.fill('dentist fri 11 for 45m !!');
   const chips = page.getByRole('list', { name: 'Understood' });

@@ -22,6 +22,8 @@
     "@orvyn/today-plan": "workspace:*",
     "@orvyn/vault-crypto": "workspace:*",
     "@simplewebauthn/browser": "^13.3.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "geist": "^1.9.2",
     "lucide-react": "^0.460.0",
     "motion": "^12.43.0",

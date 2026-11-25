@@ -1,4 +1,4 @@
-import type { ServerMessage } from '@orvyn/contracts';
+import type { PcFrame, ServerMessage } from '@orvyn/contracts';
 import { API_URL, getAccessToken, refreshSession } from './api';
 
 type Handler = (m: ServerMessage) => void;
@@ -27,6 +27,13 @@ export class Realtime {
     if (this.timer) clearTimeout(this.timer);
     this.ws?.close();
     this.ws = null;
+  }
+
+  /** False when there is no connection now. Only `pc` frames go this way; everything else is HTTP. */
+  send(frame: PcFrame): boolean {
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    this.ws.send(JSON.stringify(frame));
+    return true;
   }
 
   private connect(): void {

@@ -16,6 +16,8 @@ use crate::api::{ApiError, Client, DeviceInfo};
 use crate::live::{self, LiveEvent, Notification, ServerMessage};
 use crate::loopback::Loopback;
 use crate::notify::{self, Choice, Shown};
+use crate::pc::pairs::{KeyringKeys, Pairs};
+use crate::pc::{Event as PcEvent, Remote};
 use crate::pkce::Pkce;
 use crate::quickadd::{self, Hlc, Prefs, SHORTCUTS};
 use crate::store::{KeyringStore, MemoryStore, TokenStore};
@@ -46,12 +48,17 @@ struct State {
     /// looking at the PC while this is here
     watcher: std::sync::Mutex<Option<Watcher>>,
     samples: mpsc::Sender<Sample>,
+    /// this PC from my other devices
+    remote: Arc<Remote>,
+    outgoing: live::Outgoing,
 }
 
 struct Items {
     status: MenuItem<Wry>,
     connect: MenuItem<Wry>,
     test: MenuItem<Wry>,
+    /// while a terminal session is open
+    end: MenuItem<Wry>,
     track: CheckMenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
     autostart: CheckMenuItem<Wry>,
@@ -105,7 +112,17 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![quick_add, quick_add_hide])
+        .invoke_handler(tauri::generate_handler![
+            quick_add,
+            quick_add_hide,
+            pc_state,
+            pc_set_on,
+            pc_set_pin,
+            pc_pair,
+            pc_remove,
+            pc_unlock,
+            pc_end
+        ])
         .setup(|app| {
             let store: Arc<dyn TokenStore> = match KeyringStore::new("default") {
                 Ok(s) => Arc::new(s),
@@ -142,6 +159,7 @@ pub fn run() {
             let items = Items {
                 status: MenuItem::with_id(h, "status", "Not connected", false, None::<&str>)?,
                 connect: MenuItem::with_id(h, "connect", "Connect to ORVYN…", true, None::<&str>)?,
+                end: MenuItem::with_id(h, "pc-end", "No terminal session open", false, None::<&str>)?,
                 test: MenuItem::with_id(h, "test", "Send a test notification", false, None::<&str>)?,
                 pause: CheckMenuItem::with_id(h, "pause", "Pause notifications for 1 hour", true, false, None::<&str>)?,
                 track: CheckMenuItem::with_id(
@@ -164,6 +182,7 @@ pub fn run() {
             };
             let open = MenuItem::with_id(h, "open", "Open ORVYN", true, None::<&str>)?;
             let day = MenuItem::with_id(h, "day", "My day", true, None::<&str>)?;
+            let pc = MenuItem::with_id(h, "pc", "This PC from my phone…", true, None::<&str>)?;
             let add = MenuItem::with_id(h, "add", "Add to Today…", true, None::<&str>)?;
             let shortcut_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = items
                 .shortcuts
@@ -185,6 +204,9 @@ pub fn run() {
                     &items.connect,
                     &items.test,
                     &sep()?,
+                    &pc,
+                    &items.end,
+                    &sep()?,
                     &items.track,
                     &items.pause,
                     &items.autostart,
@@ -202,12 +224,26 @@ pub fn run() {
 
             let dir = prefs_path.parent().map(std::path::Path::to_owned).unwrap_or_default();
             let (samples, looks) = mpsc::channel(16);
+            let (frames, outgoing) = mpsc::unbounded_channel();
+            let (pc_events, mut happened) = mpsc::unbounded_channel::<PcEvent>();
+            let remote = Remote::new(
+                Pairs::load(dir.join("pc.json"), Box::new(KeyringKeys)),
+                dir.join("terminal-log.txt"),
+                std::env::var("COMPUTERNAME").unwrap_or_else(|_| "My PC".into()),
+                frames,
+                Box::new(move |e| {
+                    let _ = pc_events.send(e);
+                }),
+                Box::new(|| chrono::Utc::now().timestamp_millis()),
+            );
             let state = Arc::new(State {
                 shown: std::sync::Mutex::new(Shown::load(&dir.join("shown.json"))),
                 tracker: std::sync::Mutex::default(),
                 queue: Mutex::new(Queue::load(&dir.join("activity.json"))),
                 watcher: std::sync::Mutex::new(None),
                 samples,
+                remote: remote.clone(),
+                outgoing: Arc::new(Mutex::new(outgoing)),
                 client: Arc::new(Client::new(API_URL, store)),
                 live_task: Mutex::new(None),
                 connecting: AtomicBool::new(false),
@@ -219,6 +255,13 @@ pub fn run() {
             });
             app.manage(state.clone());
             tauri::async_runtime::spawn(record(state.clone(), looks));
+            tauri::async_runtime::spawn(remote.run());
+            let (pc_app, pc_state) = (app.handle().clone(), state.clone());
+            tauri::async_runtime::spawn(async move {
+                while let Some(e) = happened.recv().await {
+                    pc_event(&pc_app, &pc_state, e);
+                }
+            });
 
             // the quick-add box: made once, hidden until the shortcut (or the tray) asks for it
             let qa = WebviewWindowBuilder::new(app, "quick-add", WebviewUrl::App("quick-add.html".into()))
@@ -334,6 +377,8 @@ fn on_menu(app: AppHandle, id: &str) {
                 app.exit(0);
             });
         }
+        "pc" => show_pc(&app),
+        "pc-end" => s.remote.end_all("ended"),
         "add" => show_quick_add(&app),
         id if id.starts_with("sc:") => set_shortcut(&app, &s, id),
         _ => {}
@@ -460,7 +505,7 @@ fn start_live(app: AppHandle, s: Arc<State>) {
     let client = s.client.clone();
     let st = s.clone();
     tauri::async_runtime::spawn(async move {
-        let task = tauri::async_runtime::spawn(live::run(client, tx));
+        let task = tauri::async_runtime::spawn(live::run(client, tx, st.outgoing.clone()));
         *st.live_task.lock().await = Some(task);
         let mut again = tokio::time::interval(CATCH_UP_EVERY);
         again.tick().await; // the first tick is at once; connecting catches up
@@ -477,7 +522,10 @@ fn start_live(app: AppHandle, s: Arc<State>) {
                     st.live.store(true, Ordering::Relaxed);
                     catch_up(&app, &st).await;
                 }
-                LiveEvent::Disconnected => st.live.store(false, Ordering::Relaxed),
+                LiveEvent::Disconnected => {
+                    st.live.store(false, Ordering::Relaxed);
+                    st.remote.end_all("gone"); // the shells go on
+                }
                 LiveEvent::SignedOut => {
                     st.live.store(false, Ordering::Relaxed);
                     st.client.forget().await;
@@ -491,6 +539,11 @@ fn start_live(app: AppHandle, s: Arc<State>) {
                 LiveEvent::Message(ServerMessage::NotifyNew { notification }) => pop(&app, &st, &notification),
                 LiveEvent::Message(ServerMessage::NotifyRead { id } | ServerMessage::NotifyDismissed { id }) => {
                     notify::clear(&app, &id)
+                }
+                LiveEvent::Message(ServerMessage::Pc { from, s, d }) => {
+                    // checking the PIN takes a moment, on purpose
+                    tokio::task::block_in_place(|| st.remote.handle(&from, &s, &d));
+                    continue;
                 }
                 LiveEvent::Message(_) => {}
             }
@@ -634,6 +687,145 @@ async fn chosen(app: AppHandle, s: Arc<State>, n: Notification, choice: Choice) 
     }
 }
 
+// ---------------------------------------------------------------- this PC from my phone (ADR-0019)
+
+fn show_pc(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("pc") {
+        let _ = w.show();
+        let _ = w.set_focus();
+        return;
+    }
+    // made when asked for and gone when closed: a hidden page would only use memory
+    let _ = WebviewWindowBuilder::new(app, "pc", WebviewUrl::App("pc.html".into()))
+        .title("This PC from my phone")
+        .inner_size(560.0, 720.0)
+        .center()
+        .content_protected(true) // the code must not end up in a recording or a shared screen
+        .build();
+}
+
+fn pc_event(app: &AppHandle, s: &Arc<State>, e: PcEvent) {
+    let say = |title: String, body: &str| toast(app, s, &note(&title, body, "/pc"));
+    match e {
+        PcEvent::Opened(who) => say(
+            format!("{who} opened a terminal session on this PC"),
+            "Not you? End it from the ORVYN tray icon.",
+        ),
+        PcEvent::WrongPin(who) => say(format!("{who} gave a wrong terminal PIN"), "Five in a row lock it."),
+        PcEvent::Locked(who) => say(
+            format!("Terminal locked: {who} gave five wrong PINs"),
+            "Unlock it here, from the ORVYN tray icon.",
+        ),
+        PcEvent::Sessions(n) => {
+            let _ = s.items.end.set_enabled(n > 0);
+            let _ = s.items.end.set_text(match n {
+                0 => "No terminal session open".to_owned(),
+                1 => "● A terminal session is open — end it".to_owned(),
+                n => format!("● {n} terminal sessions are open — end them"),
+            });
+            if let Some(t) = app.tray_by_id("orvyn") {
+                let _ = t.set_tooltip(Some(if n > 0 { "ORVYN ● terminal open" } else { "ORVYN" }));
+            }
+        }
+    }
+    let _ = app.emit_to("pc", "pc:changed", ());
+}
+
+#[derive(serde::Serialize)]
+struct PcState {
+    connected: bool,
+    admin: bool,
+    on: bool,
+    pin: bool,
+    locked: bool,
+    sessions: usize,
+    pairs: Vec<crate::pc::pairs::Pair>,
+    log: Vec<String>,
+}
+
+/// Only this app's own window may change any of this.
+fn from_pc_window(w: &tauri::WebviewWindow) -> Result<Arc<State>, String> {
+    if w.label() != "pc" {
+        return Err("Not from here".into());
+    }
+    Ok(state(w.app_handle()))
+}
+
+#[tauri::command]
+fn pc_state(w: tauri::WebviewWindow) -> Result<PcState, String> {
+    let s = from_pc_window(&w)?;
+    let (on, pin, locked, pairs) = s.remote.pairs(|p| (p.on(), p.has_pin(), p.locked(), p.list()));
+    Ok(PcState {
+        connected: s.client.has_session(),
+        admin: is_admin(),
+        on,
+        pin,
+        locked,
+        sessions: s.remote.sessions(),
+        pairs,
+        log: s.remote.last_log(30),
+    })
+}
+
+#[tauri::command]
+fn pc_set_on(w: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+    let s = from_pc_window(&w)?;
+    if on && is_admin() {
+        return Err("ORVYN is running as administrator. Start it normally first.".into());
+    }
+    if on && !s.client.has_session() {
+        return Err("Connect ORVYN first (tray menu)".into());
+    }
+    s.remote.set_on(on)
+}
+
+#[tauri::command(async)]
+fn pc_set_pin(w: tauri::WebviewWindow, pin: String) -> Result<(), String> {
+    from_pc_window(&w)?.remote.set_pin(&pin)
+}
+
+#[derive(serde::Serialize)]
+struct PcCode {
+    text: String,
+    svg: String,
+}
+
+#[tauri::command]
+fn pc_pair(w: tauri::WebviewWindow) -> Result<PcCode, String> {
+    let text = from_pc_window(&w)?.remote.new_code()?;
+    // after the #, which a browser never sends to any server
+    let qr = qrcode::QrCode::new(format!("{WEB_URL}/pc#{text}")).map_err(|_| "Couldn’t draw the code".to_owned())?;
+    let svg = qr
+        .render::<qrcode::render::svg::Color>()
+        .min_dimensions(240, 240)
+        .build();
+    Ok(PcCode { text, svg })
+}
+
+#[tauri::command]
+fn pc_remove(w: tauri::WebviewWindow, id: String) -> Result<(), String> {
+    from_pc_window(&w)?.remote.remove(&id)
+}
+
+#[tauri::command]
+fn pc_unlock(w: tauri::WebviewWindow) -> Result<(), String> {
+    from_pc_window(&w)?.remote.pairs(|p| p.unlock())
+}
+
+#[tauri::command]
+fn pc_end(w: tauri::WebviewWindow) -> Result<(), String> {
+    from_pc_window(&w)?.remote.end_all("ended");
+    Ok(())
+}
+
+/// Commands run as me, never as administrator (spec 0021).
+fn is_admin() -> bool {
+    #[cfg(windows)]
+    return unsafe { windows::Win32::UI::Shell::IsUserAnAdmin().as_bool() };
+    #[cfg(not(windows))]
+    false
+}
+
 // ---------------------------------------------------------------- My Day
 
 fn start_tracking(s: &State) {
@@ -686,6 +878,7 @@ async fn flush(s: &State) -> Result<(), ApiError> {
 /// Signed out: nothing of this person stays for the next one.
 async fn leave(s: &State) {
     stop_tracking(s);
+    s.remote.leave();
     s.tracker.lock().unwrap().open = None;
     s.queue.lock().await.clear();
     s.shown.lock().unwrap().clear();
