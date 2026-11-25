@@ -7,35 +7,69 @@ import { defineConfig, type Plugin } from 'vite';
 /** Where each build talks to. Production is the default; `development` = your PC; `e2e` = the test stack. */
 const TARGETS: Record<string, { api: string; web: string }> = {
   production: { api: 'https://api.orvyn.dubey.app', web: 'https://orvyn.dubey.app' },
+  store: { api: 'https://api.orvyn.dubey.app', web: 'https://orvyn.dubey.app' },
   development: { api: 'http://localhost:4000', web: 'http://localhost:3000' },
   e2e: { api: 'http://localhost:4100', web: 'http://localhost:3100' },
 };
 
+const readKey = (f: string) =>
+  (JSON.parse(readFileSync(resolve(__dirname, f), 'utf8')) as { key: string }).key;
+
 /** MV3 manifest, generated so host permissions match the build target. */
 function manifest(mode: string, t: { api: string; web: string }): Plugin {
-  const devKey = (JSON.parse(readFileSync(resolve(__dirname, 'dev-key.json'), 'utf8')) as { key: string })
-    .key;
   return {
     name: 'orvyn-manifest',
     generateBundle() {
       const api = new URL(t.api);
+      const ws = `${api.protocol === 'https:' ? 'wss' : 'ws'}://${api.host}`;
       const m = {
         manifest_version: 3,
-        name: mode === 'production' ? 'ORVYN' : `ORVYN (${mode})`,
-        description: 'Your ORVYN in Chrome: live notifications now, capture from any page next.',
-        version: '0.1.0',
-        minimum_chrome_version: '116',
+        name: mode === 'production' || mode === 'store' ? 'ORVYN' : `ORVYN (${mode})`,
+        description: 'Keep, fill, find and remember anything on the web, and see where your day went.',
+        version: '0.2.0',
+        minimum_chrome_version: '127',
         action: { default_popup: 'popup.html', default_title: 'ORVYN', default_icon: icons() },
         icons: icons(),
         background: { service_worker: 'background.js', type: 'module' },
-        // least privilege: no content scripts, no <all_urls>, no tabs read access
-        permissions: ['identity', 'storage', 'notifications', 'alarms'],
-        host_permissions: [`${api.origin}/*`, `${api.protocol === 'https:' ? 'wss' : 'ws'}://${api.host}/*`],
-        content_security_policy: {
-          extension_pages: `script-src 'self'; object-src 'self'; connect-src ${api.origin} ${api.protocol === 'https:' ? 'wss' : 'ws'}://${api.host}`,
+        side_panel: { default_path: 'panel.html' },
+        omnibox: { keyword: 'o' },
+        incognito: 'not_allowed',
+        commands: {
+          _execute_action: { suggested_key: { default: 'Alt+Shift+O' } },
+          'drop-page': { suggested_key: { default: 'Alt+Shift+D' }, description: 'Drop this page' },
+          'fill-page': { suggested_key: { default: 'Alt+Shift+F' }, description: 'Fill this form' },
         },
-        // unpacked dev/e2e builds keep a fixed id so the API can allowlist it; the store assigns production's
-        ...(mode === 'production' ? {} : { key: devKey }),
+        permissions: [
+          'identity',
+          'storage',
+          'unlimitedStorage',
+          'notifications',
+          'alarms',
+          'tabs',
+          'scripting',
+          'contextMenus',
+          'sidePanel',
+          'idle',
+          'webNavigation',
+        ],
+        // every site, for filling, Recall and My Day (D-0020-1); passwords never go through a page's own script
+        host_permissions: ['http://*/*', 'https://*/*'],
+        content_scripts: [
+          {
+            matches: ['http://*/*', 'https://*/*'],
+            js: ['content.js'],
+            all_frames: true,
+            run_at: 'document_idle',
+          },
+        ],
+        content_security_policy: {
+          // wasm: libsodium (the Vault); images from pages are fetched to be dropped
+          extension_pages: `script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; connect-src ${api.origin} ${ws} https: http: data:`,
+        },
+        // unpacked builds keep a fixed id so the API can allowlist it; the store gives its own
+        ...(mode === 'store'
+          ? {}
+          : { key: readKey(mode === 'production' ? 'prod-key.json' : 'dev-key.json') }),
       };
       this.emitFile({ type: 'asset', fileName: 'manifest.json', source: JSON.stringify(m, null, 2) });
     },
@@ -60,10 +94,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: `dist/${mode}`,
       emptyOutDir: true,
-      sourcemap: mode !== 'production',
+      sourcemap: mode !== 'production' && mode !== 'store',
       rollupOptions: {
         input: {
           popup: resolve(__dirname, 'popup.html'),
+          panel: resolve(__dirname, 'panel.html'),
           background: resolve(__dirname, 'src/background.ts'),
         },
         output: {

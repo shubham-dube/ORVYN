@@ -1,19 +1,32 @@
 import { phaseAt } from '@orvyn/design-tokens';
-import { Bell, Check, ExternalLink, FileText, LogOut, Puzzle, Search, Send, Wallet, X } from 'lucide-react';
+import {
+  Bell,
+  Check,
+  ExternalLink,
+  FileText,
+  LogOut,
+  PanelRight,
+  Puzzle,
+  Search,
+  Send,
+  Wallet,
+  X,
+} from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { StrictMode, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { WEB_URL } from './config';
 import { parseSpend } from '@orvyn/money';
-import type { DataRequest, FoundDoc, Glance, Request, Status } from './core';
+import type { FoundDoc, Glance, Request, Status } from './core';
+import { DayTab, FillTab, get, PageTab, RecallTab, VaultTab } from './tabs';
+import type { VaultView } from './vault';
 import './popup.css';
 
 document.documentElement.dataset.phase = phaseAt(new Date());
 
 const ask = (req: Request) => chrome.runtime.sendMessage<Request, Status>(req);
-const askData = <T,>(req: DataRequest) => chrome.runtime.sendMessage<DataRequest, T>(req);
 const rupees = (minor: number) => `₹${Math.round(minor / 100).toLocaleString('en-IN')}`;
-type Tab = 'today' | 'money' | 'inbox' | 'find';
+type Tab = 'today' | 'page' | 'fill' | 'vault' | 'recall' | 'day' | 'money' | 'inbox' | 'find';
 const spring = { type: 'spring', stiffness: 300, damping: 30 } as const;
 
 function Popup() {
@@ -23,9 +36,18 @@ function Popup() {
   const [tabChoice, setTab] = useState<Tab | null>(null);
   const [glance, setGlance] = useState<Glance | null>(null);
   const [tick, setTick] = useState(0);
+  const [pending, setPending] = useState(false);
   useEffect(() => {
     if (!s?.connected) return;
-    void askData<Glance>({ type: 'glance' }).then(setGlance);
+    // a sign-in waiting to be saved is what the popup opened for
+    get<VaultView>({ type: 'vault' }).then(
+      (v) => setPending(!!v.pending && v.state !== 'off'),
+      () => undefined,
+    );
+  }, [s?.connected, tick]);
+  useEffect(() => {
+    if (!s?.connected) return;
+    void get<Glance>({ type: 'glance' }).then(setGlance, () => undefined);
   }, [s?.connected, tick]);
 
   useEffect(() => {
@@ -55,7 +77,7 @@ function Popup() {
           <div>
             <h1 className="text-heading font-semibold">Bring ORVYN into Chrome</h1>
             <p className="mt-1 text-small text-orv-muted">
-              Notifications on your desktop, and soon: capture anything from any page.
+              Keep, fill, find and remember anything on the web.
             </p>
           </div>
           <PrimaryButton busy={busy === 'connect'} onClick={() => void run('connect')}>
@@ -78,12 +100,17 @@ function Popup() {
   const can = (k: string) => s.me?.role === 'owner' || !!s.me?.entitlements.includes(k as never);
   const tabs: { id: Tab; label: string }[] = [
     ...(can('today') ? [{ id: 'today' as Tab, label: 'Today' }] : []),
+    { id: 'page', label: 'Page' },
+    ...(can('fill') ? [{ id: 'fill' as Tab, label: 'Fill' }] : []),
+    ...(can('vault') ? [{ id: 'vault' as Tab, label: 'Vault' }] : []),
+    { id: 'recall', label: 'Recall' },
+    ...(can('activity') ? [{ id: 'day' as Tab, label: 'Day' }] : []),
     ...(can('money') ? [{ id: 'money' as Tab, label: 'Money' }] : []),
     { id: 'inbox', label: 'Inbox' },
     ...(can('library') ? [{ id: 'find' as Tab, label: 'Find' }] : []),
   ];
   // new notifications first; otherwise the day
-  const tab: Tab = tabChoice ?? (unread ? 'inbox' : (tabs[0]?.id ?? 'inbox'));
+  const tab: Tab = tabChoice ?? (pending ? 'vault' : unread ? 'inbox' : (tabs[0]?.id ?? 'inbox'));
   return (
     <Shell>
       <header className="flex items-center gap-3 px-4 pt-4">
@@ -99,6 +126,20 @@ function Popup() {
             {s.live ? 'Live' : 'Reconnecting…'} · {s.me?.email}
           </p>
         </div>
+        {document.documentElement.dataset.surface === 'panel' ? null : (
+          <button
+            aria-label="Open the side panel"
+            className="rounded-full p-2 text-orv-muted hover:bg-orv-track"
+            onClick={() =>
+              void chrome.windows
+                .getCurrent()
+                .then((w) => chrome.sidePanel.open({ windowId: w.id! }))
+                .then(() => window.close())
+            }
+          >
+            <PanelRight size={16} />
+          </button>
+        )}
         <a
           href={WEB_URL}
           target="_blank"
@@ -118,7 +159,7 @@ function Popup() {
         }}
       />
 
-      <nav aria-label="Sections" className="mx-4 mt-3 flex gap-1 rounded-full bg-orv-track p-1">
+      <nav aria-label="Sections" className="mx-4 mt-3 grid grid-cols-5 gap-1 rounded-orv-md bg-orv-track p-1">
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -127,8 +168,8 @@ function Popup() {
             onClick={() => setTab(t.id)}
             className={
               tab === t.id
-                ? 'flex h-8 flex-1 items-center justify-center gap-1 rounded-full text-[12px] font-semibold text-white [background:var(--orv-accent-grad)]'
-                : 'flex h-8 flex-1 items-center justify-center gap-1 rounded-full text-[12px] font-medium text-orv-muted hover:text-orv-text'
+                ? 'flex h-8 items-center justify-center gap-1 rounded-full text-[12px] font-semibold text-white [background:var(--orv-accent-grad)]'
+                : 'flex h-8 items-center justify-center gap-1 rounded-full text-[12px] font-medium text-orv-muted hover:text-orv-text'
             }
           >
             {t.label}
@@ -143,6 +184,11 @@ function Popup() {
         {tab === 'today' ? <TodayTab glance={glance} onDone={() => setTick((t) => t + 1)} /> : null}
         {tab === 'money' ? <MoneyTab glance={glance} /> : null}
         {tab === 'find' ? <FindTab /> : null}
+        {tab === 'page' ? <PageTab canDrop={can('drop')} canThink={can('assistant')} /> : null}
+        {tab === 'fill' ? <FillTab /> : null}
+        {tab === 'vault' ? <VaultTab onSaved={() => setTick((t) => t + 1)} /> : null}
+        {tab === 'recall' ? <RecallTab /> : null}
+        {tab === 'day' ? <DayTab /> : null}
         {tab === 'inbox' ? (
           <section className="halo mx-4 mb-2 p-3" aria-label="Notifications">
             <div className="mb-2 flex items-center justify-between px-1">
@@ -434,7 +480,10 @@ function FindTab() {
   const [found, setFound] = useState<FoundDoc[] | null>(null);
   useEffect(() => {
     if (!q.trim()) return setFound(null);
-    const t = setTimeout(() => void askData<FoundDoc[]>({ type: 'search', q }).then(setFound), 250);
+    const t = setTimeout(
+      () => void get<FoundDoc[]>({ type: 'search', q }).then(setFound, () => setFound([])),
+      250,
+    );
     return () => clearTimeout(t);
   }, [q]);
   return (

@@ -4,4 +4,4 @@ useDefault = true
 [allowlist]
 description = "test fixtures and examples"
 # packages/vault-crypto/fixtures: cross-platform test vectors whose "secrets" are counting bytes from the generator
-paths = ['''\.env\.example$''', '''apps/.*/test/fixtures/.*''', '''packages/vault-crypto/fixtures/.*''', '''apps/extension/dev-key\.json$''']  # dev-key.json: a public key that pins the unpacked extension id
+paths = ['''\.env\.example$''', '''apps/.*/test/fixtures/.*''', '''packages/vault-crypto/fixtures/.*''', '''apps/extension/(dev|prod)-key\.json$''']  # dev-key, prod-key: public keys that pin the unpacked extension ids

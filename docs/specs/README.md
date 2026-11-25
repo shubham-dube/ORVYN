@@ -12,3 +12,5 @@
 | [0017-home-and-smart-inbox](0017-home-and-smart-inbox/spec.md)         | Home as mission control; a smart inbox across every mailbox                          | Delivered                       |
 | [0018-pool-roster](0018-pool-roster/spec.md)                           | The Pool as a roster: ask, track, close; WhatsApp in my words                        | In progress                     |
 | [0019-notifications-everywhere](0019-notifications-everywhere/spec.md) | Notifications set your way: every kind, its channels, a sample                       | In progress                     |
+| [0020-chrome-extension](0020-chrome-extension/spec.md)                 | ORVYN for Chrome, complete                                                           | In progress                     |
+| [0021-windows-companion](0021-windows-companion/spec.md)               | ORVYN for Windows, complete                                                          | In progress                     |

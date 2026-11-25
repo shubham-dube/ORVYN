@@ -1,5 +1,8 @@
-import { Injectable, Module, type OnModuleInit } from '@nestjs/common';
+import { Controller, Get, Inject, Injectable, Module, type OnModuleInit } from '@nestjs/common';
 import { VAULT_ITEM, VAULT_KEYS, VaultItemFields, VaultKeysFields } from '@orvyn/contracts';
+import { and, eq, isNull } from 'drizzle-orm';
+import { DB, type Db } from '../../db/db.module';
+import { Auth, type AuthContext, RequireEntitlement } from '../auth/auth.decorators';
 import { Rejected, SyncRegistry } from '../sync/sync.registry';
 import { SyncModule } from '../sync/sync.module';
 import { tableEntity } from '../sync/table-entity';
@@ -36,5 +39,28 @@ class VaultEntities implements OnModuleInit {
   }
 }
 
-@Module({ imports: [SyncModule], providers: [VaultEntities] })
+/**
+ * The same ciphertext sync serves, in one call, for devices that keep no copy of everything else (the extension,
+ * ADR-0017). Nothing here can be read by the server.
+ */
+@Controller('vault')
+@RequireEntitlement('vault')
+export class VaultController {
+  constructor(@Inject(DB) private readonly db: Db) {}
+
+  @Get('box')
+  async box(@Auth() a: AuthContext) {
+    const [keys] = await this.db
+      .select({ pass: vaultKeys.pass, recovery: vaultKeys.recovery })
+      .from(vaultKeys)
+      .where(and(eq(vaultKeys.ownerId, a.userId), isNull(vaultKeys.deletedAt)));
+    const items = await this.db
+      .select({ id: vaultItems.id, blob: vaultItems.blob })
+      .from(vaultItems)
+      .where(and(eq(vaultItems.ownerId, a.userId), isNull(vaultItems.deletedAt)));
+    return { keys: keys ?? null, items };
+  }
+}
+
+@Module({ imports: [SyncModule], providers: [VaultEntities], controllers: [VaultController] })
 export class VaultModule {}

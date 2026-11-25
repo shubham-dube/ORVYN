@@ -273,3 +273,4 @@ export function generatePassword(o: { length?: number; symbols?: boolean; digits
 export const toB64 = (u: Uint8Array) => b64(u);
 export const fromB64 = (s: string) => unb64(s);
 export * from './chat';
+export * from './totp';

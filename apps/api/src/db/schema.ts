@@ -19,3 +19,5 @@ export * from '../modules/ipo/ipo.schema';
 export * from '../modules/chat/chat.schema';
 export * from '../modules/split/split.schema';
 export * from '../modules/inbox/inbox.schema';
+export * from '../modules/activity/activity.schema';
+export * from '../modules/fill/fill.schema';

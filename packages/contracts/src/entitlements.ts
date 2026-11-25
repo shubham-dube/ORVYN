@@ -11,6 +11,8 @@ export const MODULE_KEYS = [
   'split',
   'ipo',
   'jobs',
+  'activity',
+  'fill',
 ] as const;
 export type ModuleKey = (typeof MODULE_KEYS)[number];
 

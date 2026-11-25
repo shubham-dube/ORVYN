@@ -15,3 +15,5 @@ export * from './ipo';
 export * from './chat';
 export * from './split';
 export * from './inbox';
+export * from './activity';
+export * from './fill';

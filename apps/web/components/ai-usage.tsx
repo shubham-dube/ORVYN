@@ -21,6 +21,11 @@ const TASKS: Record<string, string> = {
   'today.parse': 'Reading typed tasks',
   'assistant.chat': 'Assistant',
   'library.read': 'Reading documents',
+  'activity.story': 'The story of your day',
+  'fill.map': 'Matching form fields',
+  'fill.structure': 'Reading your profile',
+  'fill.draft': 'Drafting form answers',
+  'page.read': 'Reading web pages',
   'money.reply': 'Reading your replies about payments',
 };
 

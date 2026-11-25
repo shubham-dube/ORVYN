@@ -55,6 +55,15 @@ describe('Vault: the server stores only what it cannot read (spec 0004 AC2, AC3)
     const blob = await encryptItem(keys.vaultKey, item, { kind: 'login', title: 'Bank', password: SECRET });
     expect((await push(me, 'vault.item', item, { blob })).body.rejected).toEqual([]);
 
+    const box = await call<any>(h, 'GET', '/vault/box', { token: me.accessToken });
+    expect(box.body.items).toEqual([{ id: item, blob }]);
+    expect(JSON.stringify(box.body)).not.toContain(SECRET);
+    expect((await call<any>(h, 'GET', '/vault/box', { token: friend.accessToken })).body).toEqual({
+      keys: null,
+      items: [],
+    });
+    expect((await call(h, 'GET', '/vault/box', { token: guest.accessToken })).status).toBe(403);
+
     const changes = await pull(me);
     const k = changes.find((c) => c.entity === 'vault.keys').data;
     const i = changes.find((c) => c.entity === 'vault.item').data;

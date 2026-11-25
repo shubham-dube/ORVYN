@@ -40,6 +40,15 @@ export default defineConfig({
         LOG_LEVEL: 'warn',
         // the deterministic model (no key, no network): Drop and the parser fallback are exercised end to end
         AI_PROVIDER: 'fake',
+        // the API also reads the repo's .env: set to nothing here, its real keys are never used by a test
+        RESEND_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+        WHATSAPP_TOKEN: '',
+        FCM_SERVICE_ACCOUNT_B64: '',
+        GOOGLE_WEB_CLIENT_ID: '',
+        IPO_FEED: 'none',
+        SENTRY_DSN: '',
+        FILES_STORE: 'local',
         EXTENSION_IDS: 'hapijaoahockgcidibcnbghpajpnnanh',
       },
     },

@@ -18,9 +18,9 @@ let outside: BriefOutside;
 let fake: FakeModel;
 const clock = new Hlc('dev');
 
-/** "Today" is two days from now, 09:30 in Kolkata; everything is placed around it. */
+/** "Today" is the 10th of next month (budgets nudge only while enough of the month is left), 09:30 in Kolkata. */
 const real = new Date();
-const D = new Date(Date.UTC(real.getUTCFullYear(), real.getUTCMonth(), real.getUTCDate() + 2, 4, 0));
+const D = new Date(Date.UTC(real.getUTCFullYear(), real.getUTCMonth() + 1, 10, 4, 0));
 const day = (offset: number) => new Date(D.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
 const TODAY = day(0);
 const at = (offsetDays: number, hhmmIst: string) => {

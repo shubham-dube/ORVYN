@@ -14,3 +14,6 @@
 | [0010](0010-ai-gateway.md)                     | One AI gateway with a daily cap             | Accepted |
 | [0011](0011-files-at-rest.md)                  | Files encrypted at rest with their own keys | Accepted |
 | [0012](0012-money-capture-on-device.md)        | Money capture from notifications            | Accepted |
+| [0017](0017-vault-in-the-extension.md)         | The Vault in the Chrome extension           | Accepted |
+| [0018](0018-activity-record.md)                | The activity record                         | Accepted |
+| [0019](0019-remote-terminal.md)                | Running commands on the PC from elsewhere   | Proposed |

@@ -15,6 +15,12 @@ body {
     radial-gradient(60% 50% at 100% 30%, var(--orv-aurora-2), transparent 70%),
     radial-gradient(70% 50% at 40% 110%, var(--orv-aurora-3), transparent 70%), var(--orv-base);
 }
+/* the side panel is as wide as the person makes it */
+html[data-surface='panel'],
+html[data-surface='panel'] body {
+  width: auto;
+  min-height: 100vh;
+}
 body::before {
   content: '';
   position: fixed;

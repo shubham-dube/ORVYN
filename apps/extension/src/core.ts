@@ -1,4 +1,11 @@
-import type { Me, Mutation, NotificationView, SessionResponse } from '@orvyn/contracts';
+import type {
+  FillProfile,
+  Me,
+  Mutation,
+  NotificationView,
+  PageMode,
+  SessionResponse,
+} from '@orvyn/contracts';
 
 /** chrome.storage.local in the extension; a Map in tests. Holds only the refresh token and cached profile. */
 export interface Store {
@@ -40,8 +47,9 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    message?: string,
   ) {
-    super(code);
+    super(message ?? code);
   }
 }
 
@@ -91,7 +99,7 @@ export class Client {
         device: { name: deviceName, platform: 'extension', appVersion: version },
       }),
     });
-    if (!r.ok) throw new ApiError(r.status, await errorCode(r));
+    if (!r.ok) throw await apiError(r);
     const s = (await r.json()) as SessionResponse;
     await this.adopt(s);
     return s.user;
@@ -122,20 +130,41 @@ export class Client {
     return false;
   }
 
-  async call<T>(method: string, path: string, body?: unknown): Promise<T> {
+  call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    return this.send<T>(
+      method,
+      path,
+      body === undefined ? undefined : JSON.stringify(body),
+      body === undefined ? {} : { 'content-type': 'application/json' },
+    );
+  }
+
+  /** A file's bytes; returns its id. */
+  async upload(blob: Blob, name: string): Promise<string> {
+    const r = await this.send<{ id: string }>('POST', '/files', blob, {
+      'content-type': blob.type,
+      'x-file-name': encodeURIComponent(name),
+      'x-file-purpose': 'drop',
+    });
+    return r.id;
+  }
+
+  private async send<T>(
+    method: string,
+    path: string,
+    body: string | Blob | undefined,
+    headers: Record<string, string>,
+  ): Promise<T> {
     if (!this.access) await this.refresh();
-    const send = () =>
+    const go = () =>
       this.fetchFn(`${this.apiUrl}${path}`, {
         method,
-        headers: {
-          ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-          ...(this.access ? { authorization: `Bearer ${this.access}` } : {}),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: { ...headers, ...(this.access ? { authorization: `Bearer ${this.access}` } : {}) },
+        body,
       });
-    let r = await send();
-    if (r.status === 401 && (await this.refresh())) r = await send();
-    if (!r.ok) throw new ApiError(r.status, await errorCode(r));
+    let r = await go();
+    if (r.status === 401 && (await this.refresh())) r = await go();
+    if (!r.ok) throw await apiError(r);
     const text = await r.text();
     return (text ? JSON.parse(text) : null) as T;
   }
@@ -158,12 +187,13 @@ export class Client {
   }
 }
 
-async function errorCode(r: Response): Promise<string> {
+/** The server's own words when it gives them. */
+async function apiError(r: Response): Promise<ApiError> {
   try {
-    const j = (await r.json()) as { error?: { code?: string } };
-    return j.error?.code ?? `http_${r.status}`;
+    const j = (await r.json()) as { error?: { code?: string; message?: string } };
+    return new ApiError(r.status, j.error?.code ?? `http_${r.status}`, j.error?.message);
   } catch {
-    return `http_${r.status}`;
+    return new ApiError(r.status, `http_${r.status}`);
   }
 }
 
@@ -185,8 +215,101 @@ export type Request =
   | { type: 'expense'; text: string }
   | { type: 'complete'; id: string };
 
-/** Asks that answer with data rather than the status (spec 0007 C4). */
-export type DataRequest = { type: 'glance' } | { type: 'search'; q: string };
+/** Asks that answer with data rather than the status: `{ ok }` or `{ error }`. */
+export type DataRequest =
+  | { type: 'glance' }
+  | { type: 'search'; q: string }
+  | { type: 'page' }
+  | { type: 'dropPage' }
+  | { type: 'readLater' }
+  | { type: 'screenshot' }
+  | { type: 'note'; text: string }
+  | { type: 'unnote'; at: number }
+  | { type: 'forget'; url: string }
+  | { type: 'think'; mode: PageMode; question?: string }
+  | { type: 'recall'; q: string }
+  | { type: 'fill' }
+  | { type: 'undoFill' }
+  | { type: 'learn' }
+  | { type: 'draft'; question: string; maxChars?: number }
+  | { type: 'profile' }
+  | { type: 'saveProfile'; profile: FillProfile }
+  | { type: 'structure'; text: string }
+  | { type: 'vault' }
+  | { type: 'unlock'; passphrase: string }
+  | { type: 'lock' }
+  | { type: 'fillLogin'; id: string }
+  | { type: 'totp'; id: string }
+  | { type: 'newPassword' }
+  | { type: 'savePending'; username?: string }
+  | { type: 'dropPending' }
+  | { type: 'day'; date: string }
+  | { type: 'focus'; what: string; minutes: number }
+  | { type: 'unfocus' }
+  | { type: 'stash'; name: string; on: string | null }
+  | { type: 'stashes' }
+  | { type: 'unstash'; id: string; open: boolean }
+  | { type: 'prefs' }
+  | { type: 'setPrefs'; prefs: Partial<Prefs> }
+  | { type: 'jobos' };
+export type Answer<T> = { ok: T } | { error: string };
+
+export interface Prefs {
+  /** My Day: record which pages I'm on */
+  track: boolean;
+  /** Recall: keep the text of pages I read, on this device */
+  recall: boolean;
+  /** offer to save sign-ins */
+  offerSave: boolean;
+  autoLockMin: number;
+  skipHosts: string[];
+  jobos: string;
+}
+export const DEFAULT_PREFS: Prefs = {
+  track: true,
+  recall: true,
+  offerSave: true,
+  autoLockMin: 15,
+  skipHosts: [],
+  jobos: 'http://localhost:3000',
+};
+export interface Stash {
+  id: string;
+  name: string;
+  at: number;
+  on: string | null;
+  tabs: { url: string; title: string }[];
+}
+export interface FocusState {
+  what: string;
+  from: number;
+  until: number;
+  bypassed: number;
+  /** host → allowed until */
+  pass: Record<string, number>;
+}
+export interface PageView {
+  url: string;
+  title: string;
+  host: string;
+  selection: string;
+  forms: number;
+  memory: {
+    firstAt: number;
+    lastAt: number;
+    visits: number;
+    dwellMs: number;
+    notes: { at: number; text: string }[];
+    price: string | null;
+  } | null;
+  focus: FocusState | null;
+}
+export interface FillReport {
+  filled: { label: string; value: string; from: 'rule' | 'taught' | 'ai' }[];
+  left: { label: string; long: boolean }[];
+  files: number;
+  aiProblem: string | null;
+}
 
 export interface TodayGlance {
   today: string;

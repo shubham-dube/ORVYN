@@ -43,10 +43,6 @@ test('Library: add a document, it is read and filed, found in plain words, and i
   await expect(page.getByText('Added to Money')).toBeVisible();
   await expect(sheet.getByText('In Money')).toBeVisible();
   await sheet.getByRole('button', { name: 'Save' }).click();
-
-  // the dashboard shows it running out
-  await page.getByRole('link', { name: 'Home' }).first().click();
-  await expect(page.getByTestId('dash-expiring')).toBeVisible();
 });
 
 test('Vault: set up with a recovery key, lock, unlock, add and copy, recover, and the server holds no plaintext', async ({

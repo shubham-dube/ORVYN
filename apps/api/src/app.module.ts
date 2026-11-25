@@ -20,6 +20,8 @@ import { MoneyModule } from './modules/money/money.module';
 import { DropModule } from './modules/drop/drop.module';
 import { LibraryModule } from './modules/library/library.module';
 import { VaultModule } from './modules/vault/vault.module';
+import { ActivityModule } from './modules/activity/activity.module';
+import { FillModule } from './modules/fill/fill.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -74,6 +76,8 @@ export class AppModule {
         DropModule,
         LibraryModule,
         VaultModule,
+        ActivityModule,
+        FillModule,
         ...(extra ?? []),
       ],
       controllers: [HealthController],

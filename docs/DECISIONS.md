@@ -2,6 +2,16 @@
 
 The founder's choices (newest first). Technical consequences are recorded as ADRs in `adr/`.
 
+## Decided — 2026-11-25 (specs 0020 and 0021 — the founder's words)
+
+| #        | Topic      | Decision                                                                                                                                                 |
+| -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D-0020-1 | All sites  | The extension may read every page (for filling, Recall, My Day). A Web Store refusal is acceptable.                                                      |
+| D-0020-2 | Passwords  | Saving and generating are in; filling only after a click (ADR-0017).                                                                                     |
+| D-0020-3 | Tracking   | The whole day, sites and what was done inside them, with presence from keyboard and mouse. Chosen for you: counts only, never the characters (ADR-0018). |
+| D-0020-4 | Magic fill | From a structured profile. The AI maps labels to profile fields and never receives the values; drafts of long answers are asked for one by one.          |
+| D-0021-1 | Windows    | Full app tracking, reply from a toast, run commands on the PC from the phone. SmartScreen warning accepted; JobOS control in this tray; no Vault here.   |
+
 ## Decided — 2026-11-24 (spec 0019, notifications set your way — chosen for you; change any)
 
 | #        | Topic        | Decision                                                                                                                                   |

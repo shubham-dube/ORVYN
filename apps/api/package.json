@@ -23,6 +23,7 @@
     "@nestjs/platform-fastify": "^11.2.10",
     "@nestjs/platform-ws": "^11.2.10",
     "@nestjs/websockets": "^11.2.10",
+    "@orvyn/activity": "workspace:*",
     "@orvyn/contracts": "workspace:*",
     "@orvyn/money": "workspace:*",
     "@orvyn/today-parse": "workspace:*",

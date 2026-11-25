@@ -2,7 +2,9 @@
 
 import { type AdminUserView, type InviteView, MODULE_KEYS } from '@orvyn/contracts';
 import {
+  Activity as ActivityIcon,
   BookOpen,
+  Wand2,
   Briefcase,
   CalendarCheck,
   Check,
@@ -72,6 +74,8 @@ const MODULES: Record<string, { name: string; icon: LucideIcon; blurb: string }>
   split: { name: 'Split', icon: Receipt, blurb: 'Shared expenses' },
   ipo: { name: 'IPO', icon: TrendingUp, blurb: 'IPO desk' },
   jobs: { name: 'Jobs', icon: Briefcase, blurb: 'Job hunt' },
+  activity: { name: 'My Day', icon: ActivityIcon, blurb: 'Where the day went' },
+  fill: { name: 'Magic fill', icon: Wand2, blurb: 'Fill forms in Chrome' },
 };
 const mod = (k: string) => MODULES[k] ?? { name: k, icon: Sparkles, blurb: '' };
 

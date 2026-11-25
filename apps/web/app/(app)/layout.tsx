@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Activity,
   ArrowDownToLine,
   Bell,
   BookOpen,
@@ -152,6 +153,9 @@ function Shell({ children }: { children: ReactNode }) {
           { href: '/today', label: 'Today', icon: CheckCircle2 },
           { href: '/mail', label: 'Mail', icon: Mail },
         ]
+      : []),
+    ...(me?.role === 'owner' || me?.entitlements.includes('activity')
+      ? [{ href: '/day', label: 'My Day', icon: Activity }]
       : []),
     ...(me?.role === 'owner' || me?.entitlements.includes('drop')
       ? [{ href: '/drop', label: 'Drop', icon: ArrowDownToLine }]

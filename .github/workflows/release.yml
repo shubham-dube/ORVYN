@@ -73,7 +73,7 @@ jobs:
       - run: pnpm install --frozen-lockfile --filter @orvyn/extension...
       - run: pnpm --filter @orvyn/extension... build
         env: { VITE_API_URL: '${{ env.API_URL }}', VITE_WEB_URL: '${{ env.WEB_URL }}' }
-      - run: cd apps/extension/dist && zip -r ../../../orvyn-chrome-extension.zip .
+      - run: cd apps/extension/dist/production && zip -r ../../../../orvyn-chrome-extension.zip .
       - uses: actions/upload-artifact@v4
         with: { name: extension, path: orvyn-chrome-extension.zip }
 
