@@ -95,7 +95,7 @@ class _PcDeckViewState extends State<PcDeckView> {
 
 // ------------------------------------------------------------------ screen
 
-const _keys = [
+const _keyList = [
   ('Enter', 'enter'),
   ('Esc', 'esc'),
   ('Tab', 'tab'),
@@ -114,6 +114,98 @@ const _keys = [
   ('Win+D', 'win+d'),
 ];
 
+/// The picture that clicks: a tap clicks at once (two taps are a double-click to Windows), a hold is a right
+/// click, and in drag mode one finger drags. A ring shows where the tap went while the PC answers.
+class _Picture extends StatefulWidget {
+  const _Picture({required this.link, required this.screen, required this.drag, this.fill = false});
+  final PcLink link;
+  final Uint8List screen;
+  final bool drag;
+
+  /// as big as the space allows (full screen), not just as wide
+  final bool fill;
+  @override
+  State<_Picture> createState() => _PictureState();
+}
+
+class _PictureState extends State<_Picture> {
+  final _box = GlobalKey();
+  Offset? _mark;
+  int _marks = 0;
+
+  /// Where on the PC's screens, 0..1.
+  ({double x, double y}) _at(Offset local) {
+    final box = _box.currentContext!.findRenderObject()! as RenderBox;
+    return (x: (local.dx / box.size.width).clamp(0, 1), y: (local.dy / box.size.height).clamp(0, 1));
+  }
+
+  void _send(String k, Offset local, [Map<String, dynamic> more = const {}]) {
+    final p = _at(local);
+    widget.link.input({'k': k, 'x': p.x, 'y': p.y, ...more});
+  }
+
+  void _show(Offset at) {
+    final n = ++_marks;
+    setState(() => _mark = at);
+    Future<void>.delayed(const Duration(milliseconds: 450), () {
+      if (mounted && n == _marks) setState(() => _mark = null);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final picture = GestureDetector(
+      key: _box,
+      behavior: HitTestBehavior.opaque,
+      // no double-tap listener: it would hold every tap back a third of a second
+      onTapUp: (d) {
+        _show(d.localPosition);
+        _send('click', d.localPosition);
+      },
+      onLongPressStart: (d) {
+        HapticFeedback.mediumImpact();
+        _show(d.localPosition);
+        _send('click', d.localPosition, {'right': true});
+      },
+      onPanStart: widget.drag ? (d) => _send('down', d.localPosition) : null,
+      onPanUpdate: widget.drag ? (d) => _send('move', d.localPosition) : null,
+      onPanEnd: widget.drag ? (_) => widget.link.input({'k': 'up', 'x': -1, 'y': -1}) : null,
+      child: Stack(
+        children: [
+          Image.memory(
+            widget.screen,
+            gaplessPlayback: true,
+            semanticLabel: 'The PC’s screen, live',
+            width: widget.fill ? null : double.infinity,
+          ),
+          if (_mark != null)
+            Positioned(
+              left: _mark!.dx - 14,
+              top: _mark!.dy - 14,
+              child: IgnorePointer(
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: l.accent, width: 2.5),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    return InteractiveViewer(
+      maxScale: 6,
+      // in drag mode one finger drags on the PC; pinch still zooms
+      panEnabled: !widget.drag,
+      child: widget.fill ? SizedBox.expand(child: FittedBox(child: picture)) : picture,
+    );
+  }
+}
+
 class _Screen extends StatefulWidget {
   const _Screen({required this.link});
   final PcLink link;
@@ -125,7 +217,6 @@ class _ScreenState extends State<_Screen> {
   bool _sharp = true;
   bool _drag = false;
   final _text = TextEditingController();
-  final _picture = GlobalKey();
 
   @override
   void dispose() {
@@ -133,15 +224,13 @@ class _ScreenState extends State<_Screen> {
     super.dispose();
   }
 
-  /// Where on the PC's screens, 0..1.
-  ({double x, double y}) _at(Offset local) {
-    final box = _picture.currentContext!.findRenderObject()! as RenderBox;
-    return (x: (local.dx / box.size.width).clamp(0, 1), y: (local.dy / box.size.height).clamp(0, 1));
-  }
-
-  void _send(String k, Offset local, [Map<String, dynamic> more = const {}]) {
-    final p = _at(local);
-    widget.link.input({'k': k, 'x': p.x, 'y': p.y, ...more});
+  Future<void> _full() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        fullscreenDialog: true,
+        builder: (_) => _FullScreen(link: widget.link, drag: _drag),
+      ),
+    );
   }
 
   @override
@@ -165,6 +254,8 @@ class _ScreenState extends State<_Screen> {
                     variant: ButtonVariant.primary,
                     onPressed: () => link.live(true, sharp: _sharp),
                   ),
+            if (link.liveOn && screen != null)
+              OrvButton(label: 'Full screen', small: true, icon: LucideIcons.maximize, onPressed: _full),
             OrvButton(
               label: _drag ? 'Drag mode' : 'Tap mode',
               small: true,
@@ -198,30 +289,7 @@ class _ScreenState extends State<_Screen> {
         else
           ClipRRect(
             borderRadius: BorderRadius.circular(OrvTokens.radiusMd),
-            child: InteractiveViewer(
-              maxScale: 6,
-              // in drag mode one finger drags on the PC; pinch still zooms
-              panEnabled: !_drag,
-              child: GestureDetector(
-                onTapUp: (d) => _send('click', d.localPosition),
-                onDoubleTapDown: (d) => _send('click', d.localPosition, {'double': true}),
-                onDoubleTap: () {},
-                onLongPressStart: (d) {
-                  HapticFeedback.mediumImpact();
-                  _send('click', d.localPosition, {'right': true});
-                },
-                onPanStart: _drag ? (d) => _send('down', d.localPosition) : null,
-                onPanUpdate: _drag ? (d) => _send('move', d.localPosition) : null,
-                onPanEnd: _drag ? (_) => widget.link.input({'k': 'up', 'x': -1, 'y': -1}) : null,
-                child: Image.memory(
-                  screen,
-                  key: _picture,
-                  gaplessPlayback: true,
-                  semanticLabel: 'The PC’s screen, live',
-                  width: double.infinity,
-                ),
-              ),
-            ),
+            child: _Picture(link: link, screen: screen, drag: _drag),
           ),
         if (link.liveOn) ...[
           const SizedBox(height: 10),
@@ -239,7 +307,7 @@ class _ScreenState extends State<_Screen> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              for (final (label, key) in _keys) _chip(l, label, () => link.input({'k': 'key', 'key': key})),
+              for (final (label, key) in _keyList) _chip(l, label, () => link.input({'k': 'key', 'key': key})),
               _chip(l, 'Scroll ↑', () => link.input({'k': 'scroll', 'x': 0.5, 'y': 0.5, 'dy': -360})),
               _chip(l, 'Scroll ↓', () => link.input({'k': 'scroll', 'x': 0.5, 'y': 0.5, 'dy': 360})),
             ],
@@ -247,7 +315,8 @@ class _ScreenState extends State<_Screen> {
           const SizedBox(height: 8),
           Text(
             'Tap to click, tap twice to double-click, hold for a right click. Drag mode drags on the PC; '
-            'pinch to zoom. Windows’ sign-in screen and administrator windows don’t take input from here.',
+            'pinch to zoom. Full screen turns the phone sideways and types as you go. '
+            'Windows’ sign-in screen and administrator windows don’t take input from here.',
             style: OrvText.muted(l).copyWith(fontSize: 12),
           ),
         ],
@@ -260,22 +329,194 @@ class _ScreenState extends State<_Screen> {
     widget.link.input({'k': 'text', 'text': _text.text});
     _text.clear();
   }
+}
 
-  Widget _chip(OrvLook l, String label, VoidCallback onTap) => Material(
-    color: l.c.track,
+Widget _chip(OrvLook l, String label, VoidCallback onTap) => Material(
+  color: l.c.track,
+  borderRadius: BorderRadius.circular(OrvTokens.radiusSm),
+  child: InkWell(
     borderRadius: BorderRadius.circular(OrvTokens.radiusSm),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(OrvTokens.radiusSm),
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Text(label, style: OrvText.body(l).copyWith(fontFamily: monoFamily, fontSize: 12.5)),
+    onTap: () {
+      HapticFeedback.selectionClick();
+      onTap();
+    },
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Text(label, style: OrvText.body(l).copyWith(fontFamily: monoFamily, fontSize: 12.5)),
+    ),
+  ),
+);
+
+/// What the hidden box holds, so a backspace on an empty line can still be heard.
+const _held = '​';
+
+/// The PC's screen on the whole phone, sideways, with the keyboard a tap away.
+class _FullScreen extends StatefulWidget {
+  const _FullScreen({required this.link, required this.drag});
+  final PcLink link;
+  final bool drag;
+  @override
+  State<_FullScreen> createState() => _FullScreenState();
+}
+
+class _FullScreenState extends State<_FullScreen> {
+  late bool _drag = widget.drag;
+  bool _keys = false;
+  bool _bar = true;
+  final _typing = TextEditingController(text: _held);
+  final _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    widget.link.addListener(_changed);
+    _focus.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    widget.link.removeListener(_changed);
+    SystemChrome.setPreferredOrientations(const []);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _typing.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  bool _leaving = false;
+
+  void _changed() {
+    if (!mounted) return;
+    if (!widget.link.liveOn || widget.link.status != PcStatus.open) {
+      if (!_leaving) {
+        _leaving = true;
+        Navigator.of(context).maybePop();
+      }
+    } else {
+      setState(() {});
+    }
+  }
+
+  /// Each letter goes as it is typed; the box itself stays empty.
+  void _typed(String v) {
+    if (!v.startsWith(_held)) {
+      widget.link.input({'k': 'key', 'key': 'backspace'});
+    } else if (v.length > _held.length) {
+      widget.link.input({'k': 'text', 'text': v.substring(_held.length)});
+    }
+    _typing.value = const TextEditingValue(text: _held, selection: TextSelection.collapsed(offset: 1));
+  }
+
+  void _keyboard() {
+    if (_focus.hasFocus) {
+      _focus.unfocus();
+    } else {
+      _focus.requestFocus();
+      SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+    }
+  }
+
+  Widget _tool(IconData icon, String tip, VoidCallback onTap, {bool on = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: IconButton(
+      tooltip: tip,
+      onPressed: onTap,
+      style: IconButton.styleFrom(
+        backgroundColor: on ? context.orv.accent : context.orv.c.glassStrong,
+        foregroundColor: on ? OrvTokens.dark.text : context.orv.c.text,
       ),
+      icon: Icon(icon, size: 20),
     ),
   );
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final link = widget.link;
+    final screen = link.screen;
+    return Scaffold(
+      backgroundColor: OrvTokens.light.text, // the darkest ink: around a screen, nothing else
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: screen == null ? const SizedBox() : _Picture(link: link, screen: screen, drag: _drag, fill: true),
+          ),
+          // off screen: it only brings up the keyboard and hears it
+          Positioned(
+            left: -1000,
+            top: 0,
+            width: 200,
+            child: TextField(
+              controller: _typing,
+              focusNode: _focus,
+              autocorrect: false,
+              enableSuggestions: false,
+              keyboardType: TextInputType.visiblePassword,
+              onChanged: _typed,
+              onSubmitted: (_) {
+                link.input({'k': 'key', 'key': 'enter'});
+                _focus.requestFocus();
+              },
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(6),
+                child: _bar
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _tool(LucideIcons.minimize, 'Leave full screen', () => Navigator.of(context).pop()),
+                          _tool(LucideIcons.keyboard, 'Keyboard', _keyboard, on: _focus.hasFocus),
+                          _tool(LucideIcons.command, 'Keys', () => setState(() => _keys = !_keys), on: _keys),
+                          _tool(
+                            LucideIcons.move,
+                            _drag ? 'Drag mode: one finger drags' : 'Tap mode: one finger moves the view',
+                            () => setState(() => _drag = !_drag),
+                            on: _drag,
+                          ),
+                          _tool(LucideIcons.chevronsRight, 'Hide these', () => setState(() => _bar = false)),
+                        ],
+                      )
+                    : _tool(LucideIcons.chevronsLeft, 'Show the buttons', () => setState(() => _bar = true)),
+              ),
+            ),
+          ),
+          if (_keys)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                child: Container(
+                  color: l.c.glassStrong,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  height: 50,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    children: [
+                      for (final (label, key) in _keyList)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: _chip(l, label, () => link.input({'k': 'key', 'key': key})),
+                        ),
+                      _chip(l, 'Scroll ↑', () => link.input({'k': 'scroll', 'x': 0.5, 'y': 0.5, 'dy': -360})),
+                      const SizedBox(width: 6),
+                      _chip(l, 'Scroll ↓', () => link.input({'k': 'scroll', 'x': 0.5, 'y': 0.5, 'dy': 360})),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 // ------------------------------------------------------------------ files

@@ -19,6 +19,7 @@ import {
   Keyboard,
   Lock,
   Maximize,
+  Minimize,
   Monitor,
   Moon,
   MousePointer2,
@@ -135,13 +136,25 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
   const img = useRef<HTMLImageElement>(null);
   const href = useObjectUrl(deck.screen);
   const press = useRef<{ x: number; y: number; at: number; dragging: boolean; timer?: number } | null>(null);
-  const lastTap = useRef(0);
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    const changed = () => setFull(document.fullscreenElement === box.current);
+    document.addEventListener('fullscreenchange', changed);
+    return () => document.removeEventListener('fullscreenchange', changed);
+  }, []);
 
+  /** Where on the PC, 0..1: of the picture as drawn, not the box around it (object-contain leaves bands). */
   const at = (e: { clientX: number; clientY: number }) => {
-    const r = img.current!.getBoundingClientRect();
+    const el = img.current!;
+    const r = el.getBoundingClientRect();
+    const scale = Math.min(r.width / (el.naturalWidth || r.width), r.height / (el.naturalHeight || r.height));
+    const w = (el.naturalWidth || r.width) * scale;
+    const h = (el.naturalHeight || r.height) * scale;
+    const left = r.left + (r.width - w) / 2;
+    const top = r.top + (r.height - h) / 2;
     return {
-      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
-      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+      x: Math.min(1, Math.max(0, (e.clientX - left) / w)),
+      y: Math.min(1, Math.max(0, (e.clientY - top) / h)),
     };
   };
   const down = (e: PointerEvent<HTMLImageElement>) => {
@@ -179,10 +192,8 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
     if (!p) return;
     clearTimeout(p.timer);
     if (p.dragging) return link.input({ k: 'up', ...at(e) });
-    const now = Date.now();
-    const double = now - lastTap.current < 350;
-    lastTap.current = double ? 0 : now;
-    link.input({ k: 'click', ...at(e), double });
+    // a click at once: two quick ones are a double-click to Windows itself
+    link.input({ k: 'click', ...at(e) });
   };
   const keyed = (e: KeyboardEvent) => {
     if (!control || !deck.live) return;
@@ -200,6 +211,32 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
     else return;
     e.preventDefault();
   };
+
+  const keys = (
+    <div className="flex flex-wrap gap-1.5" aria-label="Keys">
+      {KEYS.map(([label, key]) => (
+        <button
+          key={key}
+          onClick={() => link.input({ k: 'key', key })}
+          className="h-9 min-w-10 rounded-orv-sm border border-orv-edge bg-orv-track px-2.5 font-mono text-[12px]"
+        >
+          {label}
+        </button>
+      ))}
+      <button
+        onClick={() => link.input({ k: 'scroll', x: 0.5, y: 0.5, dy: -360 })}
+        className="h-9 rounded-orv-sm border border-orv-edge bg-orv-track px-2.5 text-[12px]"
+      >
+        Scroll up
+      </button>
+      <button
+        onClick={() => link.input({ k: 'scroll', x: 0.5, y: 0.5, dy: 360 })}
+        className="h-9 rounded-orv-sm border border-orv-edge bg-orv-track px-2.5 text-[12px]"
+      >
+        Scroll down
+      </button>
+    </div>
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -230,8 +267,16 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
         >
           {sharp ? 'Sharp' : 'Fast'}
         </Button>
-        <Button size="sm" aria-label="Full screen" onClick={() => void box.current?.requestFullscreen?.()}>
-          <Maximize size={14} aria-hidden />
+        <Button
+          size="sm"
+          aria-label="Full screen"
+          disabled={!href}
+          onClick={() => {
+            void box.current?.requestFullscreen?.();
+            box.current?.focus();
+          }}
+        >
+          <Maximize size={14} aria-hidden /> Full screen
         </Button>
       </div>
       <div
@@ -239,7 +284,10 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
         tabIndex={0}
         onKeyDown={keyed}
         aria-label="The PC’s screen. With control on, taps and keys go to the PC."
-        className="relative flex min-h-48 items-center justify-center overflow-auto rounded-orv-md border border-orv-edge bg-orv-base outline-none focus-visible:ring-2 focus-visible:ring-orv-accent"
+        className={cn(
+          'relative flex min-h-48 items-center justify-center overflow-auto rounded-orv-md border border-orv-edge bg-orv-base outline-none focus-visible:ring-2 focus-visible:ring-orv-accent',
+          full && 'h-dvh w-dvw rounded-none border-0',
+        )}
       >
         {href ? (
           <img
@@ -257,7 +305,8 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
             }}
             onWheel={(e) => control && link.input({ k: 'scroll', ...at(e), dy: Math.round(e.deltaY) })}
             className={cn(
-              'block max-h-[75dvh] w-full select-none object-contain',
+              'block w-full select-none object-contain',
+              full ? 'h-full' : 'max-h-[75dvh]',
               control && 'cursor-crosshair touch-none',
             )}
           />
@@ -267,8 +316,16 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
             {deck.live ? 'Waiting for the first picture…' : 'Start it to see the PC as it is now.'}
           </p>
         )}
+        {full ? (
+          <div className="absolute inset-x-2 bottom-2 flex flex-col items-end gap-2">
+            <Button size="sm" onClick={() => void document.exitFullscreen()}>
+              <Minimize size={14} aria-hidden /> Leave full screen
+            </Button>
+            {deck.live && control ? <Glass className="w-full p-2">{keys}</Glass> : null}
+          </div>
+        ) : null}
       </div>
-      {deck.live && control ? (
+      {deck.live && control && !full ? (
         <Glass className="flex flex-col gap-2 p-3">
           <form
             className="flex gap-2"
@@ -290,29 +347,7 @@ function Screen({ link, deck }: { link: PcLink; deck: PcDeck }) {
               <Keyboard size={14} aria-hidden /> Type
             </Button>
           </form>
-          <div className="flex flex-wrap gap-1.5" aria-label="Keys">
-            {KEYS.map(([label, key]) => (
-              <button
-                key={key}
-                onClick={() => link.input({ k: 'key', key })}
-                className="h-9 min-w-10 rounded-orv-sm border border-orv-edge bg-orv-track px-2.5 font-mono text-[12px]"
-              >
-                {label}
-              </button>
-            ))}
-            <button
-              onClick={() => link.input({ k: 'scroll', x: 0.5, y: 0.5, dy: -360 })}
-              className="h-9 rounded-orv-sm border border-orv-edge bg-orv-track px-2.5 text-[12px]"
-            >
-              Scroll up
-            </button>
-            <button
-              onClick={() => link.input({ k: 'scroll', x: 0.5, y: 0.5, dy: 360 })}
-              className="h-9 rounded-orv-sm border border-orv-edge bg-orv-track px-2.5 text-[12px]"
-            >
-              Scroll down
-            </button>
-          </div>
+          {keys}
           <p className="text-[12px] text-orv-muted">
             Tap to click, tap twice to double-click, hold for a right click, drag to drag. With a keyboard,
             click the picture and type. Windows’ sign-in screen and administrator windows don’t take input

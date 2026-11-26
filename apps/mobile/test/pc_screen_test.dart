@@ -167,6 +167,27 @@ void main() {
     final click = inputs.firstWhere((i) => i['k'] == 'click');
     expect((click['x'] as num).toDouble(), closeTo(0.25, 0.05));
     expect((click['y'] as num).toDouble(), closeTo(0.75, 0.05));
+    // full screen: the whole phone, a tap clicks at once, letters go as they are typed
+    await tester.tap(find.text('Full screen'));
+    await wait();
+    expect(find.byTooltip('Leave full screen'), findsOneWidget);
+    final clicks = inputs.where((i) => i['k'] == 'click').length;
+    final big = tester.getRect(find.byType(Image).first);
+    expect(big.width, greaterThan(r.width * 0.9));
+    await tester.tapAt(big.center);
+    await wait();
+    final mid = inputs.where((i) => i['k'] == 'click').last;
+    expect(inputs.where((i) => i['k'] == 'click').length, clicks + 1);
+    expect((mid['x'] as num).toDouble(), closeTo(0.5, 0.05));
+    await tester.enterText(find.byType(TextField), '​h');
+    await wait();
+    expect(inputs.any((i) => i['k'] == 'text' && i['text'] == 'h'), isTrue);
+    await tester.enterText(find.byType(TextField), '');
+    await wait();
+    expect(inputs.last['key'], 'backspace');
+    await tester.tap(find.byTooltip('Leave full screen'));
+    await wait();
+    expect(find.text('Full screen'), findsOneWidget);
     await tester.ensureVisible(find.text('Ctrl+C'));
     await tester.tap(find.text('Ctrl+C'));
     await wait();

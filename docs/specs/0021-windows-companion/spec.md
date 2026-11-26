@@ -70,8 +70,12 @@ this tray; **no Vault here** (the extension and web have it). Security is for ke
   control characters, editable, and runs when Run is pressed.
 - **Remote deck (11):** in My PC on web and Android, in three parts.
   - **Screen:** live, as it changes; a picture goes only when the screen changed (or every 5 s), and the next only after
-    the last arrived. Sharp (1600 px) or fast (960 px). Taps click, twice double-click, a hold right-clicks, drag mode
-    drags; typing and keys (Ctrl+C, Alt+Tab, Win…). The PC shows a toast when someone starts watching; the log says
+    the last arrived (up to 12 parts in flight, so a picture takes one round trip). After a tap or a key the next
+    picture is taken 60 ms later. Sharp (1600 px) or fast (960 px). A tap clicks at once (no wait for a second tap:
+    two quick clicks are a double-click to Windows), a hold right-clicks, drag mode drags; typing and keys (Ctrl+C,
+    Alt+Tab, Win…). Full screen: on the phone, sideways and immersive with buttons for leave, keyboard (each letter
+    goes as typed), keys and drag; on the web, the picture fills the screen with the keys over it. Taps map to the
+    picture as drawn, not the box around it. The PC shows a toast when someone starts watching; the log says
     when the mouse and keyboard were used, never what. Windows' sign-in screen and administrator windows refuse input.
   - **Files:** Desktop, Downloads, Documents… and the drives; a path to click back along; find, sort by name, newest
     or largest; dates and sizes; download, open on the PC, and send a file from the phone into the PC's Downloads

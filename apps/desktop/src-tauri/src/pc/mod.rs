@@ -177,6 +177,8 @@ struct Live {
     sent_at: i64,
 }
 const LIVE_EVERY_MS: i64 = 200;
+/// after a tap or a key, the next picture this soon
+const LIVE_AFTER_INPUT_MS: i64 = 60;
 /// an unchanged screen is sent again only this often, so a lost picture is not lost for long
 const LIVE_SAME_MS: i64 = 5_000;
 
@@ -188,7 +190,8 @@ struct Put {
 }
 
 const PART: usize = 24 * 1024;
-const PARTS_WAITING: usize = 4;
+/// parts in flight at once: a live picture of ~250 KB goes in one round trip, not three
+const PARTS_WAITING: usize = 12;
 
 struct View {
     sent: u64,
@@ -557,6 +560,11 @@ impl Remote {
                 if let Err(e) = self.hands.input(&input) {
                     self.say(x, s, &json!({ "t": "error", "text": e }));
                 }
+                // what the tap did, soon: the PC gets a moment to draw it, then a picture
+                if let Some(l) = x.live.as_mut() {
+                    l.last_at = l.last_at.min((self.clock)() - LIVE_EVERY_MS + LIVE_AFTER_INPUT_MS);
+                }
+                self.wake.notify_one();
             }
             Ask::Put { name, size } => {
                 if size > deck::FILE_MAX as usize {
@@ -816,12 +824,12 @@ impl Remote {
                 more = true;
             }
             if let Some(b) = x.blob.as_mut() {
-                let from = b.sent * PART;
-                if from < b.bytes.len() && b.sent - b.got < PARTS_WAITING {
+                // all that may go, now: pacing them one per wake made each picture slow
+                while b.sent * PART < b.bytes.len() && b.sent - b.got < PARTS_WAITING {
+                    let from = b.sent * PART;
                     let to = (from + PART).min(b.bytes.len());
                     say.push(json!({ "t": "part", "id": b.id, "n": b.sent, "d": seal::b64(&b.bytes[from..to]) }));
                     b.sent += 1;
-                    more |= b.sent - b.got < PARTS_WAITING;
                 }
             }
             for m in say {
@@ -1170,7 +1178,7 @@ mod tests {
             t.remote.pump();
         }
         let first = t.read(&mut p);
-        assert_eq!(first.len(), PARTS_WAITING);
+        assert_eq!(first.len(), PARTS_WAITING.min(200_000usize.div_ceil(PART)));
         let mut parts = first;
         while !parts.is_empty() {
             let mut n = 0;

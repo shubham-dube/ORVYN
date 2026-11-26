@@ -137,12 +137,31 @@ test('My PC: pair by link, PIN, a live terminal, back after the PC drops', async
   const screen = page.getByAltText('The PC’s screen, live');
   await expect(screen).toBeVisible();
   const box = (await screen.boundingBox())!;
-  await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
+  // the 1×1 picture is drawn square in the middle of its box (object-contain)
+  const side = Math.min(box.width, box.height);
+  const drawn = { x: box.x + (box.width - side) / 2, y: box.y + (box.height - side) / 2 };
+  await page.mouse.click(drawn.x + side * 0.25, drawn.y + side * 0.75);
   await expect
     .poll(() => inputs.find((i) => i.k === 'click'))
     .toMatchObject({ k: 'click', x: expect.closeTo(0.25, 1), y: expect.closeTo(0.75, 1) });
   await page.getByRole('button', { name: 'Ctrl+C' }).click();
   await expect.poll(() => inputs.some((i) => i.k === 'key' && i.key === 'ctrl+c')).toBe(true);
+  // full screen: the picture fills it, a tap still lands where it was, keys go on, and back
+  await page.getByRole('button', { name: 'Full screen' }).click();
+  await expect(page.getByRole('button', { name: 'Leave full screen' })).toBeVisible();
+  const whole = (await screen.boundingBox())!;
+  expect(whole.height).toBeGreaterThan(box.height);
+  const clicks = inputs.filter((i) => i.k === 'click').length;
+  await page.mouse.click(whole.x + whole.width / 2, whole.y + whole.height / 2);
+  await expect.poll(() => inputs.filter((i) => i.k === 'click').length).toBe(clicks + 1);
+  expect(inputs.filter((i) => i.k === 'click').at(-1)).toMatchObject({
+    x: expect.closeTo(0.5, 1),
+    y: expect.closeTo(0.5, 1),
+  });
+  await page.keyboard.press('Enter');
+  await expect.poll(() => inputs.some((i) => i.k === 'key' && i.key === 'enter')).toBe(true);
+  await page.getByRole('button', { name: 'Leave full screen' }).click();
+  await expect(page.getByRole('button', { name: 'Leave full screen' })).toBeHidden();
   await page.getByRole('radio', { name: 'Controls' }).click();
   await expect(page.getByLabel('Volume')).toHaveValue('40');
   await page.getByRole('radio', { name: 'Files' }).click();
