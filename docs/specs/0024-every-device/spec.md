@@ -37,6 +37,8 @@ once, or an answer lost on a bad network, looked like a stolen token and signed 
   share a lock.
 - **On the server, once:** a lost answer may be asked for again with the old token, within 10 minutes, while the new
   token is unused. A second time, or after the new one was used, is still theft and signs the device out.
+- The price: someone replaying a token that was just replaced gets in, until the real device's next refresh (at most
+  15 minutes), which then signs both out.
 
 ## Acceptance criteria
 

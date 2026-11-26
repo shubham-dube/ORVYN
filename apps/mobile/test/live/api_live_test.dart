@@ -53,7 +53,7 @@ void main() {
     expect([me['name'], me['platform']], ['Live test phone', 'android']);
   });
 
-  test('refresh rotates; replaying the old refresh token revokes the device', () async {
+  test('refresh rotates; a replayed old token is forgiven once, then both holders are cut off', () async {
     final store = MemorySessionStore();
     final api = Api(baseUrl: base!, store: store);
     final first = await signIn(api, owner);
@@ -61,12 +61,16 @@ void main() {
     expect(rotated, isNotNull);
     expect(rotated!.refreshToken, isNot(first.refreshToken));
 
-    // an attacker replays the stolen first token
+    // the old token again, while the new one is unused: taken for a lost answer, once (spec 0024)
     final thief = Api(baseUrl: base!, store: MemorySessionStore()..values['refresh'] = first.refreshToken!);
-    expect(await thief.refresh(), isNull);
-    // and the real device is now signed out too (token family revoked)
+    expect(await thief.refresh(), isNotNull);
+    // the real device refreshes next: two holders of one session is theft, and both are cut off
     expect(await api.refresh(), isNull);
     expect(await store.readRefreshToken(), isNull);
+    expect(await thief.refresh(), isNull);
+    // and the old token never works again
+    final late = Api(baseUrl: base!, store: MemorySessionStore()..values['refresh'] = first.refreshToken!);
+    expect(await late.refresh(), isNull);
   });
 
   test('the socket delivers a notification sent from another device, then its dismissal', () async {

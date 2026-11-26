@@ -1,4 +1,3 @@
-import type { ActivitySpan } from '@orvyn/contracts';
 import { describe as group, expect, it } from 'vitest';
 import {
   buildDay,
