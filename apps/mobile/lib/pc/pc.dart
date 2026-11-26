@@ -7,7 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/state.dart';
-import '../chat/chat_crypto.dart' show unb64;
+import '../chat/chat_crypto.dart' show b64, unb64;
 import '../core/session_store.dart';
 import 'pc_crypto.dart';
 
@@ -54,11 +54,15 @@ class PcEntry {
     : name = j['name'] as String,
       path = j['path'] as String,
       dir = j['dir'] as bool,
-      size = (j['size'] as num).toInt();
+      size = (j['size'] as num).toInt(),
+      modified = (j['modified'] as num?)?.toInt();
   final String name;
   final String path;
   final bool dir;
   final int size;
+
+  /// unix ms
+  final int? modified;
 }
 
 enum PcStatus { finding, offline, off, locked, pin, open, idle, removed, ended }
@@ -100,6 +104,19 @@ class PcLink extends ChangeNotifier {
   /// Of the file or picture on its way, 0..1.
   double? progress;
   ({int id, String name, int size})? _coming;
+
+  /// The screen as it changes, its latest picture (spec 0021 #11).
+  Uint8List? screen;
+  bool liveOn = false;
+  bool _sharp = true;
+
+  /// Desktop, Downloads… and the drives.
+  List<PcEntry> places = [];
+
+  /// Of a file going to the PC, 0..1.
+  double? sending;
+  ({Uint8List bytes, Completer<String?> done})? _outgoing;
+  static const _putPart = 24 * 1024;
   BytesBuilder _parts = BytesBuilder();
   int _part = 0;
 
@@ -133,6 +150,9 @@ class PcLink extends ChangeNotifier {
     _to = '';
     _coming = null;
     progress = null;
+    _outgoing?.done.complete(null);
+    _outgoing = null;
+    sending = null;
     _s = pcNonce();
     _set(PcStatus.finding);
     send({'type': 'pc', 's': _s, 'd': 'o.${pair.id}'});
@@ -179,6 +199,32 @@ class PcLink extends ChangeNotifier {
       i = end;
     }
     return true;
+  }
+
+  /// Sharp sends more; fast is for a slow connection.
+  void live(bool on, {bool? sharp}) {
+    liveOn = on;
+    _sharp = sharp ?? _sharp;
+    if (status == PcStatus.open) {
+      _ask({'t': 'live', 'on': on, 'width': _sharp ? 1600 : 960, 'quality': _sharp ? 65 : 45});
+    }
+    if (!_stopped) notifyListeners();
+  }
+
+  /// A mouse or a key on the PC; x and y are 0..1 of all its screens together.
+  void input(Map<String, dynamic> i) {
+    if (status == PcStatus.open) _ask({'t': 'input', ...i});
+  }
+
+  /// A file into the PC's Downloads; its path there, or null.
+  Future<String?> put(String name, Uint8List bytes) {
+    if (status != PcStatus.open || _outgoing != null) return Future.value(null);
+    final done = Completer<String?>();
+    _outgoing = (bytes: bytes, done: done);
+    sending = 0;
+    notifyListeners();
+    _ask({'t': 'put', 'name': name, 'size': bytes.length});
+    return done.future;
   }
 
   void deck(Map<String, dynamic> m) => status == PcStatus.open ? _ask(m) : problem('Not connected');
@@ -289,11 +335,17 @@ class PcLink extends ChangeNotifier {
 
   void _arrived() {
     final c = _coming!;
-    progress = c.size == 0 ? 1 : _parts.length / c.size;
+    final live = c.name == 'live.jpg';
+    // a live picture shows no progress: it is replaced in a moment anyway
+    if (!live) progress = c.size == 0 ? 1 : _parts.length / c.size;
     if (_parts.length >= c.size) {
       _coming = null;
       progress = null;
-      file?.call(c.name, _parts.takeBytes());
+      if (live) {
+        screen = _parts.takeBytes();
+      } else {
+        file?.call(c.name, _parts.takeBytes());
+      }
     }
     notifyListeners();
   }
@@ -320,6 +372,8 @@ class PcLink extends ChangeNotifier {
         left = null;
         _again = 0;
         _set(PcStatus.open);
+        // back after a drop: the live screen goes on
+        if (liveOn) live(true);
         _beat();
         for (final e in _sizes.entries.toList()) {
           if (terms.any((t) => t.id == e.key)) {
@@ -378,7 +432,30 @@ class PcLink extends ChangeNotifier {
         _part++;
         _ask({'t': 'got', 'id': c.id, 'n': _part});
         _arrived();
+      case 'places':
+        places = [for (final e in m['list'] as List) PcEntry.fromJson(e as Map<String, dynamic>)];
+        notifyListeners();
+      case 'putgot':
+        final o = _outgoing;
+        if (o == null) break;
+        final from = (m['n'] as num).toInt() * _putPart;
+        sending = o.bytes.isEmpty ? 1 : from / o.bytes.length;
+        notifyListeners();
+        if (from < o.bytes.length) {
+          final to = min(from + _putPart, o.bytes.length);
+          _ask({'t': 'putpart', 'n': m['n'], 'd': b64(o.bytes.sublist(from, to))});
+        }
+      case 'saved':
+        _outgoing?.done.complete(m['path'] as String);
+        _outgoing = null;
+        sending = null;
+        notifyListeners();
       case 'error':
+        if (_outgoing != null) {
+          _outgoing!.done.complete(null);
+          _outgoing = null;
+          sending = null;
+        }
         problem(m['text'] as String);
       case 'end':
         _ended(m['why'] as String);

@@ -7,7 +7,7 @@ pub mod seal;
 pub mod term;
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -47,6 +47,10 @@ pub enum Event {
     Locked(String),
     /// what I waited for in this terminal has ended
     Done(String),
+    /// someone sees the screen live, or stopped
+    Watching(String, bool),
+    /// a file arrived from a phone
+    Received(String),
     /// how many sessions are open now
     Sessions(usize),
 }
@@ -119,6 +123,28 @@ enum Ask {
     Get {
         path: String,
     },
+    /// the screen as it changes; off when `on` is false
+    Live {
+        on: bool,
+        #[serde(default = "live_width")]
+        width: u32,
+        #[serde(default = "live_quality")]
+        quality: u8,
+    },
+    Input(deck::Input),
+    Places,
+    OpenFile {
+        path: String,
+    },
+    /// a file from the phone: first its name and size, then its parts
+    Put {
+        name: String,
+        size: usize,
+    },
+    PutPart {
+        n: usize,
+        d: String,
+    },
     /// parts of a file or picture that arrived
     Got {
         id: u64,
@@ -133,6 +159,32 @@ struct Blob {
     bytes: Vec<u8>,
     sent: usize,
     got: usize,
+}
+
+fn live_width() -> u32 {
+    1280
+}
+fn live_quality() -> u8 {
+    55
+}
+
+/// What is shown live, and how often it may change.
+struct Live {
+    width: u32,
+    quality: u8,
+    last_at: i64,
+    last: u64,
+    sent_at: i64,
+}
+const LIVE_EVERY_MS: i64 = 200;
+/// an unchanged screen is sent again only this often, so a lost picture is not lost for long
+const LIVE_SAME_MS: i64 = 5_000;
+
+struct Put {
+    path: PathBuf,
+    size: usize,
+    bytes: Vec<u8>,
+    next: usize,
 }
 
 const PART: usize = 24 * 1024;
@@ -154,6 +206,10 @@ struct Session {
     views: HashMap<String, View>,
     blob: Option<Blob>,
     blobs: u64,
+    live: Option<Live>,
+    put: Option<Put>,
+    /// said once in the log per session
+    controlled: bool,
 }
 
 struct Inner {
@@ -343,6 +399,9 @@ impl Remote {
                 views: HashMap::new(),
                 blob: None,
                 blobs: 0,
+                live: None,
+                put: None,
+                controlled: false,
             },
         );
         self.send(from, s, format!("r.{mine}"));
@@ -397,7 +456,7 @@ impl Remote {
             }
             return;
         }
-        if !matches!(ask, Ask::Ack { .. } | Ask::Got { .. } | Ask::Ping) {
+        if !matches!(ask, Ask::Ack { .. } | Ask::Got { .. } | Ask::Ping | Ask::Live { .. }) {
             x.active = now;
         }
         match ask {
@@ -474,6 +533,79 @@ impl Remote {
                     }
                 }
             }
+            Ask::Live { on, width, quality } => {
+                let who = i.pairs.name(&x.pair).unwrap_or_default();
+                let was = x.live.is_some();
+                x.live = on.then_some(Live {
+                    width: width.clamp(320, 2560),
+                    quality: quality.clamp(20, 85),
+                    last_at: 0,
+                    last: 0,
+                    sent_at: 0,
+                });
+                if on != was {
+                    self.write_log(&format!("{who}: live screen {}", if on { "on" } else { "off" }));
+                    (self.tell)(Event::Watching(who, on));
+                }
+            }
+            Ask::Input(input) => {
+                if !x.controlled {
+                    x.controlled = true;
+                    let who = i.pairs.name(&x.pair).unwrap_or_default();
+                    self.write_log(&format!("{who}: used the mouse and keyboard"));
+                }
+                if let Err(e) = self.hands.input(&input) {
+                    self.say(x, s, &json!({ "t": "error", "text": e }));
+                }
+            }
+            Ask::Put { name, size } => {
+                if size > deck::FILE_MAX as usize {
+                    self.say(x, s, &json!({ "t": "error", "text": "Files up to 25 MB can be sent" }));
+                } else {
+                    x.put = Some(Put {
+                        path: deck::landing(&name),
+                        size,
+                        bytes: Vec::with_capacity(size),
+                        next: 0,
+                    });
+                    self.say(x, s, &json!({ "t": "putgot", "n": 0 }));
+                }
+            }
+            Ask::PutPart { n, d } => {
+                let Some(p) = x.put.as_mut().filter(|p| p.next == n) else {
+                    return self.end(i, s, "gone");
+                };
+                let Some(b) = seal::unb64(&d).filter(|b| p.bytes.len() + b.len() <= p.size) else {
+                    x.put = None;
+                    return self.say(x, s, &json!({ "t": "error", "text": "That file didn’t arrive whole" }));
+                };
+                p.bytes.extend(b);
+                p.next += 1;
+                if p.bytes.len() < p.size {
+                    let m = json!({ "t": "putgot", "n": p.next });
+                    return self.say(x, s, &m);
+                }
+                let p = x.put.take().unwrap();
+                let saved = p
+                    .path
+                    .parent()
+                    .map_or(Ok(()), std::fs::create_dir_all)
+                    .and_then(|_| std::fs::write(&p.path, &p.bytes));
+                let who = i.pairs.name(&x.pair).unwrap_or_default();
+                match saved {
+                    Ok(()) => {
+                        let name = p.path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                        self.say(
+                            x,
+                            s,
+                            &json!({ "t": "saved", "path": p.path.to_string_lossy(), "name": name }),
+                        );
+                        self.write_log(&format!("{who}: sent {name}"));
+                        (self.tell)(Event::Received(name));
+                    }
+                    Err(_) => self.say(x, s, &json!({ "t": "error", "text": "The PC couldn’t save it" })),
+                }
+            }
             Ask::Bye => self.end(i, s, "ended"),
             other => {
                 let (answer, note) = self.deck(x, other);
@@ -519,7 +651,12 @@ impl Remote {
                 }
                 Err(e) => (failed(e), None),
             },
-            Ask::Shot => match self.hands.shot() {
+            Ask::Places => (
+                json!({ "t": "places", "list": deck::places(self.hands.drives()) }),
+                None,
+            ),
+            Ask::OpenFile { path } => done(self.hands.open_file(Path::new(&path)), "opened on the PC"),
+            Ask::Shot => match self.hands.shot(1920, 70) {
                 Ok(b) => (
                     Self::start_blob(x, "screen.jpg", b),
                     Some("looked at the screen".into()),
@@ -612,6 +749,7 @@ impl Remote {
     pub async fn run(self: Arc<Self>) {
         let mut tick = tokio::time::interval(Duration::from_secs(10));
         let mut look = tokio::time::interval(Duration::from_secs(2));
+        let mut live = tokio::time::interval(Duration::from_millis(250));
         loop {
             tokio::select! {
                 _ = self.wake.notified() => {
@@ -620,6 +758,11 @@ impl Remote {
                 }
                 _ = tick.tick() => self.sweep(),
                 _ = look.tick() => self.look(),
+                _ = live.tick() => {
+                    if self.inner.lock().unwrap().sessions.values().any(|x| x.live.is_some()) {
+                        self.pump();
+                    }
+                }
             }
         }
     }
@@ -651,6 +794,26 @@ impl Remote {
                     v.told_exit = true;
                     say.push(json!({ "t": "exit", "id": id, "code": code }));
                 }
+            }
+            // the screen as it changes, one picture at a time: the next only when the last arrived
+            let now = (self.clock)();
+            if let (Some(l), None) = (x.live.as_mut(), x.blob.as_ref()) {
+                if now - l.last_at >= LIVE_EVERY_MS {
+                    l.last_at = now;
+                    if let Ok(jpg) = self.hands.shot(l.width, l.quality) {
+                        let h = {
+                            use std::hash::{Hash, Hasher};
+                            let mut h = std::collections::hash_map::DefaultHasher::new();
+                            jpg.hash(&mut h);
+                            h.finish()
+                        };
+                        if h != l.last || now - l.sent_at >= LIVE_SAME_MS {
+                            (l.last, l.sent_at) = (h, now);
+                            say.push(Self::start_blob(x, "live.jpg", jpg));
+                        }
+                    }
+                }
+                more = true;
             }
             if let Some(b) = x.blob.as_mut() {
                 let from = b.sent * PART;
@@ -720,8 +883,18 @@ mod tests {
         fn set_clip(&self, _: &str) -> Result<(), String> {
             Ok(())
         }
-        fn shot(&self) -> Result<Vec<u8>, String> {
+        fn shot(&self, _: u32, _: u8) -> Result<Vec<u8>, String> {
             Ok((0..200_000u32).map(|i| i as u8).collect())
+        }
+        fn input(&self, i: &deck::Input) -> Result<(), String> {
+            self.0.lock().unwrap().push(format!("{i:?}"));
+            Ok(())
+        }
+        fn open_file(&self, _: &Path) -> Result<(), String> {
+            Ok(())
+        }
+        fn drives(&self) -> Vec<String> {
+            vec!["C:\\".into()]
         }
     }
 
@@ -1012,7 +1185,69 @@ mod tests {
             }
             parts = t.read(&mut p);
         }
-        assert_eq!(all, FakeHands::default().shot().unwrap());
+        assert_eq!(all, FakeHands::default().shot(0, 0).unwrap());
+    }
+
+    #[test]
+    fn live_screen_waits_for_each_picture_and_mouse_and_keys_reach_the_pc() {
+        let mut t = pc("live");
+        let mut p = t.signed_in();
+        t.ask(&mut p, json!({ "t": "live", "on": true }));
+        t.remote.pump();
+        let first = t.read(&mut p);
+        assert_eq!(first[0]["name"], "live.jpg");
+        let parts = first.iter().filter(|m| m["t"] == "part").count();
+        // not confirmed: no new picture however long
+        t.now.fetch_add(10_000, Ordering::Relaxed);
+        for _ in 0..5 {
+            t.remote.pump();
+        }
+        assert!(t.read(&mut p).iter().all(|m| m["t"] != "blob"));
+        assert!(parts >= 1);
+        t.ask(&mut p, json!({ "t": "input", "k": "click", "x": 0.5, "y": 0.5 }));
+        t.ask(&mut p, json!({ "t": "input", "k": "key", "key": "ctrl+c" }));
+        t.ask(&mut p, json!({ "t": "live", "on": false }));
+        assert!(t
+            .events
+            .lock()
+            .unwrap()
+            .contains(&Event::Watching("Pixel".into(), true)));
+        assert!(t
+            .events
+            .lock()
+            .unwrap()
+            .contains(&Event::Watching("Pixel".into(), false)));
+        assert!(
+            t.remote
+                .last_log(99)
+                .iter()
+                .filter(|l| l.contains("mouse and keyboard"))
+                .count()
+                == 1
+        );
+    }
+
+    #[test]
+    fn a_file_from_the_phone_arrives_whole_or_not_at_all() {
+        let mut t = pc("put");
+        let mut p = t.signed_in();
+        let name = format!("orvyn-test-{}.txt", std::process::id());
+        assert_eq!(
+            t.ask(&mut p, json!({ "t": "put", "name": name, "size": 5 }))[0],
+            json!({ "t": "putgot", "n": 0 })
+        );
+        assert_eq!(
+            t.ask(&mut p, json!({ "t": "putpart", "n": 0, "d": seal::b64(b"hel") }))[0]["n"],
+            1
+        );
+        let r = t.ask(&mut p, json!({ "t": "putpart", "n": 1, "d": seal::b64(b"lo") }));
+        let saved = std::path::PathBuf::from(r[0]["path"].as_str().unwrap());
+        assert_eq!(std::fs::read(&saved).unwrap(), b"hello");
+        let _ = std::fs::remove_file(saved);
+        t.ask(&mut p, json!({ "t": "put", "name": "x", "size": 2 }));
+        let r = t.ask(&mut p, json!({ "t": "putpart", "n": 0, "d": seal::b64(b"too long") }));
+        assert_eq!(r[0]["t"], "error");
+        assert!(t.events.lock().unwrap().iter().any(|e| matches!(e, Event::Received(_))));
     }
 
     #[test]

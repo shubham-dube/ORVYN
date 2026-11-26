@@ -19,6 +19,11 @@ void main() {
     late PcChannel chan;
     late Map<String, dynamic> at;
     var typed = '';
+    final inputs = <Map<String, dynamic>>[];
+    // a 1×1 PNG
+    final pixel = base64.decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    );
     var end = 0;
     void push(String d) => h.sockets.push({'type': 'pc', 'from': 'pc', 's': at['s'], 'd': d});
     Future<void> say(Map<String, dynamic> m) => chan.seal(jsonEncode(m), push);
@@ -77,6 +82,18 @@ void main() {
                 {'name': 'notes.txt', 'path': r'C:\Users\me\notes.txt', 'dir': false, 'size': 5},
               ],
             });
+          case 'places':
+            say({
+              't': 'places',
+              'list': [
+                {'name': 'Downloads', 'path': r'C:\Users\me\Downloads', 'dir': true, 'size': 0},
+              ],
+            });
+          case 'live' when m['on'] == true:
+            say({'t': 'blob', 'id': 7, 'name': 'live.jpg', 'size': pixel.length, 'part': 24576});
+            say({'t': 'part', 'id': 7, 'n': 0, 'd': b64(pixel)});
+          case 'input':
+            inputs.add(m);
           case 'in':
             typed += m['d'] as String;
         }
@@ -137,9 +154,29 @@ void main() {
     expect(typed, 'Get-Date\r');
     await tester.tap(find.text('Deck'));
     await wait();
+    // the screen live: a tap is a click where it was tapped
+    await tester.tap(find.text('Show the screen live'));
+    await wait();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
+    await wait();
+    expect(find.bySemanticsLabel('The PC’s screen, live'), findsOneWidget);
+    final r = tester.getRect(find.byType(Image).first);
+    await tester.tapAt(r.topLeft + Offset(r.width * 0.25, r.height * 0.75));
+    await tester.pump(const Duration(milliseconds: 400)); // past a double tap
+    await wait();
+    final click = inputs.firstWhere((i) => i['k'] == 'click');
+    expect((click['x'] as num).toDouble(), closeTo(0.25, 0.05));
+    expect((click['y'] as num).toDouble(), closeTo(0.75, 0.05));
+    await tester.ensureVisible(find.text('Ctrl+C'));
+    await tester.tap(find.text('Ctrl+C'));
+    await wait();
+    expect(inputs.any((i) => i['k'] == 'key' && i['key'] == 'ctrl+c'), isTrue);
+    await tester.tap(find.text('Controls'));
+    await wait();
     expect(find.text('Mute'), findsOneWidget);
     await tester.tap(find.text('Files'));
     await wait();
+    expect(find.text('Downloads'), findsWidgets);
     expect(find.text('notes.txt', skipOffstage: false), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);

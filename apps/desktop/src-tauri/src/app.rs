@@ -915,6 +915,15 @@ fn pc_event(app: &AppHandle, s: &Arc<State>, e: PcEvent) {
             format!("Terminal locked: {who} gave five wrong PINs"),
             "Unlock it here, from the ORVYN tray icon.",
         ),
+        PcEvent::Watching(who, on) => {
+            if on {
+                say(
+                    format!("{who} is looking at this screen"),
+                    "And can use the mouse and keyboard. End it from the tray.",
+                );
+            }
+        }
+        PcEvent::Received(name) => say(format!("{name} arrived from your phone"), "It is in Downloads."),
         PcEvent::Done(_) => {
             let (s, body) = (
                 s.clone(),

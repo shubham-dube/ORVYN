@@ -68,8 +68,17 @@ this tray; **no Vault here** (the extension and web have it). Security is for ke
   (`Start-Sleep`, `Invoke-WebRequest`) start no program, so they are not noticed.
 - **Say it, run it (12):** only the wish and the shell's name go to the server and the AI. The answer is one line without
   control characters, editable, and runs when Run is pressed.
-- **Remote deck (11):** in My PC on web and Android. Links must be http(s). Files up to 25 MB, read only. Sleep asks first.
-  Lock, sleep, links, clipboard, screen and files are in the PC's log, without what they held.
+- **Remote deck (11):** in My PC on web and Android, in three parts.
+  - **Screen:** live, as it changes; a picture goes only when the screen changed (or every 5 s), and the next only after
+    the last arrived. Sharp (1600 px) or fast (960 px). Taps click, twice double-click, a hold right-clicks, drag mode
+    drags; typing and keys (Ctrl+C, Alt+Tab, Win…). The PC shows a toast when someone starts watching; the log says
+    when the mouse and keyboard were used, never what. Windows' sign-in screen and administrator windows refuse input.
+  - **Files:** Desktop, Downloads, Documents… and the drives; a path to click back along; find, sort by name, newest
+    or largest; dates and sizes; download, open on the PC, and send a file from the phone into the PC's Downloads
+    (25 MB, never over an existing one).
+  - **Controls:** lock, sleep (asks first), volume, a link, the clipboard both ways.
+  - Live pictures go through ORVYN's server: an hour of a busy screen is about 1 GB, past the free tier's monthly
+    1 GB. For long sessions, RustDesk over Tailscale (spec 0022) costs nothing.
 - AC3, AC4 and AC5 have tests (Rust, API, web, Android); AC6's reconnect too.
 - Not checked yet: a real phone with the real tray app, a full-screen program by hand (AC6), the camera scan.
 

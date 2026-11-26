@@ -18,6 +18,8 @@ import '../design/toast.dart';
 import '../pc/pc.dart';
 import '../pc/pc_crypto.dart';
 import 'common.dart';
+import 'pc_deck.dart';
+import 'pc_did.dart';
 import 'sheets.dart';
 
 /// My PC (spec 0021 step 3): a real terminal on the PC, from the phone.
@@ -204,13 +206,6 @@ class _ScanState extends State<_Scan> {
   }
 }
 
-const _did = {
-  'lock': 'The PC is locked',
-  'sleep': 'The PC is going to sleep',
-  'open': 'Opened on the PC',
-  'clipboard set': 'In the PC’s clipboard',
-};
-
 const _words = {
   PcStatus.finding: 'Looking for the PC…',
   PcStatus.offline: 'The PC isn’t answering. It may be off, asleep or offline, or this phone was removed there.',
@@ -259,10 +254,6 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
   bool _ctrl = false;
   bool _writing = false;
   bool _deck = false;
-  Uint8List? _shot;
-  double? _level;
-  final _url = TextEditingController();
-  final _clip = TextEditingController();
 
   @override
   void initState() {
@@ -281,13 +272,12 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
         t.write(reset ? '\x1bc$text' : text);
         _writing = false;
       },
-      did: (what) => Toaster.of(context).show(_did[what] ?? 'Done', tone: ToastTone.success),
+      did: (what) => Toaster.of(context).show(pcDid[what] ?? 'Done', tone: ToastTone.success),
       clip: (text) async {
         await Clipboard.setData(ClipboardData(text: text));
         if (mounted) Toaster.of(context).show('Copied from the PC', tone: ToastTone.success);
       },
       file: (name, bytes) async {
-        if (name == 'screen.jpg') return setState(() => _shot = bytes);
         final dir = await getTemporaryDirectory();
         // only its name: never a path the PC chose
         final f = File('${dir.path}/pc-${name.replaceAll(RegExp(r'[^\w. -]'), '_')}');
@@ -336,8 +326,6 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
   void dispose() {
     _link.dispose();
     _pin.dispose();
-    _url.dispose();
-    _clip.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -389,7 +377,7 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
                   TextButton(
                     onPressed: () {
                       setState(() => _deck = !_deck);
-                      if (_deck) _link.deck({'t': 'deck'});
+                      if (!_deck) _link.live(false);
                     },
                     child: Text(_deck ? 'Terminal' : 'Deck'),
                   ),
@@ -401,7 +389,7 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
               ],
             ),
             if (open && _deck)
-              Expanded(child: _deckView(l))
+              Expanded(child: PcDeckView(link: _link))
             else if (open)
               ..._terminal(l, shown)
             else
@@ -548,133 +536,6 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
       ),
     ),
   );
-
-  Widget _deckView(OrvLook l) {
-    final sound = _link.sound;
-    final files = _link.files;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            OrvButton(
-              label: 'Lock',
-              small: true,
-              icon: LucideIcons.lock,
-              onPressed: () => _link.deck({'t': 'do', 'what': 'lock'}),
-            ),
-            OrvButton(label: 'Sleep', small: true, icon: LucideIcons.moon, onPressed: _sleep),
-            if (sound != null)
-              OrvButton(
-                label: sound.muted ? 'Unmute' : 'Mute',
-                small: true,
-                icon: sound.muted ? LucideIcons.volumeX : LucideIcons.volume2,
-                onPressed: () => _link.deck({'t': 'do', 'what': 'mute', 'v': sound.muted ? 0 : 1}),
-              ),
-            OrvButton(
-              label: 'See the screen',
-              small: true,
-              icon: LucideIcons.monitor,
-              onPressed: () => _link.deck({'t': 'shot'}),
-            ),
-            OrvButton(
-              label: 'Files',
-              small: true,
-              icon: LucideIcons.folder,
-              onPressed: () => _link.deck({'t': 'files', 'path': files?.path}),
-            ),
-          ],
-        ),
-        if (sound != null)
-          Slider(
-            value: _level ?? sound.volume.toDouble(),
-            max: 100,
-            label: 'Volume',
-            onChanged: (v) => setState(() => _level = v),
-            onChangeEnd: (v) {
-              _link.deck({'t': 'do', 'what': 'volume', 'v': v.round()});
-              setState(() => _level = null);
-            },
-          ),
-        if (_link.progress != null) LinearProgressIndicator(value: _link.progress),
-        if (_shot != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: InteractiveViewer(
-              maxScale: 6,
-              child: Image.memory(_shot!, semanticLabel: 'The PC’s screen a moment ago', gaplessPlayback: true),
-            ),
-          ),
-        const SizedBox(height: 10),
-        OrvField(label: 'Open a link on the PC', controller: _url, keyboardType: TextInputType.url),
-        const SizedBox(height: 6),
-        OrvButton(
-          label: 'Open on the PC',
-          small: true,
-          onPressed: () {
-            final u = _url.text.trim();
-            if (u.isEmpty) return;
-            _link.deck({'t': 'open', 'url': u.startsWith(RegExp('https?://')) ? u : 'https://$u'});
-            _url.clear();
-          },
-        ),
-        const SizedBox(height: 14),
-        OrvField(label: 'Text for the PC’s clipboard', controller: _clip),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          children: [
-            OrvButton(
-              label: 'Send',
-              small: true,
-              onPressed: () {
-                if (_clip.text.isEmpty) return;
-                _link.deck({'t': 'clip', 'text': _clip.text});
-                _clip.clear();
-              },
-            ),
-            OrvButton(label: 'Get the PC’s', small: true, onPressed: () => _link.deck({'t': 'clip'})),
-          ],
-        ),
-        if (files != null) ...[
-          const SizedBox(height: 14),
-          Text(files.path, style: OrvText.muted(l).copyWith(fontFamily: monoFamily, fontSize: 12)),
-          if (files.parent != null)
-            ListTile(
-              dense: true,
-              leading: const Icon(LucideIcons.folderUp, size: 18),
-              title: const Text('Up'),
-              onTap: () => _link.deck({'t': 'files', 'path': files.parent}),
-            ),
-          for (final f in files.list)
-            ListTile(
-              dense: true,
-              leading: Icon(f.dir ? LucideIcons.folder : LucideIcons.file, size: 18),
-              title: Text(f.name, overflow: TextOverflow.ellipsis),
-              onTap: () => _link.deck({'t': f.dir ? 'files' : 'get', 'path': f.path}),
-            ),
-          if (files.cut) Text('Too many to show: use the terminal.', style: OrvText.muted(l)),
-        ],
-      ],
-    );
-  }
-
-  Future<void> _sleep() async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Put the PC to sleep?'),
-        content: const Text('You can’t wake it from here unless it is set up for that.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
-          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sleep')),
-        ],
-      ),
-    );
-    if (yes == true) _link.deck({'t': 'do', 'what': 'sleep'});
-  }
 
   Widget _outside(OrvLook l) {
     final s = _link.status;

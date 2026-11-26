@@ -1,5 +1,5 @@
 import type { ServerMessage } from '@orvyn/contracts';
-import { PcChannel, pcNonce, type PcPairing, unb64 } from '@orvyn/vault-crypto';
+import { b64, PcChannel, pcNonce, type PcPairing, unb64 } from '@orvyn/vault-crypto';
 
 /**
  * A terminal session with my PC (spec 0021 step 3, ADR-0019). Everything but finding it is encrypted with the key the PC
@@ -17,10 +17,18 @@ export interface PcShell {
   id: string;
   name: string;
 }
+export interface PcEntry {
+  name: string;
+  path: string;
+  dir: boolean;
+  size: number;
+  /** unix ms */
+  modified?: number | null;
+}
 export interface PcFiles {
   path: string;
   parent: string | null;
-  list: { name: string; path: string; dir: boolean; size: number }[];
+  list: PcEntry[];
   cut: boolean;
 }
 /** What the remote deck knows (spec 0021 #11). */
@@ -32,7 +40,21 @@ export interface PcDeck {
   file: { name: string; blob: Blob } | null;
   /** of the one on its way, 0..1 */
   progress: number | null;
+  /** the live screen, its latest picture */
+  screen: Blob | null;
+  live: boolean;
+  /** Desktop, Downloads… and the drives */
+  places: PcEntry[];
+  /** of a file going to the PC, 0..1 */
+  sending: number | null;
 }
+/** A mouse or a key on the PC; x and y are 0..1 of all its screens together. */
+export type PcInput =
+  | { k: 'move' | 'down' | 'up'; x: number; y: number }
+  | { k: 'click'; x: number; y: number; right?: boolean; double?: boolean }
+  | { k: 'scroll'; x: number; y: number; dy: number }
+  | { k: 'text'; text: string }
+  | { k: 'key'; key: string };
 export type PcDeckAsk =
   | { t: 'deck' }
   | { t: 'do'; what: 'lock' | 'sleep' | 'mute' | 'volume'; v?: number }
@@ -40,7 +62,9 @@ export type PcDeckAsk =
   | { t: 'clip'; text?: string }
   | { t: 'shot' }
   | { t: 'files'; path?: string | null }
-  | { t: 'get'; path: string };
+  | { t: 'get'; path: string }
+  | { t: 'places' }
+  | { t: 'openfile'; path: string };
 
 export type PcStatus =
   'finding' | 'offline' | 'off' | 'locked' | 'pin' | 'open' | 'idle' | 'removed' | 'ended';
@@ -56,6 +80,9 @@ type Told =
   | ({ t: 'files' } & PcFiles)
   | { t: 'clip'; text: string }
   | { t: 'did'; what: string }
+  | { t: 'places'; list: PcEntry[] }
+  | { t: 'putgot'; n: number }
+  | { t: 'saved'; path: string; name: string }
   | { t: 'blob'; id: number; name: string; size: number; part: number }
   | { t: 'part'; id: number; n: number; d: string }
   | { t: 'error'; text: string }
@@ -76,6 +103,8 @@ export interface PcEvents {
 }
 
 const FIND_MS = 6_000;
+/** a part of a file sent to the PC */
+const PART = 24 * 1024;
 const PING_MS = 20_000;
 const QUIET_MS = 8_000;
 const PASTE = 8_000;
@@ -86,7 +115,18 @@ export class PcLink {
   status: PcStatus = 'finding';
   shells: PcShell[] = [];
   terms: PcTerm[] = [];
-  remote: PcDeck = { sound: null, files: null, clip: null, file: null, progress: null };
+  remote: PcDeck = {
+    sound: null,
+    files: null,
+    clip: null,
+    file: null,
+    progress: null,
+    screen: null,
+    live: false,
+    places: [],
+    sending: null,
+  };
+  private outgoing: { name: string; bytes: Uint8Array; done(saved: string | null): void } | null = null;
   private coming: { id: number; name: string; size: number; parts: Uint8Array<ArrayBuffer>[] } | null = null;
   /** tries left after a wrong PIN */
   left: number | null = null;
@@ -128,7 +168,9 @@ export class PcLink {
     this.chan = null;
     this.to = '';
     this.coming = null;
-    this.remote = { ...this.remote, progress: null };
+    this.outgoing?.done(null);
+    this.outgoing = null;
+    this.remote = { ...this.remote, progress: null, sending: null };
     const s = await pcNonce();
     if (this.stopped) return;
     this.s = s;
@@ -179,6 +221,26 @@ export class PcLink {
   deck(m: PcDeckAsk): void {
     if (this.status === 'open') this.ask({ ...m });
     else this.events.problem('Not connected');
+  }
+  /** The screen as it changes. Sharp sends more; fast is for a slow connection. */
+  live(on: boolean, sharp = true): void {
+    this.remote = { ...this.remote, live: on };
+    if (this.status === 'open')
+      this.ask({ t: 'live', on, width: sharp ? 1600 : 960, quality: sharp ? 65 : 45 });
+    this.events.changed();
+  }
+  input(i: PcInput): void {
+    if (this.status === 'open') this.ask({ t: 'input', ...i });
+  }
+  /** A file into the PC's Downloads; its path there, or null. */
+  put(name: string, bytes: Uint8Array): Promise<string | null> {
+    if (this.status !== 'open' || this.outgoing) return Promise.resolve(null);
+    return new Promise((done) => {
+      this.outgoing = { name, bytes, done };
+      this.remote = { ...this.remote, sending: 0 };
+      this.events.changed();
+      this.ask({ t: 'put', name, size: bytes.length });
+    });
   }
   watch(id: string, on: boolean): void {
     this.ask({ t: 'watch', id, on });
@@ -251,14 +313,15 @@ export class PcLink {
     const c = this.coming;
     if (!c) return;
     const have = c.parts.reduce((n, p) => n + p.length, 0);
-    this.remote = { ...this.remote, progress: c.size ? have / c.size : 1 };
+    // a live picture shows no progress: it is replaced in a moment anyway
+    if (c.name !== 'live.jpg') this.remote = { ...this.remote, progress: c.size ? have / c.size : 1 };
     if (have >= c.size) {
-      const type = c.name === 'screen.jpg' ? 'image/jpeg' : 'application/octet-stream';
-      this.remote = {
-        ...this.remote,
-        progress: null,
-        file: { name: c.name, blob: new Blob(c.parts, { type }) },
-      };
+      const picture = c.name === 'screen.jpg' || c.name === 'live.jpg';
+      const blob = new Blob(c.parts, { type: picture ? 'image/jpeg' : 'application/octet-stream' });
+      this.remote =
+        c.name === 'live.jpg'
+          ? { ...this.remote, progress: null, screen: blob }
+          : { ...this.remote, progress: null, file: { name: c.name, blob } };
       this.coming = null;
     }
     this.events.changed();
@@ -276,6 +339,8 @@ export class PcLink {
     if (this.status === 'open') this.beat();
     switch (m.t) {
       case 'hello': {
+        // back after a drop: the live screen goes on
+        if (this.remote.live) queueMicrotask(() => this.live(true));
         this.shells = m.shells;
         this.terms = m.terms;
         this.left = null;
@@ -326,7 +391,7 @@ export class PcLink {
         break;
       case 'blob':
         this.coming = { id: m.id, name: m.name, size: m.size, parts: [] };
-        this.remote = { ...this.remote, progress: 0 };
+        if (m.name !== 'live.jpg') this.remote = { ...this.remote, progress: 0 };
         this.arrived();
         break;
       case 'part': {
@@ -337,10 +402,35 @@ export class PcLink {
         this.arrived();
         break;
       }
+      case 'places':
+        this.remote = { ...this.remote, places: m.list };
+        this.events.changed();
+        break;
+      case 'putgot': {
+        const o = this.outgoing;
+        if (!o) break;
+        const from = m.n * PART;
+        this.remote = { ...this.remote, sending: o.bytes.length ? from / o.bytes.length : 1 };
+        this.events.changed();
+        if (from < o.bytes.length)
+          this.ask({ t: 'putpart', n: m.n, d: b64(o.bytes.slice(from, from + PART)) });
+        break;
+      }
+      case 'saved':
+        this.outgoing?.done(m.path);
+        this.outgoing = null;
+        this.remote = { ...this.remote, sending: null };
+        this.events.changed();
+        break;
       case 'did':
         this.events.did(m.what);
         break;
       case 'error':
+        if (this.outgoing) {
+          this.outgoing.done(null);
+          this.outgoing = null;
+          this.remote = { ...this.remote, sending: null };
+        }
         this.events.problem(m.text);
         break;
       case 'end':

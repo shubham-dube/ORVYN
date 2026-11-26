@@ -34,6 +34,14 @@ test('My PC: pair by link, PIN, a live terminal, back after the PC drops', async
   const term = { id: 't1', name: 'PowerShell', since: 0, exit: null };
   const out = (d: string) => say({ t: 'out', id: 't1', d, end: (sent += d.length), reset: false });
   let terms: unknown[] = [];
+  const inputs: Record<string, unknown>[] = [];
+  // a 1×1 JPEG
+  const PIXEL = Uint8Array.from(
+    atob(
+      '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=',
+    ),
+    (c) => c.charCodeAt(0),
+  );
   ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: session.accessToken }));
   ws.onmessage = (e) => {
     const f = JSON.parse(String(e.data)) as { type: string; from: string; s: string; d: string };
@@ -62,6 +70,12 @@ test('My PC: pair by link, PIN, a live terminal, back after the PC drops', async
         cut: false,
         list: [{ name: 'notes.txt', path: 'C:\\Users\\me\\notes.txt', dir: false, size: 5 }],
       });
+    else if (m.t === 'places')
+      say({ t: 'places', list: [{ name: 'Downloads', path: 'C:\Users\me\Downloads', dir: true, size: 0 }] });
+    else if (m.t === 'live' && m.on) {
+      say({ t: 'blob', id: 7, name: 'live.jpg', size: PIXEL.length, part: 24576 });
+      say({ t: 'part', id: 7, n: 0, d: b64(PIXEL) });
+    } else if (m.t === 'input') inputs.push(m as unknown as Record<string, unknown>);
     else if (m.t === 'get') {
       say({ t: 'blob', id: 1, name: 'notes.txt', size: 5, part: 24576 });
       say({ t: 'part', id: 1, n: 0, d: b64(new TextEncoder().encode('hello')) });
@@ -118,10 +132,23 @@ test('My PC: pair by link, PIN, a live terminal, back after the PC drops', async
     .or(page.getByRole('tab', { name: 'Deck' }))
     .first()
     .click();
+  // the screen live; a tap is a click where it was tapped
+  await page.getByRole('button', { name: 'Show the screen live' }).click();
+  const screen = page.getByAltText('The PC’s screen, live');
+  await expect(screen).toBeVisible();
+  const box = (await screen.boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.75);
+  await expect
+    .poll(() => inputs.find((i) => i.k === 'click'))
+    .toMatchObject({ k: 'click', x: expect.closeTo(0.25, 1), y: expect.closeTo(0.75, 1) });
+  await page.getByRole('button', { name: 'Ctrl+C' }).click();
+  await expect.poll(() => inputs.some((i) => i.k === 'key' && i.key === 'ctrl+c')).toBe(true);
+  await page.getByRole('radio', { name: 'Controls' }).click();
   await expect(page.getByLabel('Volume')).toHaveValue('40');
-  await page.getByRole('button', { name: 'Files' }).click();
+  await page.getByRole('radio', { name: 'Files' }).click();
+  await expect(page.getByRole('button', { name: 'Downloads' })).toBeVisible();
   const saved = page.waitForEvent('download');
-  await page.getByRole('button', { name: /notes.txt/ }).click();
+  await page.getByRole('button', { name: 'Download notes.txt' }).click();
   expect((await saved).suggestedFilename()).toBe('notes.txt');
   await page.screenshot({ path: info.outputPath('deck.png') });
   await page
