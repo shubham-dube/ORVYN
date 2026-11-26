@@ -106,7 +106,7 @@ export class TodayController {
       .from(todayProjects)
       .where(and(eq(todayProjects.ownerId, a.userId), isNull(todayProjects.deletedAt)));
     const timeZone = body.timeZone ?? settings?.timeZone ?? 'Asia/Kolkata';
-    const now = new Date();
+    const now = body.at ? new Date(body.at) : new Date();
     const parsed = parseTask(body.text, { now, timeZone, projects, literal: body.literal });
     if (!body.ai || !this.ai.available || !looksUnread(parsed)) return parsed;
     return this.aiRead(a.userId, body.text, parsed, now, timeZone);

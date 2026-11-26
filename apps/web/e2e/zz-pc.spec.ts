@@ -52,6 +52,19 @@ test('My PC: pair by link, PIN, a live terminal, back after the PC drops', async
       size = `${m.cols}x${m.rows}`;
       if (!sent) out('PS C:\\> ');
       else out('still here ');
+    } else if (m.t === 'watch') say({ t: 'terms', terms: [{ ...term, watch: m.on }] });
+    else if (m.t === 'deck') say({ t: 'deck', sound: { volume: 40, muted: false } });
+    else if (m.t === 'files')
+      say({
+        t: 'files',
+        path: 'C:\\Users\\me',
+        parent: 'C:\\Users',
+        cut: false,
+        list: [{ name: 'notes.txt', path: 'C:\\Users\\me\\notes.txt', dir: false, size: 5 }],
+      });
+    else if (m.t === 'get') {
+      say({ t: 'blob', id: 1, name: 'notes.txt', size: 5, part: 24576 });
+      say({ t: 'part', id: 1, n: 0, d: b64(new TextEncoder().encode('hello')) });
     } else if (m.t === 'in') {
       typed += m.d;
       out(m.d === '\r' ? '\r\nhello from the PC\r\n' : m.d!);
@@ -78,6 +91,44 @@ test('My PC: pair by link, PIN, a live terminal, back after the PC drops', async
   await page.keyboard.type('c');
   await expect.poll(() => typed).toBe('dir\r\x03');
   await page.screenshot({ path: info.outputPath('terminal.png') });
+
+  await page.getByRole('button', { name: 'Tell me when done' }).click();
+  await expect(page.getByRole('button', { name: 'Will tell you' })).toBeVisible();
+  // a suggestion runs only when Run is pressed (AC7)
+  await page.route('**/pc/suggest', (r) =>
+    r.fulfill({
+      json: { command: 'Get-Date', why: 'Shows the time', careful: false },
+      headers: {
+        'access-control-allow-origin': 'http://localhost:3100',
+        'access-control-allow-credentials': 'true',
+      },
+    }),
+  );
+  typed = '';
+  await page.getByRole('button', { name: 'Say it' }).click();
+  await page.getByLabel('What do you want to do?').fill('what time is it');
+  await page.getByRole('button', { name: 'Suggest' }).click();
+  await expect(page.getByLabel('Command', { exact: true })).toHaveValue('Get-Date');
+  expect(typed).toBe('');
+  await page.getByRole('button', { name: 'Run' }).click();
+  await expect.poll(() => typed).toBe('Get-Date\r');
+
+  await page
+    .getByRole('radio', { name: 'Deck' })
+    .or(page.getByRole('tab', { name: 'Deck' }))
+    .first()
+    .click();
+  await expect(page.getByLabel('Volume')).toHaveValue('40');
+  await page.getByRole('button', { name: 'Files' }).click();
+  const saved = page.waitForEvent('download');
+  await page.getByRole('button', { name: /notes.txt/ }).click();
+  expect((await saved).suggestedFilename()).toBe('notes.txt');
+  await page.screenshot({ path: info.outputPath('deck.png') });
+  await page
+    .getByRole('radio', { name: 'Terminal' })
+    .or(page.getByRole('tab', { name: 'Terminal' }))
+    .first()
+    .click();
 
   // the PC comes back on a new session: the same terminal, without the PIN again
   ws.send(JSON.stringify({ type: 'pc', ...at, d: 'x.gone' }));

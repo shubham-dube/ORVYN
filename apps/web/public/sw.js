@@ -54,6 +54,7 @@ self.addEventListener('push', (e) => {
   }
   e.waitUntil(
     self.registration.showNotification(p.title || 'ORVYN', {
+      requireInteraction: !!p.alarm || p.priority === 'urgent',
       body: p.body || '',
       tag: p.id,
       renotify: p.priority === 'urgent' || p.priority === 'high',
@@ -75,17 +76,25 @@ self.addEventListener('notificationclick', (e) => {
   const action = (d.actions || []).find((a) => a.id === e.action);
   // a button that does something (Done, Snooze…): the page runs it with the person's session — the worker holds
   // no tokens. A button that opens something just opens it.
-  const target = new URL(
-    action && !action.open
-      ? `/?notification=${encodeURIComponent(d.id)}&action=${encodeURIComponent(action.id)}`
-      : (action && action.open) || d.url || '/',
+  const to = new URL(
+    action && !action.open ? '/' : (action && action.open) || d.url || '/',
     self.location.origin,
-  ).href;
+  );
+  const ours = to.origin === self.location.origin;
+  if (ours && d.id) {
+    to.searchParams.set('notification', d.id); // the page marks it read
+    if (action && !action.open) to.searchParams.set('action', action.id);
+  }
+  const target = to.href;
   e.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
       const open = wins.find((w) => w.url.startsWith(self.location.origin));
-      if (open) return open.navigate(target).then((w) => w && w.focus());
-      return self.clients.openWindow(target);
+      if (!open || !ours) return self.clients.openWindow(target);
+      // a tab this worker doesn't control yet can't be steered
+      return open.navigate(target).then(
+        (w) => w && w.focus(),
+        () => self.clients.openWindow(target),
+      );
     }),
   );
 });

@@ -17,6 +17,7 @@ sealed class PushCommand {
         module: (data['module'] as String?) ?? 'core',
         priority: (data['priority'] as String?) ?? 'normal',
         alarm: data['alarm'] == true || data['alarm'] == 'true',
+        task: _nullable(data['task']),
         actions: [
           for (final a in _list(data['actions']))
             PushAction(
@@ -27,7 +28,7 @@ sealed class PushCommand {
             ),
         ],
       ),
-      'dismiss' || 'read' => ClearPush(id),
+      'dismiss' || 'read' => ClearPush(id, task: _nullable(data['task'])),
       _ => null,
     };
   }
@@ -61,6 +62,7 @@ class ShowPush extends PushCommand {
     required this.priority,
     required this.actions,
     this.alarm = false,
+    this.task,
   }) : super(id);
   final String title;
   final String body;
@@ -71,10 +73,14 @@ class ShowPush extends PushCommand {
 
   /// rings like an alarm (D22)
   final bool alarm;
+
+  /// the task a reminder is about: this phone may already be ringing for it by itself
+  final String? task;
 }
 
 class ClearPush extends PushCommand {
-  const ClearPush(super.id);
+  const ClearPush(super.id, {this.task});
+  final String? task;
 }
 
 /// Stable 31-bit id for Android's notification manager (FNV-1a), the same in every isolate and app run.
@@ -91,15 +97,23 @@ int notificationIntId(String id) {
 abstract interface class NotificationShade {
   Future<void> show(ShowPush p);
   Future<void> cancel(String id);
+
+  /// This phone rings, just rang or is about to ring for this task by itself.
+  Future<bool> ringsFor(String task);
+
+  /// Done or dismissed elsewhere: stop ringing for it here.
+  Future<void> stopRinging(String task);
 }
 
 /// One notification per ORVYN notification; a dismiss or read anywhere removes it here too.
 Future<void> handlePush(Map<String, dynamic> data, NotificationShade shade) async {
   switch (PushCommand.parse(data)) {
     case final ShowPush p:
+      if (p.alarm && p.task != null && await shade.ringsFor(p.task!)) return;
       await shade.show(p);
     case final ClearPush c:
       await shade.cancel(c.id);
+      if (c.task != null) await shade.stopRinging(c.task!);
     case null:
       break;
   }
@@ -111,6 +125,9 @@ abstract interface class Pusher {
 
   /// Taps on this phone's notifications while the app runs: {id, url, action}
   Stream<Map<String, dynamic>> get taps;
+
+  /// The tap that opened the app from closed, once.
+  Map<String, dynamic>? takeLaunch();
   Future<void> init();
 
   /// Where push reaches this phone: its Firebase Installation ID (Firebase's current method), or — on a phone
@@ -139,6 +156,8 @@ class NoPush implements Pusher {
   bool get ready => false;
   @override
   Stream<Map<String, dynamic>> get taps => const Stream.empty();
+  @override
+  Map<String, dynamic>? takeLaunch() => null;
   @override
   Future<void> init() async {}
   @override

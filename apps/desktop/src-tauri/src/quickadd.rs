@@ -71,14 +71,10 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-pub fn local_day() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
-}
-
-fn mutation(hlc: &Mutex<Hlc>, entity: &str, id: &str, fields: Map<String, Value>) -> Value {
+pub fn mutation(hlc: &Mutex<Hlc>, mutation_id: &str, entity: &str, id: &str, fields: Map<String, Value>) -> Value {
     let stamp = hlc.lock().map(|mut h| h.tick(now_ms())).unwrap_or_default();
     json!({
-        "mutationId": uuid::Uuid::now_v7().to_string(),
+        "mutationId": mutation_id,
         "entity": entity,
         "entityId": id,
         "op": "upsert",
@@ -88,35 +84,10 @@ fn mutation(hlc: &Mutex<Hlc>, entity: &str, id: &str, fields: Map<String, Value>
 }
 
 /// Parse, then save. Returns the title that was saved. An unknown @project is created on the way (as everywhere).
-pub async fn add(client: &Client, text: &str, hlc: &Mutex<Hlc>, fallback_day: &str) -> Result<String, ApiError> {
-    let parsed: Value = client
-        .call(reqwest::Method::POST, "/today/parse", Some(json!({ "text": text })))
-        .await?;
-    let mut fields = task_fields(&parsed, fallback_day);
-    let mut mutations = vec![];
-    if let (Value::Null, Value::String(name)) = (&parsed["projectId"], &parsed["projectName"]) {
-        let pid = uuid::Uuid::now_v7().to_string();
-        let mut p = Map::new();
-        p.insert("name".into(), json!(name));
-        mutations.push(mutation(hlc, "today.project", &pid, p));
-        fields.insert("projectId".into(), json!(pid));
-    }
-    let title = fields["title"].as_str().unwrap_or(text).to_owned();
-    mutations.push(mutation(hlc, "today.task", &uuid::Uuid::now_v7().to_string(), fields));
-    let r: Value = client
-        .call(
-            reqwest::Method::POST,
-            "/sync/push",
-            Some(json!({ "mutations": mutations })),
-        )
-        .await?;
-    if let Some(reason) = r["rejected"].get(0).and_then(|x| x["reason"].as_str()) {
-        return Err(ApiError::Http {
-            status: 422,
-            code: reason.to_owned(),
-        });
-    }
-    Ok(title)
+pub async fn add(client: &Client, text: &str, hlc: &Mutex<Hlc>) -> Result<String, ApiError> {
+    crate::capture::Kept::new(crate::capture::Kind::Task, text, now_ms() as i64)
+        .save(client, hlc)
+        .await
 }
 
 /// Shortcuts the person can pick from the tray (none is forced: "Off" is a choice too).
@@ -130,6 +101,9 @@ pub struct Prefs {
     /// My Day on this PC; on until switched off
     #[serde(default)]
     pub track: Option<bool>,
+    /// where JobOS is, once chosen
+    #[serde(default)]
+    pub jobos: Option<std::path::PathBuf>,
 }
 
 impl Prefs {
@@ -212,6 +186,7 @@ mod tests {
         Prefs {
             quick_add_shortcut: Some("Alt+Shift+T".into()),
             track: None,
+            jobos: None,
         }
         .save(&path)
         .unwrap();
@@ -219,6 +194,7 @@ mod tests {
         Prefs {
             quick_add_shortcut: Some(String::new()),
             track: None,
+            jobos: None,
         }
         .save(&path)
         .unwrap();

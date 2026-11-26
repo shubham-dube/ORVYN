@@ -12,13 +12,35 @@ export interface PushPayload {
   module?: string;
   priority?: string;
   alarm?: boolean;
-  actions?: { id: string; label: string; open?: string }[];
+  actions?: { id: string; label: string; open?: string; reply?: { placeholder: string } }[];
+  /** the task a reminder is about */
+  task?: string;
+}
+
+const PUSH_BYTES = 3400;
+const size = (p: PushPayload) => Buffer.byteLength(JSON.stringify(p));
+/** Push services take 4 KB, and Hindi is three bytes a letter: a long body is cut, never the whole push lost. */
+export function fit(p: PushPayload): PushPayload {
+  let out = p;
+  while (size(out) > PUSH_BYTES && (out.body?.length ?? 0) > 0)
+    out = {
+      ...out,
+      body:
+        [...out.body!].slice(0, Math.floor([...out.body!].length * 0.8) - 1).join('') +
+        (out.body!.length > 8 ? '…' : ''),
+      ...(out.body!.length <= 8 ? { body: '' } : {}),
+    };
+  if (size(out) > PUSH_BYTES) out = { ...out, actions: [] };
+  return out;
 }
 
 export type SendOutcome = 'sent' | 'gone' | 'failed' | 'skipped';
 /** What happened, with the push service's own words when it refused (shown in delivery checks). */
-export type SendResult = SendOutcome | { outcome: SendOutcome; detail: string };
-export const outcomeOf = (r: SendResult) => (typeof r === 'string' ? { outcome: r, detail: '' } : r);
+export type SendResult = SendOutcome | { outcome: SendOutcome; detail: string; again?: boolean };
+/** down or busy: worth another try */
+const passing = (status: number | undefined) => !status || status === 429 || status >= 500;
+export const outcomeOf = (r: SendResult) =>
+  typeof r === 'string' ? { outcome: r, detail: '', again: false } : { again: false, ...r };
 
 export interface PushTargetRef {
   channel: 'webpush' | 'fcm';
@@ -70,7 +92,8 @@ export class LivePushSender implements PushSender {
   }
 
   async send(t: PushTargetRef, payload: PushPayload): Promise<SendResult> {
-    return t.channel === 'webpush' ? this.webpush(t, payload) : this.fcmSend(t, payload);
+    const p = fit(payload);
+    return t.channel === 'webpush' ? this.webpush(t, p) : this.fcmSend(t, p);
   }
 
   private async webpush(t: PushTargetRef, payload: PushPayload): Promise<SendResult> {
@@ -80,6 +103,7 @@ export class LivePushSender implements PushSender {
     try {
       await webpush.sendNotification({ endpoint: t.address, keys: t.keys }, JSON.stringify(payload), {
         TTL: 24 * 3600,
+        timeout: 15_000,
         urgency: payload.priority === 'urgent' || payload.priority === 'high' ? 'high' : 'normal',
         topic: payload.id.replace(/-/g, '').slice(0, 32), // a later push for the same notification replaces it
       });
@@ -90,7 +114,7 @@ export class LivePushSender implements PushSender {
       if (err.statusCode === 404 || err.statusCode === 410)
         return { outcome: 'gone', detail: 'this browser’s subscription expired' };
       this.log.warn(`web push failed: ${detail}`);
-      return { outcome: 'failed', detail };
+      return { outcome: 'failed', detail, again: passing(err.statusCode) };
     }
   }
 
@@ -103,6 +127,7 @@ export class LivePushSender implements PushSender {
       return {
         outcome: 'failed',
         detail: `Google sign-in for FCM failed: ${(e as Error).message.slice(0, 160)}`,
+        again: true,
       };
     }
     const data: Record<string, string> = Object.fromEntries(
@@ -115,18 +140,25 @@ export class LivePushSender implements PushSender {
         message: {
           ...(t.format === 'fid' ? { fid: t.address } : { token: t.address }),
           data,
-          android: { priority: 'high' },
+          // high is for what is shown at once: Android slows down an app that uses it for silent clears
+          android: { priority: payload.type === 'notify' ? 'high' : 'normal', ttl: '86400s' },
         },
       }),
+      signal: AbortSignal.timeout(15_000),
     });
     if (res.ok) return 'sent';
     const text = await res.text().catch(() => '');
-    if ((res.status === 404 || res.status === 400) && /UNREGISTERED|INVALID_ARGUMENT/.test(text))
+    // a 400 about the message itself says nothing about the phone
+    if (
+      /UNREGISTERED|SENDER_ID_MISMATCH/.test(text) ||
+      res.status === 404 ||
+      (res.status === 400 && /registration token|\bfid\b|installation/i.test(text))
+    )
       return {
         outcome: 'gone',
         detail: 'this phone’s push token is no longer valid; open the app to renew it',
       };
     this.log.warn(`fcm failed: ${res.status} ${text.slice(0, 200)}`);
-    return { outcome: 'failed', detail: `${res.status} ${text.slice(0, 200)}` };
+    return { outcome: 'failed', detail: `${res.status} ${text.slice(0, 200)}`, again: passing(res.status) };
   }
 }

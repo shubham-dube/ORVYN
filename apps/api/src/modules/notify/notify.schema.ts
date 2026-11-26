@@ -35,7 +35,7 @@ export const notifications = pgTable(
     /** hard notifications come back until acknowledged (D22) */
     repeatEveryMin: integer('repeat_every_min'),
     repeatLeft: integer('repeat_left').notNull().default(0),
-    /** What it is about, for actions (e.g. "today.task:<id>"). Never shown, never pushed. */
+    /** What it is about, for actions (e.g. "today.task:<id>"). Never shown; only a task's id is pushed, to my own phone. */
     ref: text('ref'),
     /** Device that caused it (e.g. a new sign-in) — it is not pushed there. */
     sourceDeviceId: uuid('source_device_id'),

@@ -1,3 +1,4 @@
+import '../features/notification_host.dart';
 import '../money/capture.dart';
 import 'home_widget.dart';
 
@@ -67,7 +68,10 @@ class _OrvynAppState extends ConsumerState<OrvynApp> with WidgetsBindingObserver
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Offstage(offstage: locked, child: child),
+                  Offstage(
+                    offstage: locked,
+                    child: NotificationHost(child: child ?? const SizedBox()),
+                  ),
                   if (locked) const _LockScreen(),
                 ],
               ),

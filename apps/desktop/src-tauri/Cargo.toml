@@ -37,16 +37,19 @@ rand = "0.8"
 url = "2"
 thiserror = "2"
 argon2 = "0.5"
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 chacha20poly1305 = "0.10"
 portable-pty = "0.9"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 keyring = { version = "3", features = ["windows-native", "apple-native", "sync-secret-service"] }
 
 [target.'cfg(windows)'.dependencies]
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+rfd = { version = "0.15", default-features = false }
 windows = { version = "0.61", features = [
   "Data_Xml_Dom", "Foundation", "Foundation_Collections", "UI_Notifications",
-  "Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant",
-  "Win32_System_LibraryLoader", "Win32_System_Registry", "Win32_System_StationsAndDesktops",
+  "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Variant",
+  "Win32_System_Diagnostics_ToolHelp", "Win32_System_LibraryLoader", "Win32_System_Power", "Win32_System_Registry", "Win32_System_Shutdown", "Win32_System_StationsAndDesktops",
   "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }

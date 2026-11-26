@@ -45,11 +45,13 @@ class NotificationsController extends Notifier<List<NotificationView>> {
 
   void _onMessage(Map<String, dynamic> m) {
     switch (m['type']) {
+      case 'hello': // what came, or went, while the connection was down
+        unawaited(load());
       case 'notify.new':
         final n = NotificationView.fromJson(m['notification'] as Map<String, dynamic>);
-        if (state.any((x) => x.id == n.id)) return;
-        state = [n, ...state];
-        ref.read(arrivalsProvider).add(n);
+        // the same one may speak again (a second chat message, a reminder that repeats)
+        state = [n, ...state.where((x) => x.id != n.id)];
+        if (!n.silent) ref.read(arrivalsProvider).add(n);
       case 'notify.read':
         state = [for (final n in state) n.id == m['id'] ? n.markRead() : n];
         unawaited(ref.read(pusherProvider).clear(m['id'] as String));

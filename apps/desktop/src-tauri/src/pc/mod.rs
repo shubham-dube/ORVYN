@@ -1,6 +1,7 @@
 //! This PC from a phone or browser (spec 0021 step 3, ADR-0019). A session: the other side names a pairing, this PC
 //! answers with a fresh random half of the session's name, and from then on every message is encrypted and numbered.
 //! The first one must be the PIN. Nothing runs before that.
+pub mod deck;
 pub mod pairs;
 pub mod seal;
 pub mod term;
@@ -14,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::{mpsc, Notify};
 
+use deck::Hands;
 use pairs::{Pairs, Pin};
 use seal::{b64, random, Channel};
 use term::Terms;
@@ -43,6 +45,8 @@ pub enum Event {
     Opened(String),
     WrongPin(String),
     Locked(String),
+    /// what I waited for in this terminal has ended
+    Done(String),
     /// how many sessions are open now
     Sessions(usize),
 }
@@ -81,6 +85,10 @@ enum Ask {
         cols: u16,
         rows: u16,
     },
+    Watch {
+        id: String,
+        on: bool,
+    },
     Ack {
         id: String,
         end: u64,
@@ -88,8 +96,47 @@ enum Ask {
     Close {
         id: String,
     },
+    /// volume and so on, as they are now
+    Deck,
+    Do {
+        what: String,
+        #[serde(default)]
+        v: Option<u8>,
+    },
+    Open {
+        url: String,
+    },
+    /// read it, or set it
+    Clip {
+        #[serde(default)]
+        text: Option<String>,
+    },
+    Shot,
+    Files {
+        #[serde(default)]
+        path: Option<String>,
+    },
+    Get {
+        path: String,
+    },
+    /// parts of a file or picture that arrived
+    Got {
+        id: u64,
+        n: usize,
+    },
     Bye,
 }
+
+/// A file or a picture on its way, part by part.
+struct Blob {
+    id: u64,
+    bytes: Vec<u8>,
+    sent: usize,
+    got: usize,
+}
+
+const PART: usize = 24 * 1024;
+const PARTS_WAITING: usize = 4;
 
 struct View {
     sent: u64,
@@ -105,6 +152,8 @@ struct Session {
     /// the last thing a person did
     active: i64,
     views: HashMap<String, View>,
+    blob: Option<Blob>,
+    blobs: u64,
 }
 
 struct Inner {
@@ -119,6 +168,7 @@ pub struct Remote {
     out: mpsc::UnboundedSender<Frame>,
     tell: Box<dyn Fn(Event) + Send + Sync>,
     log: PathBuf,
+    hands: Box<dyn Hands>,
     pub pc_name: String,
     clock: Box<dyn Fn() -> i64 + Send + Sync>,
 }
@@ -131,6 +181,7 @@ impl Remote {
         out: mpsc::UnboundedSender<Frame>,
         tell: Box<dyn Fn(Event) + Send + Sync>,
         clock: Box<dyn Fn() -> i64 + Send + Sync>,
+        hands: Box<dyn Hands>,
     ) -> Arc<Self> {
         let wake = Arc::new(Notify::new());
         let w = wake.clone();
@@ -144,6 +195,7 @@ impl Remote {
             out,
             tell,
             log,
+            hands,
             pc_name,
             clock,
         })
@@ -289,6 +341,8 @@ impl Remote {
                 ok: false,
                 active: now,
                 views: HashMap::new(),
+                blob: None,
+                blobs: 0,
             },
         );
         self.send(from, s, format!("r.{mine}"));
@@ -343,7 +397,7 @@ impl Remote {
             }
             return;
         }
-        if !matches!(ask, Ask::Ack { .. } | Ask::Ping) {
+        if !matches!(ask, Ask::Ack { .. } | Ask::Got { .. } | Ask::Ping) {
             x.active = now;
         }
         match ask {
@@ -393,6 +447,12 @@ impl Remote {
                     t.resize(cols, rows);
                 }
             }
+            Ask::Watch { id, on } => {
+                if let Some(t) = self.terms.get(&id) {
+                    t.set_watch(on);
+                }
+                self.tell_terms(i);
+            }
             Ask::Ack { id, end } => {
                 if let Some(v) = x.views.get_mut(&id) {
                     v.acked = end.min(v.sent).max(v.acked);
@@ -406,9 +466,127 @@ impl Remote {
                     self.say(x, s, &m);
                 }
             }
+            Ask::Got { id, n } => {
+                if let Some(b) = x.blob.as_mut().filter(|b| b.id == id) {
+                    b.got = n.min(b.sent).max(b.got);
+                    if b.got * PART >= b.bytes.len() {
+                        x.blob = None;
+                    }
+                }
+            }
             Ask::Bye => self.end(i, s, "ended"),
+            other => {
+                let (answer, note) = self.deck(x, other);
+                self.say(x, s, &answer);
+                if let Some(what) = note {
+                    let who = i.pairs.name(&i.sessions[s].pair).unwrap_or_default();
+                    self.write_log(&format!("{who}: {what}"));
+                }
+            }
         }
         self.wake.notify_one();
+    }
+
+    /// The answer, and what the log says.
+    fn deck(&self, x: &mut Session, ask: Ask) -> (serde_json::Value, Option<String>) {
+        let state = || json!({ "t": "deck", "sound": self.hands.sound() });
+        let failed = |e: String| json!({ "t": "error", "text": e });
+        let done = |r: Result<(), String>, what: &str| match r {
+            Ok(()) => (json!({ "t": "did", "what": what }), Some(what.to_owned())),
+            Err(e) => (failed(e), None),
+        };
+        match ask {
+            Ask::Do { what, v } => {
+                let r = match what.as_str() {
+                    "lock" => return done(self.hands.lock(), "lock"),
+                    "sleep" => return done(self.hands.sleep(), "sleep"),
+                    "mute" => self.hands.set_sound(None, Some(v != Some(0))),
+                    "volume" => self.hands.set_sound(v, None),
+                    _ => Err("This PC doesn’t know that".into()),
+                };
+                (r.map_or_else(failed, |_| state()), None)
+            }
+            Ask::Open { url } => match deck::web_link(&url) {
+                Ok(u) => done(self.hands.open(&u), "open"),
+                Err(e) => (failed(e), None),
+            },
+            Ask::Clip { text: Some(t) } if t.len() > deck::CLIP_MAX => (failed("That is too long".into()), None),
+            Ask::Clip { text: Some(t) } => done(self.hands.set_clip(&t), "clipboard set"),
+            Ask::Clip { text: None } => match self.hands.clip() {
+                Ok(t) => {
+                    let t: String = t.chars().take(deck::CLIP_MAX / 4).collect();
+                    (json!({ "t": "clip", "text": t }), Some("clipboard read".into()))
+                }
+                Err(e) => (failed(e), None),
+            },
+            Ask::Shot => match self.hands.shot() {
+                Ok(b) => (
+                    Self::start_blob(x, "screen.jpg", b),
+                    Some("looked at the screen".into()),
+                ),
+                Err(e) => (failed(e), None),
+            },
+            Ask::Files { path } => {
+                let p = path.map(PathBuf::from).unwrap_or_else(deck::home);
+                match deck::list(&p) {
+                    Ok((mut all, mut cut)) => {
+                        let parent = p.parent().map(|q| q.to_string_lossy().into_owned());
+                        // one message is at most 64 KB
+                        while serde_json::to_string(&all).map_or(0, |t| t.len()) > 32 * 1024 {
+                            all.truncate(all.len() * 3 / 4);
+                            cut = true;
+                        }
+                        (
+                            json!({ "t": "files", "path": p.to_string_lossy(), "parent": parent, "list": all, "cut": cut }),
+                            None,
+                        )
+                    }
+                    Err(e) => (failed(e), None),
+                }
+            }
+            Ask::Get { path } => {
+                let p = PathBuf::from(&path);
+                let name = p.file_name().map(|n| n.to_string_lossy().into_owned());
+                match deck::read(&p) {
+                    Ok(b) => (
+                        Self::start_blob(x, name.as_deref().unwrap_or("file"), b),
+                        Some(format!("fetched {path}")),
+                    ),
+                    Err(e) => (failed(e), None),
+                }
+            }
+            _ => (state(), None),
+        }
+    }
+
+    /// The newest wins: asking again drops what was on its way.
+    fn start_blob(x: &mut Session, name: &str, bytes: Vec<u8>) -> serde_json::Value {
+        x.blobs += 1;
+        let m = json!({ "t": "blob", "id": x.blobs, "name": name, "size": bytes.len(), "part": PART });
+        x.blob = (!bytes.is_empty()).then_some(Blob {
+            id: x.blobs,
+            bytes,
+            sent: 0,
+            got: 0,
+        });
+        m
+    }
+
+    fn tell_terms(&self, i: &mut Inner) {
+        let m = json!({ "t": "terms", "terms": self.terms.list() });
+        for (s, x) in i.sessions.iter_mut().filter(|(_, x)| x.ok) {
+            self.say(x, s, &m);
+        }
+    }
+
+    fn look(&self) {
+        let done = self.terms.ended();
+        if !done.is_empty() {
+            self.tell_terms(&mut self.inner.lock().unwrap());
+        }
+        for id in done {
+            (self.tell)(Event::Done(id));
+        }
     }
 
     fn say(&self, x: &mut Session, s: &str, m: &serde_json::Value) {
@@ -433,6 +611,7 @@ impl Remote {
     /// Sends what is new, gathered for a moment, and ends what is idle.
     pub async fn run(self: Arc<Self>) {
         let mut tick = tokio::time::interval(Duration::from_secs(10));
+        let mut look = tokio::time::interval(Duration::from_secs(2));
         loop {
             tokio::select! {
                 _ = self.wake.notified() => {
@@ -440,6 +619,7 @@ impl Remote {
                     tokio::time::sleep(Duration::from_millis(25)).await;
                 }
                 _ = tick.tick() => self.sweep(),
+                _ = look.tick() => self.look(),
             }
         }
     }
@@ -470,6 +650,15 @@ impl Remote {
                 if let (false, Some(code)) = (v.told_exit || v.sent < ring.end(), t.exit()) {
                     v.told_exit = true;
                     say.push(json!({ "t": "exit", "id": id, "code": code }));
+                }
+            }
+            if let Some(b) = x.blob.as_mut() {
+                let from = b.sent * PART;
+                if from < b.bytes.len() && b.sent - b.got < PARTS_WAITING {
+                    let to = (from + PART).min(b.bytes.len());
+                    say.push(json!({ "t": "part", "id": b.id, "n": b.sent, "d": seal::b64(&b.bytes[from..to]) }));
+                    b.sent += 1;
+                    more |= b.sent - b.got < PARTS_WAITING;
                 }
             }
             for m in say {
@@ -503,6 +692,39 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicI64, Ordering};
 
+    #[derive(Default)]
+    pub struct FakeHands(Mutex<Vec<String>>);
+    impl Hands for FakeHands {
+        fn sound(&self) -> Option<deck::Sound> {
+            Some(deck::Sound {
+                volume: 40,
+                muted: false,
+            })
+        }
+        fn set_sound(&self, v: Option<u8>, m: Option<bool>) -> Result<(), String> {
+            self.0.lock().unwrap().push(format!("{v:?} {m:?}"));
+            Ok(())
+        }
+        fn lock(&self) -> Result<(), String> {
+            Ok(())
+        }
+        fn sleep(&self) -> Result<(), String> {
+            Err("not now".into())
+        }
+        fn open(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn clip(&self) -> Result<String, String> {
+            Ok("from the PC".into())
+        }
+        fn set_clip(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn shot(&self) -> Result<Vec<u8>, String> {
+            Ok((0..200_000u32).map(|i| i as u8).collect())
+        }
+    }
+
     struct Pc {
         remote: Arc<Remote>,
         out: mpsc::UnboundedReceiver<Frame>,
@@ -525,6 +747,7 @@ mod tests {
             tx,
             Box::new(move |e| ev.lock().unwrap().push(e)),
             Box::new(move || n.load(Ordering::Relaxed)),
+            Box::<FakeHands>::default(),
         );
         remote.set_pin("826193").unwrap();
         remote.set_on(true).unwrap();
@@ -734,6 +957,62 @@ mod tests {
         assert!(!later.contains("first-2") || later.contains("second-3"));
         let r = t.ask(&mut q, json!({ "t": "close", "id": id }));
         assert!(r.iter().any(|m| m["t"] == "terms" && m["terms"] == json!([])));
+    }
+
+    #[test]
+    fn the_deck_answers_after_the_pin_and_refuses_what_is_not_a_link() {
+        let mut t = pc("deck");
+        let mut p = t.signed_in();
+        assert_eq!(t.ask(&mut p, json!({ "t": "deck" }))[0]["sound"]["volume"], 40);
+        assert_eq!(t.ask(&mut p, json!({ "t": "do", "what": "lock" }))[0]["t"], "did");
+        assert_eq!(
+            t.ask(&mut p, json!({ "t": "do", "what": "sleep" }))[0]["text"],
+            "not now"
+        );
+        assert_eq!(t.ask(&mut p, json!({ "t": "do", "what": "format" }))[0]["t"], "error");
+        assert_eq!(
+            t.ask(&mut p, json!({ "t": "open", "url": "calc.exe" }))[0]["t"],
+            "error"
+        );
+        assert_eq!(t.ask(&mut p, json!({ "t": "clip" }))[0]["text"], "from the PC");
+        assert_eq!(t.ask(&mut p, json!({ "t": "clip", "text": "x" }))[0]["t"], "did");
+        let long = "x".repeat(deck::CLIP_MAX + 1);
+        assert_eq!(t.ask(&mut p, json!({ "t": "clip", "text": long }))[0]["t"], "error");
+        assert_eq!(t.ask(&mut p, json!({ "t": "files" }))[0]["t"], "files");
+        let log = t.remote.last_log(99).join("\n");
+        assert!(log.contains("Pixel: lock") && log.contains("clipboard read") && !log.contains("from the PC"));
+    }
+
+    #[test]
+    fn a_picture_arrives_whole_part_by_part_and_waits_for_the_other_side() {
+        let mut t = pc("blob");
+        let mut p = t.signed_in();
+        let head = t.ask(&mut p, json!({ "t": "shot" }));
+        assert_eq!(
+            (head[0]["t"].as_str(), head[0]["size"].as_u64()),
+            (Some("blob"), Some(200_000))
+        );
+        let mut all = vec![];
+        for _ in 0..20 {
+            t.remote.pump();
+        }
+        let first = t.read(&mut p);
+        assert_eq!(first.len(), PARTS_WAITING);
+        let mut parts = first;
+        while !parts.is_empty() {
+            let mut n = 0;
+            for m in &parts {
+                assert_eq!(m["n"].as_u64().unwrap() as usize * PART, all.len());
+                all.extend(unb64(m["d"].as_str().unwrap()).unwrap());
+                n = m["n"].as_u64().unwrap() + 1;
+            }
+            t.ask(&mut p, json!({ "t": "got", "id": 1, "n": n }));
+            for _ in 0..9 {
+                t.remote.pump();
+            }
+            parts = t.read(&mut p);
+        }
+        assert_eq!(all, FakeHands::default().shot().unwrap());
     }
 
     #[test]

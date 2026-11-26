@@ -143,4 +143,47 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
     await finish(tester);
   });
+
+  testWidgets(
+    'a tap that opened ORVYN from closed, buttons that open, links outside, and one that speaks again (0023)',
+    (tester) async {
+      final h = AppHarness()..signedInAs(userJson(ent: ['today', 'money']));
+      for (final id in ['l1', 'b1', 'x1']) {
+        h.server.on('POST /notifications/$id/read', (_) => {'ok': true});
+      }
+      h.pusher.launch = {'id': 'l1', 'url': '/settings#security', 'action': null};
+      await h.pump(tester);
+      await settle(tester);
+      expect(find.text('Security & devices'), findsWidgets);
+
+      // "Open Money" opens Money; nothing is sent as an action
+      h.pusher.tapController.add({
+        'id': 'b1',
+        'url': '/',
+        'action': 'open',
+        'open': {'open': '/money'},
+      });
+      await settle(tester);
+      expect(h.server.calls.any((r) => r.path.contains('/actions/')), isFalse);
+
+      // the same chat writes twice: one entry, the newest words, and it shows again
+      Map<String, dynamic> chat(String body, {bool silent = false}) => {
+        ...notificationJson('c1', 'Ravi', body: body, module: 'chat'),
+        'silent': silent,
+      };
+      h.sockets.push({'type': 'notify.new', 'notification': chat('Hello')});
+      await settle(tester);
+      h.sockets.push({'type': 'notify.new', 'notification': chat('Are you there?')});
+      await settle(tester);
+      expect(find.text('Are you there?'), findsOneWidget); // popped up again
+      await tester.pump(const Duration(seconds: 7));
+      h.sockets.push({'type': 'notify.new', 'notification': chat('Quiet now', silent: true)});
+      await settle(tester);
+      expect(find.text('Quiet now'), findsNothing); // in the inbox only
+      await tester.tap(find.bySemanticsLabel(RegExp('Notifications, 1 unread')));
+      await settle(tester);
+      expect(find.text('Quiet now'), findsOneWidget);
+      await finish(tester);
+    },
+  );
 }

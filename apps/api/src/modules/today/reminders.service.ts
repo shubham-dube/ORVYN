@@ -450,9 +450,22 @@ export class RemindersService implements OnModuleInit, OnModuleDestroy {
         // the task itself doesn't move; the reminder comes back in 10 minutes
         const moment = t.dueAt ?? t.scheduledStart;
         const jobId = `rem-${taskId}-${this.now() + 10 * 60_000}-snooze`;
+        // what rang rings again
+        const via: ReminderWay[] | undefined = e.notification.alarm
+          ? ['alarm']
+          : e.notification.priority === 'urgent'
+            ? ['urgent']
+            : undefined;
         await this.queue.add(
           'remind',
-          { kind: 'remind', ownerId: e.ownerId, taskId, momentMs: moment?.getTime() ?? 0, snoozed: true },
+          {
+            kind: 'remind',
+            ownerId: e.ownerId,
+            taskId,
+            momentMs: moment?.getTime() ?? 0,
+            snoozed: true,
+            via,
+          },
           { jobId, delay: 10 * 60_000 },
         );
         await this.redis.sadd(`today:rem:${taskId}`, jobId);

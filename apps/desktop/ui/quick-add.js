@@ -32,7 +32,7 @@
     say('Adding…');
     try {
       const title = await invoke('quick_add', { text: input.value });
-      say(`Added to Today: ${title}`, 'ok');
+      say(title, 'ok');
       input.value = '';
       setTimeout(() => invoke('quick_add_hide'), 900);
     } catch (err) {

@@ -120,6 +120,62 @@ pub struct TermView {
     pub name: String,
     pub since: i64,
     pub exit: Option<u32>,
+    /// tells me when what runs in it ends
+    pub watch: bool,
+}
+
+/// "Tell me when done": whether something ran since it was asked, and for how many looks nothing has.
+#[derive(Default)]
+struct Watch {
+    ran: bool,
+    quiet: u8,
+}
+
+impl Watch {
+    /// True once, when it has ended. A moment between two steps of a build is not the end.
+    fn look(&mut self, busy: bool) -> bool {
+        if busy {
+            (self.ran, self.quiet) = (true, 0);
+            return false;
+        }
+        self.quiet = self.quiet.saturating_add(1);
+        self.ran && self.quiet >= 3
+    }
+}
+
+/// Every process and its parent, but not the consoles themselves.
+#[cfg(windows)]
+pub fn children() -> Vec<u32> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    };
+    let mut all = vec![];
+    unsafe {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
+            return all;
+        };
+        let mut e = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        let mut more = Process32FirstW(snap, &mut e).is_ok();
+        while more {
+            let end = e.szExeFile.iter().position(|c| *c == 0).unwrap_or(e.szExeFile.len());
+            let name = String::from_utf16_lossy(&e.szExeFile[..end]).to_lowercase();
+            if name != "conhost.exe" && name != "openconsole.exe" {
+                all.push(e.th32ParentProcessID);
+            }
+            more = Process32NextW(snap, &mut e).is_ok();
+        }
+        let _ = CloseHandle(snap);
+    }
+    all
+}
+
+#[cfg(not(windows))]
+pub fn children() -> Vec<u32> {
+    vec![]
 }
 
 pub struct Term {
@@ -128,6 +184,8 @@ pub struct Term {
     since: i64,
     pub ring: Mutex<Ring>,
     exit: Mutex<Option<u32>>,
+    pid: Option<u32>,
+    watch: Mutex<Option<Watch>>,
     input: mpsc::Sender<Vec<u8>>,
     master: Mutex<Option<Box<dyn MasterPty + Send>>>,
     killer: Mutex<Box<dyn ChildKiller + Send + Sync>>,
@@ -140,10 +198,14 @@ impl Term {
             name: self.name.clone(),
             since: self.since,
             exit: *self.exit.lock().unwrap(),
+            watch: self.watch.lock().unwrap().is_some(),
         }
     }
     pub fn exit(&self) -> Option<u32> {
         *self.exit.lock().unwrap()
+    }
+    pub fn set_watch(&self, on: bool) {
+        *self.watch.lock().unwrap() = on.then(Watch::default);
     }
     pub fn type_in(&self, s: &str) {
         let _ = self.input.send(s.as_bytes().to_vec());
@@ -220,6 +282,8 @@ impl Terms {
             since: now,
             ring: Mutex::default(),
             exit: Mutex::new(None),
+            pid: child.process_id(),
+            watch: Mutex::new(None),
             input: input.clone(),
             master: Mutex::new(Some(pair.master)),
             killer: Mutex::new(child.clone_killer()),
@@ -267,6 +331,26 @@ impl Terms {
         Ok(term)
     }
 
+    /// Those that were watched and have ended, each once.
+    pub fn ended(&self) -> Vec<String> {
+        let list: Vec<_> = self.list.lock().unwrap().clone();
+        let watched: Vec<_> = list.into_iter().filter(|t| t.watch.lock().unwrap().is_some()).collect();
+        if watched.is_empty() {
+            return vec![]; // looking costs nothing when nobody waits
+        }
+        let parents = children();
+        let mut done = vec![];
+        for t in watched {
+            let busy = t.pid.is_some_and(|p| parents.contains(&p));
+            let mut w = t.watch.lock().unwrap();
+            if t.exit().is_some() || w.as_mut().is_some_and(|w| w.look(busy)) {
+                *w = None;
+                done.push(t.id.clone());
+            }
+        }
+        done
+    }
+
     pub fn close(&self, id: &str) {
         let mut list = self.list.lock().unwrap();
         if let Some(i) = list.iter().position(|t| t.id == id) {
@@ -301,6 +385,38 @@ mod tests {
         r.push(b"x"); // now the oldest byte kept is half a character
         assert_eq!(r.read(0, 3).0, "é");
         assert_eq!(r.read(r.end(), 5), (String::new(), r.end(), r.end()));
+    }
+
+    #[test]
+    fn done_means_something_ran_and_then_nothing_for_a_while() {
+        let mut w = Watch::default();
+        assert!(!(0..9).any(|_| w.look(false))); // asked before starting it
+        assert!(!w.look(true) && !w.look(false) && !w.look(false) && !w.look(true));
+        assert!(!w.look(false) && !w.look(false) && w.look(false));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_watched_command_says_when_it_ends_once() {
+        let terms = Terms::new(Arc::new(|| ()));
+        let t = terms.start(Some("cmd"), 80, 24, 0).unwrap();
+        t.set_watch(true);
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(terms.ended().is_empty());
+        t.type_in("ping -n 4 127.0.0.1\r");
+        let mut looks = 0;
+        let done = loop {
+            std::thread::sleep(Duration::from_millis(300));
+            let d = terms.ended();
+            looks += 1;
+            if !d.is_empty() || looks > 60 {
+                break d;
+            }
+        };
+        assert_eq!(done, vec![t.id.clone()]);
+        assert!(looks > 5, "{looks}"); // not while it ran
+        assert!(!t.view().watch && terms.ended().is_empty());
+        terms.close_all();
     }
 
     #[test]

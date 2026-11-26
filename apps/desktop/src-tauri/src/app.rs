@@ -13,13 +13,15 @@ use tokio::sync::{mpsc, Mutex};
 
 use crate::activity::{Queue, Sample, Tracker};
 use crate::api::{ApiError, Client, DeviceInfo};
+use crate::capture::{self, Kept, Kind, Typed, Waiting};
+use crate::jobos::{self, JobOs};
 use crate::live::{self, LiveEvent, Notification, ServerMessage};
 use crate::loopback::Loopback;
 use crate::notify::{self, Choice, Shown};
 use crate::pc::pairs::{KeyringKeys, Pairs};
 use crate::pc::{Event as PcEvent, Remote};
 use crate::pkce::Pkce;
-use crate::quickadd::{self, Hlc, Prefs, SHORTCUTS};
+use crate::quickadd::{Hlc, Prefs, SHORTCUTS};
 use crate::store::{KeyringStore, MemoryStore, TokenStore};
 use crate::watch::Watcher;
 
@@ -51,6 +53,9 @@ struct State {
     /// this PC from my other devices
     remote: Arc<Remote>,
     outgoing: live::Outgoing,
+    /// typed while offline
+    waiting: Mutex<Waiting>,
+    jobos: Arc<std::sync::Mutex<JobOs>>,
 }
 
 struct Items {
@@ -59,6 +64,7 @@ struct Items {
     test: MenuItem<Wry>,
     /// while a terminal session is open
     end: MenuItem<Wry>,
+    jobos: MenuItem<Wry>,
     track: CheckMenuItem<Wry>,
     pause: CheckMenuItem<Wry>,
     autostart: CheckMenuItem<Wry>,
@@ -159,6 +165,7 @@ pub fn run() {
             let items = Items {
                 status: MenuItem::with_id(h, "status", "Not connected", false, None::<&str>)?,
                 connect: MenuItem::with_id(h, "connect", "Connect to ORVYN…", true, None::<&str>)?,
+                jobos: MenuItem::with_id(h, "jobos-status", "JobOS", false, None::<&str>)?,
                 end: MenuItem::with_id(h, "pc-end", "No terminal session open", false, None::<&str>)?,
                 test: MenuItem::with_id(h, "test", "Send a test notification", false, None::<&str>)?,
                 pause: CheckMenuItem::with_id(h, "pause", "Pause notifications for 1 hour", true, false, None::<&str>)?,
@@ -190,6 +197,15 @@ pub fn run() {
                 .map(|i| i as &dyn tauri::menu::IsMenuItem<Wry>)
                 .collect();
             let shortcut_menu = Submenu::with_items(h, "Quick add shortcut", true, &shortcut_refs)?;
+            let clip = MenuItem::with_id(h, "drop-clip", "Drop the clipboard", true, None::<&str>)?;
+            let snip = MenuItem::with_id(h, "drop-snip", "Drop a snip of the screen", true, None::<&str>)?;
+            let (jo, js, jx, jf) = (
+                MenuItem::with_id(h, "jobos-open", "Open", true, None::<&str>)?,
+                MenuItem::with_id(h, "jobos-start", "Start", true, None::<&str>)?,
+                MenuItem::with_id(h, "jobos-stop", "Stop", true, None::<&str>)?,
+                MenuItem::with_id(h, "jobos-folder", "Choose its folder…", true, None::<&str>)?,
+            );
+            let jobos_menu = Submenu::with_items(h, "JobOS", true, &[&items.jobos, &jo, &js, &jx, &jf])?;
             let quit = MenuItem::with_id(h, "quit", "Quit", true, None::<&str>)?;
             let sep = || PredefinedMenuItem::separator(h);
             let menu = Menu::with_items(
@@ -200,12 +216,15 @@ pub fn run() {
                     &open,
                     &day,
                     &add,
+                    &clip,
+                    &snip,
                     &shortcut_menu,
                     &items.connect,
                     &items.test,
                     &sep()?,
                     &pc,
                     &items.end,
+                    &jobos_menu,
                     &sep()?,
                     &items.track,
                     &items.pause,
@@ -235,6 +254,7 @@ pub fn run() {
                     let _ = pc_events.send(e);
                 }),
                 Box::new(|| chrono::Utc::now().timestamp_millis()),
+                hands(),
             );
             let state = Arc::new(State {
                 shown: std::sync::Mutex::new(Shown::load(&dir.join("shown.json"))),
@@ -243,6 +263,8 @@ pub fn run() {
                 watcher: std::sync::Mutex::new(None),
                 samples,
                 remote: remote.clone(),
+                waiting: Mutex::new(Waiting::load(&dir.join("waiting.json"))),
+                jobos: Arc::default(),
                 outgoing: Arc::new(Mutex::new(outgoing)),
                 client: Arc::new(Client::new(API_URL, store)),
                 live_task: Mutex::new(None),
@@ -379,6 +401,13 @@ fn on_menu(app: AppHandle, id: &str) {
         }
         "pc" => show_pc(&app),
         "pc-end" => s.remote.end_all("ended"),
+        "drop-clip" => {
+            tauri::async_runtime::spawn(drop_clipboard(app.clone(), s, false));
+        }
+        "drop-snip" => {
+            tauri::async_runtime::spawn(drop_clipboard(app.clone(), s, true));
+        }
+        id if id.starts_with("jobos-") => jobos_menu(&app, &s, id),
         "add" => show_quick_add(&app),
         id if id.starts_with("sc:") => set_shortcut(&app, &s, id),
         _ => {}
@@ -436,16 +465,39 @@ async fn quick_add(app: AppHandle, text: String) -> Result<String, String> {
     if !s.client.has_session() {
         return Err("Connect ORVYN first (tray menu)".into());
     }
-    quickadd::add(&s.client, &text, &s.hlc, &quickadd::local_day())
-        .await
-        .map_err(|e| match e {
-            crate::api::ApiError::Offline => "Couldn’t reach ORVYN — check your connection".to_owned(),
+    let (kind, words) = match capture::read(&text) {
+        Some(Typed::Save(k, w)) => (k, w),
+        Some(Typed::Find(q)) => {
+            let q: String = url::form_urlencoded::byte_serialize(q.as_bytes()).collect();
+            let _ = app
+                .opener()
+                .open_url(format!("{WEB_URL}/assistant?q={q}"), None::<&str>);
+            return Ok("Looking in ORVYN".into());
+        }
+        None => return Err("Type something first".into()),
+    };
+    let k = Kept::new(kind, words, chrono::Utc::now().timestamp_millis());
+    match k.save(&s.client, &s.hlc).await {
+        Err(ApiError::Offline) => {
+            if s.waiting.lock().await.add(k) {
+                Ok("Kept here; saved when you’re back online".into())
+            } else {
+                Err("Couldn’t reach ORVYN, or keep it here".into())
+            }
+        }
+        other => other.map_err(|e| match e {
             crate::api::ApiError::SignedOut => "Connect ORVYN again (tray menu)".to_owned(),
             crate::api::ApiError::Http { code, .. } if code == "forbidden" || code.contains("not_enabled") => {
-                "Today isn’t switched on for you".to_owned()
+                match kind {
+                    Kind::Task => "Today isn’t switched on for you".to_owned(),
+                    Kind::Money => "Money isn’t switched on for you".to_owned(),
+                    Kind::Drop => "Drop isn’t switched on for you".to_owned(),
+                }
             }
+            ApiError::Http { code, .. } if code == "no_amount" => "How much? No amount was found".to_owned(),
             _ => "That didn’t save — try again".to_owned(),
-        })
+        }),
+    }
 }
 
 #[tauri::command]
@@ -520,6 +572,7 @@ fn start_live(app: AppHandle, s: Arc<State>) {
             match ev {
                 LiveEvent::Connected => {
                     st.live.store(true, Ordering::Relaxed);
+                    send_waiting(&app, &st).await;
                     catch_up(&app, &st).await;
                 }
                 LiveEvent::Disconnected => {
@@ -560,6 +613,9 @@ const CATCH_UP_MAX: usize = 5;
 #[derive(serde::Deserialize)]
 struct Missed {
     items: Vec<Notification>,
+    /// read or dismissed elsewhere meanwhile
+    #[serde(default)]
+    cleared: Vec<String>,
     until: String,
 }
 
@@ -581,6 +637,9 @@ async fn catch_up(app: &AppHandle, s: &Arc<State>) {
     let Ok(m) = s.client.call::<Missed>(reqwest::Method::GET, &path, None).await else {
         return; // asked again later from the same moment
     };
+    for id in &m.cleared {
+        notify::clear(app, id);
+    }
     let new: Vec<_> = {
         let mut shown = s.shown.lock().unwrap();
         shown.set_since(m.until);
@@ -595,7 +654,7 @@ async fn catch_up(app: &AppHandle, s: &Arc<State>) {
             &note(
                 &format!("{more} more while you were away"),
                 "Open the inbox to see them.",
-                "/notifications",
+                "/",
             ),
         );
     }
@@ -687,6 +746,146 @@ async fn chosen(app: AppHandle, s: Arc<State>, n: Notification, choice: Choice) 
     }
 }
 
+// ---------------------------------------------------------------- quick box, Drop, JobOS
+
+async fn send_waiting(app: &AppHandle, s: &Arc<State>) {
+    let refused = {
+        let mut w = s.waiting.lock().await;
+        if w.is_empty() {
+            return;
+        }
+        w.send(&s.client, &s.hlc).await
+    };
+    for k in refused {
+        toast(app, s, &note("This couldn’t be saved", &k.text, "/"));
+    }
+}
+
+/// What is in the clipboard, or (after Windows' own snip) the picture that lands there.
+async fn drop_clipboard(app: AppHandle, s: Arc<State>, snip: bool) {
+    let say = |t: &str, b: &str| toast(&app, &s, &note(t, b, "/drop"));
+    if !s.client.has_session() {
+        return say("Connect ORVYN first", "From the tray menu.");
+    }
+    let found = if snip {
+        let before = tauri::async_runtime::spawn_blocking(clipboard).await.ok().flatten();
+        let _ = tauri_plugin_opener::open_url("ms-screenclip:", None::<&str>);
+        let mut got = None;
+        for _ in 0..120 {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let now = tauri::async_runtime::spawn_blocking(clipboard).await.ok().flatten();
+            if now != before && matches!(now, Some(Clip::Picture(_))) {
+                got = now;
+                break;
+            }
+        }
+        got
+    } else {
+        tauri::async_runtime::spawn_blocking(clipboard).await.ok().flatten()
+    };
+    let name = chrono::Local::now().format("PC %Y-%m-%d %H.%M.jpg").to_string();
+    match found {
+        Some(Clip::Picture(jpeg)) => match capture::drop_picture(&s.client, &s.hlc, jpeg, &name).await {
+            Ok(()) => say("In Drop", &name),
+            Err(_) => say("The picture couldn’t be dropped", "It is still in your clipboard."),
+        },
+        Some(Clip::Text(t)) => {
+            let k = Kept::new(Kind::Drop, &t, chrono::Utc::now().timestamp_millis());
+            match k.save(&s.client, &s.hlc).await {
+                Ok(_) => say("In Drop", &k.text),
+                Err(ApiError::Offline) if s.waiting.lock().await.add(k.clone()) => {
+                    say("Kept here; dropped when you’re back online", &k.text)
+                }
+                Err(_) => say("That couldn’t be dropped", "It is still in your clipboard."),
+            }
+        }
+        None if snip => {}
+        None => say("Nothing to drop", "Copy some text, a link or a picture first."),
+    }
+}
+
+#[derive(PartialEq)]
+#[cfg_attr(not(windows), allow(dead_code))]
+enum Clip {
+    Text(String),
+    Picture(Vec<u8>),
+}
+
+#[cfg(windows)]
+fn clipboard() -> Option<Clip> {
+    let mut c = arboard::Clipboard::new().ok()?;
+    if let Ok(i) = c.get_image() {
+        let (w, h) = (u32::try_from(i.width).ok()?, u32::try_from(i.height).ok()?);
+        let rgb: Vec<u8> = i
+            .bytes
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2]])
+            .collect();
+        let mut out = vec![];
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 88)
+            .encode(&rgb, w, h, image::ExtendedColorType::Rgb8)
+            .ok()?;
+        return Some(Clip::Picture(out));
+    }
+    c.get_text()
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+        .map(|t| Clip::Text(t.trim().to_owned()))
+}
+
+#[cfg(not(windows))]
+fn clipboard() -> Option<Clip> {
+    None
+}
+
+fn jobos_menu(app: &AppHandle, s: &Arc<State>, id: &str) {
+    let (app, s, id) = (app.clone(), s.clone(), id.to_owned());
+    tauri::async_runtime::spawn_blocking(move || {
+        let say = |t: &str, b: &str| toast(&app, &s, &note(t, b, "/"));
+        let mut prefs = Prefs::load(&s.prefs_path);
+        match id.as_str() {
+            "jobos-open" => {
+                let _ = tauri_plugin_opener::open_url(jobos::WEB, None::<&str>);
+            }
+            "jobos-folder" =>
+            {
+                #[cfg(windows)]
+                if let Some(d) = rfd::FileDialog::new().set_title("Where is JobOS?").pick_folder() {
+                    if jobos::is_jobos(&d) {
+                        prefs.jobos = Some(d);
+                        let _ = prefs.save(&s.prefs_path);
+                        say("JobOS is set", "Start it from the tray.");
+                    } else {
+                        say(
+                            "That folder isn’t JobOS",
+                            "Choose the folder that has its pyproject.toml.",
+                        );
+                    }
+                }
+            }
+            "jobos-start" => match &prefs.jobos {
+                None => say("Choose JobOS’s folder first", "Tray → JobOS → Choose its folder."),
+                Some(d) => {
+                    say("Starting JobOS", "It takes about 10 seconds.");
+                    match s.jobos.lock().unwrap().start(d) {
+                        Ok(()) => say("JobOS is started", "Tray → JobOS → Open."),
+                        Err(e) => say("JobOS didn’t start", &e),
+                    }
+                }
+            },
+            "jobos-stop" => match s.jobos.lock().unwrap().stop() {
+                Ok(()) => say("JobOS is stopped", ""),
+                Err(e) => say("JobOS is still running", &e),
+            },
+            _ => {}
+        }
+        let _ = s.items.jobos.set_text(jobos::Status::now().words());
+        let _ = &mut prefs;
+    });
+}
+
 // ---------------------------------------------------------------- this PC from my phone (ADR-0019)
 
 fn show_pc(app: &AppHandle) {
@@ -716,6 +915,24 @@ fn pc_event(app: &AppHandle, s: &Arc<State>, e: PcEvent) {
             format!("Terminal locked: {who} gave five wrong PINs"),
             "Unlock it here, from the ORVYN tray icon.",
         ),
+        PcEvent::Done(_) => {
+            let (s, body) = (
+                s.clone(),
+                serde_json::json!({ "id": uuid::Uuid::now_v7(), "pc": s.remote.pc_name }),
+            );
+            tauri::async_runtime::spawn(async move {
+                for wait in [0, 5, 30, 120] {
+                    tokio::time::sleep(Duration::from_secs(wait)).await;
+                    let sent = s
+                        .client
+                        .call::<serde_json::Value>(reqwest::Method::POST, "/pc/done", Some(body.clone()))
+                        .await;
+                    if !matches!(sent, Err(ApiError::Offline)) {
+                        break; // the id makes a repeat count once
+                    }
+                }
+            });
+        }
         PcEvent::Sessions(n) => {
             let _ = s.items.end.set_enabled(n > 0);
             let _ = s.items.end.set_text(match n {
@@ -818,6 +1035,13 @@ fn pc_end(w: tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
 
+fn hands() -> Box<dyn crate::pc::deck::Hands> {
+    #[cfg(windows)]
+    return Box::new(crate::pc::deck::Windows);
+    #[cfg(not(windows))]
+    Box::new(crate::pc::deck::Nothing)
+}
+
 /// Commands run as me, never as administrator (spec 0021).
 fn is_admin() -> bool {
     #[cfg(windows)]
@@ -838,8 +1062,7 @@ fn start_tracking(s: &State) {
 }
 
 fn stop_tracking(s: &State) {
-    let w = s.watcher.lock().unwrap().take();
-    drop(w);
+    let _ended = s.watcher.lock().unwrap().take();
 }
 
 /// Samples become spans; spans are sent every minute.
@@ -879,6 +1102,7 @@ async fn flush(s: &State) -> Result<(), ApiError> {
 async fn leave(s: &State) {
     stop_tracking(s);
     s.remote.leave();
+    s.waiting.lock().await.clear();
     s.tracker.lock().unwrap().open = None;
     s.queue.lock().await.clear();
     s.shown.lock().unwrap().clear();

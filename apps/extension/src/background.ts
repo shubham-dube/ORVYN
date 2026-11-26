@@ -9,6 +9,7 @@ import {
   type FillProfile,
   Hlc,
   type Mutation,
+  type MissedNotifications,
   type NotificationView,
   type PageReadReply,
   type ServerMessage,
@@ -108,7 +109,16 @@ client.onSignedOut = () => {
   closeSocket();
   notifications = [];
   void vault.wipe();
-  void chrome.storage.local.remove(['queue', 'spans', 'profile', 'rules', 'stashes', 'fillMaps']);
+  void chrome.storage.local.remove([
+    'shownNotifications',
+    'notificationsSince',
+    'queue',
+    'spans',
+    'profile',
+    'rules',
+    'stashes',
+    'fillMaps',
+  ]);
   void chrome.storage.session.clear();
   void render();
 };
@@ -175,24 +185,57 @@ function closeSocket(): void {
   s?.close();
 }
 
+/** Once for each time it speaks, whether it comes live or is caught up on. */
+async function pop(n: NotificationView): Promise<void> {
+  const key = `${n.id}:${n.updatedAt ?? ''}`;
+  const shown = (await local.get<string[]>('shownNotifications')) ?? [];
+  if (shown.includes(key)) return;
+  await local.set('shownNotifications', [...shown, key].slice(-300));
+  // an id that is already on screen would only change quietly
+  await chrome.notifications.clear(n.id);
+  chrome.notifications.create(n.id, {
+    type: 'basic',
+    iconUrl: 'icons/icon-128.png',
+    title: n.title,
+    message: n.body || ' ',
+    priority: n.priority === 'urgent' ? 2 : 0,
+    requireInteraction: n.alarm || n.priority === 'urgent',
+    buttons: notificationButtons(n).map((b) => ({ title: b.title })),
+  });
+}
+
+/** What came or went while this browser was closed or its worker slept. */
+async function catchUp(): Promise<void> {
+  const since = await local.get<string>('notificationsSince');
+  try {
+    const m = await client.call<MissedNotifications>(
+      'GET',
+      `/notifications/missed${since ? `?since=${encodeURIComponent(since)}` : ''}`,
+    );
+    await local.set('notificationsSince', m.until);
+    for (const id of m.cleared) chrome.notifications.clear(id);
+    notifications = notifications.filter((n) => !m.cleared.includes(n.id));
+    const more = m.items.length - 5;
+    for (const n of m.items.slice(-5)) await pop(n);
+    if (more > 0) tell(`${more} more while you were away`, 'Open ORVYN to see them.', 'missed');
+  } catch {
+    // asked again from the same moment next time
+  }
+}
+
 async function onMessage(m: ServerMessage): Promise<void> {
   switch (m.type) {
     case 'hello':
       live = true;
+      await catchUp();
       break;
     case 'notify.new':
-      if (!notifications.some((n) => n.id === m.notification.id)) {
-        notifications = [m.notification, ...notifications].slice(0, 50);
-        if (m.notification.silent) break; // in the inbox only
-        chrome.notifications.create(m.notification.id, {
-          type: 'basic',
-          iconUrl: 'icons/icon-128.png',
-          title: m.notification.title,
-          message: m.notification.body || ' ',
-          priority: m.notification.priority === 'urgent' ? 2 : 0,
-          buttons: notificationButtons(m.notification).map((b) => ({ title: b.title })),
-        });
-      }
+      // the same one may speak again (a second chat message, a reminder that repeats)
+      notifications = [m.notification, ...notifications.filter((n) => n.id !== m.notification.id)].slice(
+        0,
+        50,
+      );
+      if (!m.notification.silent) await pop(m.notification); // silent: in the inbox only
       break;
     case 'notify.read':
       notifications = notifications.map((n) =>

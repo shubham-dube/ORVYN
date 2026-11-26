@@ -2,6 +2,8 @@
 pub mod activity;
 pub mod api;
 pub mod app;
+pub mod capture;
+pub mod jobos;
 pub mod live;
 pub mod loopback;
 pub mod notify;

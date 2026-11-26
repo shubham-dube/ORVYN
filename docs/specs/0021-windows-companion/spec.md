@@ -63,8 +63,23 @@ this tray; **no Vault here** (the extension and web have it). Security is for ke
 - Web: My PC. Android: Everything → My PC, with a camera scanner. Needs the `pc` switch (ADR-0005).
 - ORVYN running as administrator refuses to switch it on. Nothing typed while disconnected is sent later.
 - The relay takes 200 messages and 1 MB a second per socket and 64 KB a message; more is dropped and both ends start again.
+- **Tell me when done (13):** a bell on a terminal; one notification when the programs started from it have ended. Without
+  the last lines the plan had: they would have to pass the server readable (AC4). Commands inside PowerShell itself
+  (`Start-Sleep`, `Invoke-WebRequest`) start no program, so they are not noticed.
+- **Say it, run it (12):** only the wish and the shell's name go to the server and the AI. The answer is one line without
+  control characters, editable, and runs when Run is pressed.
+- **Remote deck (11):** in My PC on web and Android. Links must be http(s). Files up to 25 MB, read only. Sleep asks first.
+  Lock, sleep, links, clipboard, screen and files are in the PC's log, without what they held.
 - AC3, AC4 and AC5 have tests (Rust, API, web, Android); AC6's reconnect too.
 - Not checked yet: a real phone with the real tray app, a full-screen program by hand (AC6), the camera scan.
+
+## Step 2, what is built
+
+- **One quick box (6):** a task; `spent` / `paid` / `received` / `got` / `earned` with an amount is Money; `drop: …`; `?…` asks
+  the Assistant. Offline it is kept on this PC and saved once, as of when it was typed. `!page` waits for Recall (2).
+- **Clipboard and snip (7):** from the tray, into Drop: text, a link or a picture.
+- **JobOS (8):** start, stop, open, status. The folder is checked to be JobOS each time; only what ORVYN started is stopped.
+- Not built: Recall for every program (2), updating itself (9: needs a signing key in the GitHub secrets).
 
 ## Acceptance criteria
 
@@ -74,7 +89,7 @@ this tray; **no Vault here** (the extension and web have it). Security is for ke
 - [x] AC4 The server's database and logs hold nothing readable from a terminal session (test).
 - [x] AC5 Five wrong PINs lock it; removing a device at the PC ends its session at once (tests).
 - [ ] AC6 A full-screen program (an editor, `top`) works in the phone browser; a dropped phone reconnects to the same session.
-- [ ] AC7 AI never runs a command: Run is always pressed (test).
+- [x] AC7 AI never runs a command: Run is always pressed (test).
 - [ ] AC8 Under 80 MB and 1% CPU idle over 10 minutes (measured).
 - [ ] AC9 After an hour asleep, each missed notification shows once.
 

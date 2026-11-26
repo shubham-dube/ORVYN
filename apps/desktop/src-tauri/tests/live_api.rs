@@ -4,6 +4,7 @@
 use futures_util::{SinkExt, StreamExt};
 use orvyn_desktop::activity::{Queue, Sample, Tracker};
 use orvyn_desktop::api::{Client, DeviceInfo};
+use orvyn_desktop::capture::{self, Kept, Kind, Waiting};
 use orvyn_desktop::live::{self, LiveEvent, Notification, ServerMessage};
 use orvyn_desktop::loopback::Loopback;
 use orvyn_desktop::notify::Shown;
@@ -109,13 +110,9 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
 
     // 3b. quick add from the PC: the same parser and sync as every device
     let hlc = std::sync::Mutex::new(Hlc::new("wtestpc"));
-    let title = quickadd::add(&client, "Pay rent tomorrow 6pm !!!", &hlc, "2030-01-01")
-        .await
-        .unwrap();
+    let title = quickadd::add(&client, "Pay rent tomorrow 6pm !!!", &hlc).await.unwrap();
     assert_eq!(title, "Pay rent");
-    let made = quickadd::add(&client, "buy milk @Errands", &hlc, "2030-01-01")
-        .await
-        .unwrap();
+    let made = quickadd::add(&client, "buy milk @Errands", &hlc).await.unwrap();
     assert_eq!(made, "Buy milk");
     let pulled: Value = http
         .get(format!("{base}/sync/pull?cursor=0"))
@@ -140,12 +137,74 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
     assert_eq!(rent["priority"], 3);
     assert_eq!(rent["source"], "desktop");
     let milk = task("Buy milk");
-    assert_eq!(milk["dueDate"], "2030-01-01", "no day named: lands in Today");
+    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+    assert_eq!(milk["dueDate"], today, "no day named: lands in Today");
     let project = changes
         .iter()
         .find(|c| c["entity"] == "today.project" && c["data"]["name"] == "Errands")
         .unwrap();
     assert_eq!(milk["projectId"], project["entityId"]);
+
+    // 3c. typed offline three days ago: saved once, "tomorrow" counts from then; money and Drop from the same box
+    let then = chrono::Utc::now() - chrono::Duration::days(3);
+    let path = std::env::temp_dir().join(format!("orvyn-live-waiting-{}.json", std::process::id()));
+    let mut waiting = Waiting::load(&path);
+    let k = Kept::new(Kind::Task, "water plants tomorrow", then.timestamp_millis());
+    waiting.add(k.clone());
+    waiting.add(k.clone()); // sent twice, saved once
+    waiting.add(Kept::new(Kind::Money, "spent 240 lunch", then.timestamp_millis()));
+    waiting.add(Kept::new(
+        Kind::Drop,
+        "https://example.test/idea",
+        then.timestamp_millis(),
+    ));
+    waiting.add(Kept::new(Kind::Money, "spent much", then.timestamp_millis()));
+    let refused = waiting.send(&client, &hlc).await;
+    assert!(waiting.is_empty());
+    assert_eq!(
+        refused.iter().map(|k| k.text.as_str()).collect::<Vec<_>>(),
+        ["spent much"]
+    );
+    let jpeg = vec![
+        0xFF, 0xD8, 0xFF, 0xE0, 0, 16, b'J', b'F', b'I', b'F', 0, 1, 1, 0, 0, 1, 0, 1, 0, 0, 0xFF, 0xD9,
+    ];
+    capture::drop_picture(&client, &hlc, jpeg, "snip.jpg").await.unwrap();
+    let pulled: Value = http
+        .get(format!("{base}/sync/pull?cursor=0"))
+        .bearer_auth(&owner)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let all = pulled["changes"].as_array().unwrap();
+    let of = |entity: &str| {
+        all.iter()
+            .filter(|c| c["entity"] == entity)
+            .map(|c| &c["data"])
+            .collect::<Vec<_>>()
+    };
+    let plants: Vec<_> = of("today.task")
+        .into_iter()
+        .filter(|t| t["title"] == "Water plants")
+        .collect();
+    assert_eq!(plants.len(), 1);
+    let due = plants[0]["dueDate"].as_str().unwrap();
+    assert!(due < today.as_str(), "{due}");
+    assert_eq!(
+        of("money.transaction")
+            .iter()
+            .filter(|t| t["amountMinor"] == 24_000)
+            .count(),
+        1
+    );
+    assert!(of("drop.item")
+        .iter()
+        .any(|d| d["url"] == "https://example.test/idea" && d["kind"] == "link"));
+    assert!(of("drop.item")
+        .iter()
+        .any(|d| d["kind"] == "photo" && d["fileId"].is_string()));
 
     // 4. live: a notification sent from the phone arrives on the PC
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
@@ -253,6 +312,7 @@ async fn connect_through_the_web_app_then_live_notifications_then_remote_sign_ou
         frames,
         Box::new(|_| ()),
         Box::new(|| chrono::Utc::now().timestamp_millis()),
+        Box::new(orvyn_desktop::pc::deck::Nothing),
     );
     remote.set_pin("826193").unwrap();
     remote.set_on(true).unwrap();

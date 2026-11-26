@@ -8,6 +8,11 @@ class FakeShade implements NotificationShade {
   Future<void> show(ShowPush p) async => shown.add(p);
   @override
   Future<void> cancel(String id) async => cancelled.add(id);
+  final ringing = <String>{};
+  @override
+  Future<bool> ringsFor(String task) async => ringing.contains(task);
+  @override
+  Future<void> stopRinging(String task) async => ringing.remove(task);
 }
 
 void main() {
@@ -57,5 +62,23 @@ void main() {
     expect(notificationIntId(id), notificationIntId(id));
     expect(notificationIntId(id), inInclusiveRange(0, 0x7fffffff));
     expect(notificationIntId(id), isNot(notificationIntId('0190a3c2-7b1e-7cc0-9f00-123456789abd')));
+  });
+
+  test('a phone that rings by itself for a task is not rung twice, and stops when it is handled elsewhere', () async {
+    final shade = FakeShade()..ringing.add('t1');
+    Map<String, dynamic> push(String task) => {
+      'type': 'notify',
+      'id': 'a-$task',
+      'title': 'Pills',
+      'alarm': 'true',
+      'actions': '[]',
+      'task': task,
+    };
+    await handlePush(push('t1'), shade);
+    expect(shade.shown, isEmpty);
+    await handlePush(push('t2'), shade); // not scheduled here: rings from the push
+    expect(shade.shown.single.alarm, isTrue);
+    await handlePush({'type': 'dismiss', 'id': 'a-t1', 'task': 't1'}, shade);
+    expect(shade.ringing, isEmpty);
   });
 }

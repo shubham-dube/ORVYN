@@ -15,6 +15,13 @@ const config: NextConfig = {
     '@orvyn/today-parse',
     '@orvyn/today-plan',
   ],
+  // where older notifications point
+  async redirects() {
+    return [
+      { source: '/settings/devices', destination: '/settings#security', permanent: false },
+      { source: '/notifications', destination: '/', permanent: false },
+    ];
+  },
   async headers() {
     return [
       {

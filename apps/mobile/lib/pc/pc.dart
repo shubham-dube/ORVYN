@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/state.dart';
+import '../chat/chat_crypto.dart' show unb64;
 import '../core/session_store.dart';
 import 'pc_crypto.dart';
 
@@ -36,12 +38,27 @@ class PcPairings {
 final pcPairingsProvider = Provider((ref) => PcPairings(ref.watch(storeProvider)));
 
 class PcTerm {
-  PcTerm(this.id, this.name, this.exit);
+  PcTerm(this.id, this.name, this.exit, {this.watch = false});
   factory PcTerm.fromJson(Map<String, dynamic> j) =>
-      PcTerm(j['id'] as String, j['name'] as String, (j['exit'] as num?)?.toInt());
+      PcTerm(j['id'] as String, j['name'] as String, (j['exit'] as num?)?.toInt(), watch: j['watch'] == true);
   final String id;
   final String name;
   final int? exit;
+
+  /// tells me when what runs in it ends
+  final bool watch;
+}
+
+class PcEntry {
+  PcEntry.fromJson(Map<String, dynamic> j)
+    : name = j['name'] as String,
+      path = j['path'] as String,
+      dir = j['dir'] as bool,
+      size = (j['size'] as num).toInt();
+  final String name;
+  final String path;
+  final bool dir;
+  final int size;
 }
 
 enum PcStatus { finding, offline, off, locked, pin, open, idle, removed, ended }
@@ -57,6 +74,9 @@ class PcLink extends ChangeNotifier {
     required this.output,
     required this.opened,
     required this.problem,
+    this.did,
+    this.clip,
+    this.file,
   }) {
     _sub = messages.listen(_heard);
   }
@@ -69,6 +89,19 @@ class PcLink extends ChangeNotifier {
   final void Function(String id, String text, bool reset) output;
   final void Function(String id) opened;
   final void Function(String text) problem;
+
+  /// The remote deck (spec 0021 #11).
+  final void Function(String what)? did;
+  final void Function(String text)? clip;
+  final void Function(String name, Uint8List bytes)? file;
+  ({int volume, bool muted})? sound;
+  ({String path, String? parent, List<PcEntry> list, bool cut})? files;
+
+  /// Of the file or picture on its way, 0..1.
+  double? progress;
+  ({int id, String name, int size})? _coming;
+  BytesBuilder _parts = BytesBuilder();
+  int _part = 0;
 
   static const findTime = Duration(seconds: 6);
   static const pingTime = Duration(seconds: 20);
@@ -98,6 +131,8 @@ class PcLink extends ChangeNotifier {
     _clear();
     _chan = null;
     _to = '';
+    _coming = null;
+    progress = null;
     _s = pcNonce();
     _set(PcStatus.finding);
     send({'type': 'pc', 's': _s, 'd': 'o.${pair.id}'});
@@ -145,6 +180,10 @@ class PcLink extends ChangeNotifier {
     }
     return true;
   }
+
+  void deck(Map<String, dynamic> m) => status == PcStatus.open ? _ask(m) : problem('Not connected');
+
+  void watch(String id, bool on) => _ask({'t': 'watch', 'id': id, 'on': on});
 
   void close(String id) {
     _ends.remove(id);
@@ -248,6 +287,17 @@ class PcLink extends ChangeNotifier {
     });
   }
 
+  void _arrived() {
+    final c = _coming!;
+    progress = c.size == 0 ? 1 : _parts.length / c.size;
+    if (_parts.length >= c.size) {
+      _coming = null;
+      progress = null;
+      file?.call(c.name, _parts.takeBytes());
+    }
+    notifyListeners();
+  }
+
   void _beat() {
     _clear();
     _later(pingTime, () {
@@ -300,6 +350,34 @@ class PcLink extends ChangeNotifier {
       case 'exit':
         terms = [for (final t in terms) t.id == m['id'] ? PcTerm(t.id, t.name, (m['code'] as num).toInt()) : t];
         notifyListeners();
+      case 'deck':
+        final s = m['sound'] as Map<String, dynamic>?;
+        sound = s == null ? null : (volume: (s['volume'] as num).toInt(), muted: s['muted'] as bool);
+        notifyListeners();
+      case 'files':
+        files = (
+          path: m['path'] as String,
+          parent: m['parent'] as String?,
+          list: [for (final e in m['list'] as List) PcEntry.fromJson(e as Map<String, dynamic>)],
+          cut: m['cut'] as bool,
+        );
+        notifyListeners();
+      case 'clip':
+        clip?.call(m['text'] as String);
+      case 'did':
+        did?.call(m['what'] as String);
+      case 'blob':
+        _coming = (id: (m['id'] as num).toInt(), name: m['name'] as String, size: (m['size'] as num).toInt());
+        _parts = BytesBuilder();
+        _part = 0;
+        _arrived();
+      case 'part':
+        final c = _coming;
+        if (c == null || m['id'] != c.id || m['n'] != _part) break;
+        _parts.add(unb64(m['d'] as String));
+        _part++;
+        _ask({'t': 'got', 'id': c.id, 'n': _part});
+        _arrived();
       case 'error':
         problem(m['text'] as String);
       case 'end':

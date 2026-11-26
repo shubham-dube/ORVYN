@@ -1,5 +1,5 @@
 import type { ServerMessage } from '@orvyn/contracts';
-import { PcChannel, pcNonce, type PcPairing } from '@orvyn/vault-crypto';
+import { PcChannel, pcNonce, type PcPairing, unb64 } from '@orvyn/vault-crypto';
 
 /**
  * A terminal session with my PC (spec 0021 step 3, ADR-0019). Everything but finding it is encrypted with the key the PC
@@ -10,11 +10,38 @@ export interface PcTerm {
   name: string;
   since: number;
   exit: number | null;
+  /** tells me when what runs in it ends */
+  watch?: boolean;
 }
 export interface PcShell {
   id: string;
   name: string;
 }
+export interface PcFiles {
+  path: string;
+  parent: string | null;
+  list: { name: string; path: string; dir: boolean; size: number }[];
+  cut: boolean;
+}
+/** What the remote deck knows (spec 0021 #11). */
+export interface PcDeck {
+  sound: { volume: number; muted: boolean } | null;
+  files: PcFiles | null;
+  clip: string | null;
+  /** the last picture or file that arrived whole */
+  file: { name: string; blob: Blob } | null;
+  /** of the one on its way, 0..1 */
+  progress: number | null;
+}
+export type PcDeckAsk =
+  | { t: 'deck' }
+  | { t: 'do'; what: 'lock' | 'sleep' | 'mute' | 'volume'; v?: number }
+  | { t: 'open'; url: string }
+  | { t: 'clip'; text?: string }
+  | { t: 'shot' }
+  | { t: 'files'; path?: string | null }
+  | { t: 'get'; path: string };
+
 export type PcStatus =
   'finding' | 'offline' | 'off' | 'locked' | 'pin' | 'open' | 'idle' | 'removed' | 'ended';
 
@@ -25,6 +52,12 @@ type Told =
   | { t: 'terms'; terms: PcTerm[] }
   | { t: 'out'; id: string; d: string; end: number; reset: boolean }
   | { t: 'exit'; id: string; code: number }
+  | { t: 'deck'; sound: PcDeck['sound'] }
+  | ({ t: 'files' } & PcFiles)
+  | { t: 'clip'; text: string }
+  | { t: 'did'; what: string }
+  | { t: 'blob'; id: number; name: string; size: number; part: number }
+  | { t: 'part'; id: number; n: number; d: string }
   | { t: 'error'; text: string }
   | { t: 'end'; why: string }
   | { t: 'pong' };
@@ -39,6 +72,7 @@ export interface PcEvents {
   output(id: string, text: string, reset: boolean): void;
   opened(id: string): void;
   problem(text: string): void;
+  did(what: string): void;
 }
 
 const FIND_MS = 6_000;
@@ -52,6 +86,8 @@ export class PcLink {
   status: PcStatus = 'finding';
   shells: PcShell[] = [];
   terms: PcTerm[] = [];
+  remote: PcDeck = { sound: null, files: null, clip: null, file: null, progress: null };
+  private coming: { id: number; name: string; size: number; parts: Uint8Array<ArrayBuffer>[] } | null = null;
   /** tries left after a wrong PIN */
   left: number | null = null;
   private s = '';
@@ -91,6 +127,8 @@ export class PcLink {
     this.clear();
     this.chan = null;
     this.to = '';
+    this.coming = null;
+    this.remote = { ...this.remote, progress: null };
     const s = await pcNonce();
     if (this.stopped) return;
     this.s = s;
@@ -137,6 +175,13 @@ export class PcLink {
     if (this.status !== 'open') return false;
     for (let i = 0; i < clean.length; i += PASTE) this.ask({ t: 'in', id, d: clean.slice(i, i + PASTE) });
     return true;
+  }
+  deck(m: PcDeckAsk): void {
+    if (this.status === 'open') this.ask({ ...m });
+    else this.events.problem('Not connected');
+  }
+  watch(id: string, on: boolean): void {
+    this.ask({ t: 'watch', id, on });
   }
   close(id: string): void {
     this.ends.delete(id);
@@ -202,6 +247,23 @@ export class PcLink {
     );
   }
 
+  private arrived() {
+    const c = this.coming;
+    if (!c) return;
+    const have = c.parts.reduce((n, p) => n + p.length, 0);
+    this.remote = { ...this.remote, progress: c.size ? have / c.size : 1 };
+    if (have >= c.size) {
+      const type = c.name === 'screen.jpg' ? 'image/jpeg' : 'application/octet-stream';
+      this.remote = {
+        ...this.remote,
+        progress: null,
+        file: { name: c.name, blob: new Blob(c.parts, { type }) },
+      };
+      this.coming = null;
+    }
+    this.events.changed();
+  }
+
   private beat() {
     this.clear();
     this.later(PING_MS, () => {
@@ -248,6 +310,35 @@ export class PcLink {
       case 'exit':
         this.terms = this.terms.map((t) => (t.id === m.id ? { ...t, exit: m.code } : t));
         this.events.changed();
+        break;
+      case 'deck':
+        this.remote = { ...this.remote, sound: m.sound };
+        this.events.changed();
+        break;
+      case 'files':
+        this.remote = { ...this.remote, files: { path: m.path, parent: m.parent, list: m.list, cut: m.cut } };
+        this.events.changed();
+        break;
+      case 'clip':
+        this.remote = { ...this.remote, clip: m.text };
+        this.events.changed();
+        this.remote = { ...this.remote, clip: null };
+        break;
+      case 'blob':
+        this.coming = { id: m.id, name: m.name, size: m.size, parts: [] };
+        this.remote = { ...this.remote, progress: 0 };
+        this.arrived();
+        break;
+      case 'part': {
+        const c = this.coming;
+        if (!c || c.id !== m.id || c.parts.length !== m.n) break;
+        c.parts.push(new Uint8Array(unb64(m.d)));
+        this.ask({ t: 'got', id: c.id, n: c.parts.length });
+        this.arrived();
+        break;
+      }
+      case 'did':
+        this.events.did(m.what);
         break;
       case 'error':
         this.events.problem(m.text);

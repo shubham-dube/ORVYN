@@ -1,10 +1,11 @@
-import { type SessionResponse } from '@orvyn/contracts';
+import { NOTIFY_CATALOG, type SessionResponse } from '@orvyn/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   PUSH_SENDER,
   type PushPayload,
   type PushTargetRef,
-  type SendOutcome,
+  type SendResult,
+  fit,
 } from '../src/modules/notify/push-sender';
 import { NotifyService } from '../src/modules/notify/notify.service';
 import { msUntilQuietEnds } from '../src/modules/notify/quiet-hours';
@@ -13,8 +14,10 @@ import { call, type Harness, openSocket, OWNER, signIn, sleep, startApp, waitFor
 class FakeSender {
   sent: { target: PushTargetRef; payload: PushPayload }[] = [];
   gone = new Set<string>();
-  async send(target: PushTargetRef, payload: PushPayload): Promise<SendOutcome> {
+  down = false;
+  async send(target: PushTargetRef, payload: PushPayload): Promise<SendResult> {
     if (this.gone.has(target.address)) return 'gone';
+    if (this.down) return { outcome: 'failed', detail: '503', again: true };
     this.sent.push({ target, payload });
     return 'sent';
   }
@@ -129,7 +132,9 @@ describe('delivery', () => {
     expect(again.id).toBe(before.id);
     expect(again.updatedAt).not.toBe(before.updatedAt); // how the device knows it is new
     await call(h, 'POST', `/notifications/${before.id}/read`, { token: phone.accessToken });
-    expect(mine(await missed(laptop, first.until))).toEqual([]);
+    const after = await missed(laptop, first.until);
+    expect(mine(after)).toEqual([]);
+    expect(after.cleared).toContain(before.id); // its toast on a PC that slept goes too
   });
 
   it('cannot read or dismiss someone else’s notifications', async () => {
@@ -149,6 +154,97 @@ describe('delivery', () => {
       ),
     ).toBe(false);
   });
+});
+
+describe('nothing is lost on the way (spec 0023)', () => {
+  const queue = () => (h.app.get(NotifyService) as any).queue;
+  const run = (data: any) => (h.app.get(NotifyService) as any).process(data);
+  const say = (over: object) =>
+    h.app
+      .get(NotifyService)
+      .send({ userId: phone.user.id, module: 'core', kind: 'note', title: 'x', ...over } as any);
+
+  it('a push service that is down is tried again where it failed, and the phone stays registered', async () => {
+    sender.down = true;
+    const ids = [];
+    for (let i = 0; i < 7; i++) ids.push((await say({ title: `Down ${i}` })).id);
+    await waitFor(() => true);
+    await sleep(700);
+    sender.down = false;
+    const jobs = (await queue().getDelayed()).filter((j: any) => j.data.kind === 'push');
+    expect(new Set(jobs.map((j: any) => j.data.id))).toEqual(new Set(ids));
+    await run(jobs[0].data);
+    expect(sender.to(PHONE_FCM).filter((p) => p.id === jobs[0].data.id)).toHaveLength(1);
+    const d = (await call<any>(h, 'GET', '/notifications/delivery', { token: phone.accessToken })).body;
+    expect(d.devices.find((x: any) => x.id === phone.deviceId).push[0].active).toBe(true);
+  });
+
+  it('an urgent one comes back on every device, also the second time under the same key; acting ends it', async () => {
+    const ws = await openSocket(h, laptop.accessToken);
+    const key = { title: 'Ring', dedupeKey: 'ring', priority: 'urgent', repeat: { everyMin: 5, times: 2 } };
+    const again = async (id: string) =>
+      (await queue().getDelayed()).filter((j: any) => j.data.id === id && j.data.again).at(-1)?.data;
+    const heard = (id: string) =>
+      ws.messages.filter((m) => m.type === 'notify.new' && m.notification.id === id).length;
+    const n = await say(key);
+    await sleep(400);
+    const first = await again(n.id);
+    await run(first);
+    await waitFor(() => heard(n.id) === 2); // the PC and Chrome hear it again, as a new moment
+    const times = ws.messages.filter((m) => m.notification?.id === n.id).map((m) => m.notification.updatedAt);
+    expect(new Set(times).size).toBe(2);
+    await say(key); // it is due again, under the same key
+    await sleep(400);
+    const before = sender.to(PHONE_FCM).filter((p) => p.id === n.id).length;
+    await run(first); // left over from the first time
+    expect(sender.to(PHONE_FCM).filter((p) => p.id === n.id).length).toBe(before);
+    const jobs = (await queue().getDelayed()).filter((j: any) => j.data.id === n.id && j.data.again);
+    expect(jobs.length).toBeGreaterThan(1); // the second time has repeats of its own
+    await call(h, 'POST', `/notifications/${n.id}/dismiss`, { token: phone.accessToken });
+    await run(jobs.at(-1).data);
+    expect(sender.to(PHONE_FCM).filter((p) => p.id === n.id && p.type === 'notify').length).toBe(before);
+    ws.close();
+  });
+
+  it('held by quiet hours: shown live when they end', async () => {
+    const ws = await openSocket(h, laptop.accessToken);
+    const n = await say({ title: 'Held' });
+    await sleep(200);
+    const at = new Date(n.updatedAt!).getTime();
+    await run({ kind: 'deliver', id: n.id, at, held: true });
+    await waitFor(() => ws.messages.filter((m) => m.notification?.id === n.id).length === 2);
+    ws.close();
+  });
+
+  it('a long Hindi text still fits a push', () => {
+    const p = fit({
+      type: 'notify',
+      id: 'x',
+      title: 'शीर्षक '.repeat(25),
+      body: 'यह एक लंबा संदेश है। '.repeat(50),
+      actions: [{ id: 'done', label: 'Done' }],
+    });
+    expect(Buffer.byteLength(JSON.stringify(p))).toBeLessThanOrEqual(3400);
+    expect(p.body!.length).toBeGreaterThan(50);
+    expect(p.actions).toHaveLength(1);
+    expect(fit({ type: 'notify', id: 'x', body: 'short' }).body).toBe('short');
+  });
+
+  it('every type in the catalog reaches the phone the way it says', async () => {
+    for (const t of NOTIFY_CATALOG) {
+      const r = await call<any>(h, 'POST', '/notifications/sample', {
+        token: laptop.accessToken,
+        body: { type: t.key },
+      });
+      expect([t.key, r.status]).toEqual([t.key, 200]);
+      const pushed = () => sender.to(PHONE_FCM).some((p) => p.title === `Sample · ${t.label}`);
+      if (t.ways.includes('push') || t.managedIn) await waitFor(pushed);
+      else {
+        await sleep(150);
+        expect([t.key, pushed()]).toEqual([t.key, false]);
+      }
+    }
+  }, 60_000);
 });
 
 describe('quiet hours', () => {

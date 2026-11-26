@@ -1,12 +1,24 @@
-import { Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { DEFAULT_CATEGORIES, MONEY_CATEGORY } from '@orvyn/contracts';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { DEFAULT_CATEGORIES, MONEY_CATEGORY, SpendRequest } from '@orvyn/contracts';
 import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import { instantAt, wallIn } from '@orvyn/today-parse';
 import { v5 } from 'uuid';
 import { DB, type Db } from '../../db/db.module';
+import { ZodPipe } from '../../common/zod.pipe';
 import { Auth, type AuthContext, RequireEntitlement } from '../auth/auth.decorators';
 import { SERVER_DEVICE, SyncService } from '../sync/sync.service';
-import { moneyInsights, type Upcoming } from '@orvyn/money';
+import { moneyInsights, occurredAtFor, parseSpend, type Upcoming } from '@orvyn/money';
 import { occurrences } from '@orvyn/today-plan';
 import { moneyBudgets, moneyCategories, moneyRecurring, moneyTransactions } from './money.schema';
 import { todaySettings } from '../today/today.schema';
@@ -93,6 +105,43 @@ export class MoneyController {
    * The month, read for the person (spec 0013): pace and forecast, safe to spend, unusual charges, duplicates, price
    * changes, subscriptions not tracked yet, bills this week, top merchants, payments without a category. Rules only.
    */
+  /** "spent 240 lunch" as an entry to save (spec 0021 #6); null when there is no amount in it. */
+  @Post('parse')
+  @HttpCode(200)
+  async parse(@Auth() a: AuthContext, @Body(new ZodPipe(SpendRequest)) b: SpendRequest) {
+    const [s] = await this.db
+      .select({ tz: todaySettings.timeZone })
+      .from(todaySettings)
+      .where(eq(todaySettings.ownerId, a.userId));
+    const timeZone = s?.tz ?? 'Asia/Kolkata';
+    const now = b.at ? new Date(b.at) : new Date();
+    const e = parseSpend(b.text, { now, timeZone });
+    if (!e) return { fields: null, said: null };
+    const [category] = e.category
+      ? await this.db
+          .select({ id: moneyCategories.id })
+          .from(moneyCategories)
+          .where(
+            and(
+              eq(moneyCategories.ownerId, a.userId),
+              eq(moneyCategories.slug, e.category),
+              isNull(moneyCategories.deletedAt),
+            ),
+          )
+      : [];
+    return {
+      fields: {
+        amountMinor: e.amountMinor,
+        direction: e.direction,
+        merchant: e.merchant,
+        note: e.note,
+        categoryId: category?.id ?? null,
+        occurredAt: occurredAtFor(e, now, timeZone).toISOString(),
+      },
+      said: `${e.direction === 'credit' ? 'Received' : 'Spent'} ₹${(e.amountMinor / 100).toLocaleString('en-IN')}${e.merchant || e.note ? ` · ${e.merchant || e.note}` : ''}`,
+    };
+  }
+
   @Get('insights')
   async insights(@Auth() a: AuthContext, @Query('month') monthQ?: string) {
     const [s] = await this.db

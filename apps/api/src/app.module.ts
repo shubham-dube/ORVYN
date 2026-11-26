@@ -22,6 +22,7 @@ import { LibraryModule } from './modules/library/library.module';
 import { VaultModule } from './modules/vault/vault.module';
 import { ActivityModule } from './modules/activity/activity.module';
 import { FillModule } from './modules/fill/fill.module';
+import { PcModule } from './modules/pc/pc.module';
 import { FilesModule } from './modules/files/files.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -78,6 +79,7 @@ export class AppModule {
         VaultModule,
         ActivityModule,
         FillModule,
+        PcModule,
         ...(extra ?? []),
       ],
       controllers: [HealthController],

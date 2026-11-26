@@ -364,7 +364,8 @@ export interface Status {
 
 /** Buttons for a desktop notification: the notification's own (Done, Snooze…) when it has them, else Open/Dismiss. */
 export function notificationButtons(n: Pick<NotificationView, 'actions'>): { id: string; title: string }[] {
-  const own = n.actions.filter((a) => !a.open).slice(0, 2); // Chrome shows at most two
+  // Chrome has no box to type in: a reply opens ORVYN instead
+  const own = n.actions.filter((a) => !a.open && !a.reply).slice(0, 2); // Chrome shows at most two
   return own.length
     ? own.map((a) => ({ id: a.id, title: a.label }))
     : [

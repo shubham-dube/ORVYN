@@ -72,7 +72,16 @@ class AndroidShade implements NotificationShade {
     id: notificationIntId(p.id),
     title: p.title,
     body: p.body,
-    payload: jsonEncode({'id': p.id, 'url': p.url, if (p.alarm) 'alarm': true}),
+    payload: jsonEncode({
+      'id': p.id,
+      'url': p.url,
+      'title': p.title,
+      if (p.alarm) 'alarm': true,
+      'open': {
+        for (final a in p.actions)
+          if (a.open != null) a.id: a.open,
+      },
+    }),
     notificationDetails: NotificationDetails(
       android: p.alarm
           ? _alarmDetails(
@@ -113,6 +122,46 @@ class AndroidShade implements NotificationShade {
 
   @override
   Future<void> cancel(String id) => _plugin.cancel(id: notificationIntId(id), tag: id);
+
+  static Map<String, dynamic>? _local(String? payload) {
+    if (payload == null) return null;
+    final p = jsonDecode(payload) as Map<String, dynamic>;
+    return p['kind'] == AndroidAlarmScheduler.kind ? p : null;
+  }
+
+  @override
+  Future<bool> ringsFor(String task) async {
+    for (final n in await _plugin.getActiveNotifications()) {
+      if (_local(n.payload)?['taskId'] == task) return true;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final n in await _plugin.pendingNotificationRequests()) {
+      final p = _local(n.payload);
+      final at = p?['at'];
+      // a snooze within the next repeats counts too
+      if (p?['taskId'] == task && at is int && at > now - 180000 && at < now + 900000) return true;
+    }
+    return false;
+  }
+
+  @override
+  Future<void> stopRinging(String task) async {
+    for (final n in await _plugin.getActiveNotifications()) {
+      if (n.id != null && _local(n.payload)?['taskId'] == task) await _plugin.cancel(id: n.id!, tag: n.tag);
+    }
+    for (final n in await _plugin.pendingNotificationRequests()) {
+      final p = _local(n.payload);
+      if (p?['taskId'] == task && p?['snoozed'] == true) await _plugin.cancel(id: n.id);
+    }
+  }
+}
+
+/// A tap that opened ORVYN from closed: kept until the app is ready to act on it.
+Map<String, dynamic>? _launchTap;
+Map<String, dynamic>? takeLaunchTap() {
+  final t = _launchTap;
+  _launchTap = null;
+  return t;
 }
 
 Future<void> initShade() async {
@@ -132,7 +181,7 @@ Future<void> initShade() async {
 
 /// Local alarms (D22): scheduled with Android's alarm-clock scheduling, so they ring on time with no connection.
 class AndroidAlarmScheduler implements AlarmScheduler {
-  static const _kind = 'local-alarm';
+  static const kind = 'local-alarm';
 
   @override
   Future<void> replaceAll(List<AlarmSlot> wanted) async {
@@ -141,7 +190,7 @@ class AndroidAlarmScheduler implements AlarmScheduler {
     final have = <int>{};
     for (final p in pending) {
       final payload = p.payload == null ? null : jsonDecode(p.payload!) as Map<String, dynamic>;
-      if (payload?['kind'] != _kind) continue;
+      if (payload?['kind'] != kind || payload?['snoozed'] == true) continue;
       if (want.containsKey(p.id)) {
         have.add(p.id);
       } else {
@@ -167,7 +216,8 @@ class AndroidAlarmScheduler implements AlarmScheduler {
         ),
         androidScheduleMode: AndroidScheduleMode.alarmClock,
         payload: jsonEncode({
-          'kind': _kind,
+          'kind': kind,
+          'at': w.at.millisecondsSinceEpoch,
           'alarm': true,
           'taskId': w.taskId,
           'localId': w.id,
@@ -200,7 +250,12 @@ class AndroidAlarmScheduler implements AlarmScheduler {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.alarmClock,
-      payload: jsonEncode({...payload, 'localId': id}),
+      payload: jsonEncode({
+        ...payload,
+        'localId': id,
+        'snoozed': true,
+        'at': DateTime.now().add(Duration(minutes: minutes)).millisecondsSinceEpoch,
+      }),
     );
   }
 }
@@ -216,7 +271,21 @@ Future<void> backgroundAction(NotificationResponse r) async {
   if (id == null) return;
   final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
   final typed = r.input?.trim();
-  await runNotificationAction(api, id, action, text: typed == null || typed.isEmpty ? null : typed);
+  final text = typed == null || typed.isEmpty ? null : typed;
+  if (await runNotificationAction(api, id, action, text: text)) return;
+  // the shade has already removed it: say so, with what was typed, instead of losing it
+  await initShade();
+  await AndroidShade().show(
+    ShowPush(
+      id: id,
+      title: 'Not done yet: ${payload['title'] ?? 'a notification'}',
+      body: text == null ? 'ORVYN couldn’t be reached. Open it to try again.' : 'Not sent. You wrote: $text',
+      url: payload['url'] as String?,
+      module: 'core',
+      priority: 'normal',
+      actions: const [],
+    ),
+  );
 }
 
 /// A button on a local alarm while the app is closed: Done completes the task from this phone's own copy (synced
@@ -245,9 +314,21 @@ class PushService implements Pusher {
   Stream<Map<String, dynamic>> get taps => notificationTaps.stream;
 
   @override
+  Map<String, dynamic>? takeLaunch() => takeLaunchTap();
+
+  @override
   Future<void> init() async {
     try {
       await initShade();
+      final launch = await _plugin.getNotificationAppLaunchDetails();
+      final r = launch?.notificationResponse;
+      if ((launch?.didNotificationLaunchApp ?? false) && r?.payload != null) {
+        _launchTap = {
+          ...jsonDecode(r!.payload!) as Map<String, dynamic>,
+          'action': r.actionId,
+          if (r.input != null) 'input': r.input,
+        };
+      }
       await Firebase.initializeApp();
       FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
       FirebaseMessaging.onMessage.listen((m) => handlePush(m.data, AndroidShade()));
@@ -293,5 +374,5 @@ class PushService implements Pusher {
 
   /// Foreground: the in-app list already shows it, but the shade copy must go when it's dismissed elsewhere.
   @override
-  Future<void> clear(String id) => _ready ? AndroidShade().cancel(id) : Future.value();
+  Future<void> clear(String id) => AndroidShade().cancel(id).catchError((Object _) {});
 }

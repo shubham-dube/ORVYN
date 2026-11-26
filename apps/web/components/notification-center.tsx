@@ -4,7 +4,7 @@ import { BellOff, Send, X } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useRouter } from 'next/navigation';
-import { Empty } from '@/components/ui/bits';
+import { Empty, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { spring } from '@/lib/motion';
 import { useNotifications } from '@/lib/notifications';
@@ -12,6 +12,7 @@ import { useNotifications } from '@/lib/notifications';
 export function NotificationCenter({ open, onClose }: { open: boolean; onClose(): void }) {
   const n = useNotifications();
   const router = useRouter();
+  const toast = useToast();
   return (
     <AnimatePresence>
       {open ? (
@@ -65,7 +66,9 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
                         void n.markRead(item.id);
                         if (item.url) {
                           onClose();
-                          router.push(item.url);
+                          // a pull request, an IPO’s registrar…
+                          if (/^https?:/.test(item.url)) window.open(item.url, '_blank', 'noopener');
+                          else router.push(item.url);
                         }
                       }}
                     >
@@ -95,7 +98,11 @@ export function NotificationCenter({ open, onClose }: { open: boolean; onClose()
                               key={a.id}
                               size="sm"
                               variant={a.id === 'done' ? 'primary' : 'secondary'}
-                              onClick={() => void n.act(item.id, a.id)}
+                              onClick={() =>
+                                void n
+                                  .act(item.id, a.id)
+                                  .catch(() => toast({ title: 'That didn’t work', tone: 'danger' }))
+                              }
                             >
                               {a.label}
                             </Button>

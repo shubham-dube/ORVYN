@@ -13,6 +13,12 @@ export const MONEY_BUDGET = 'money.budget';
 export const MONEY_RECURRING = 'money.recurring';
 export const MONEY_IOU = 'money.iou';
 
+/** One line typed somewhere small ("spent 240 lunch"). Nothing is saved by reading it. */
+export const SpendRequest = z
+  .object({ text: z.string().min(1).max(500), at: z.string().datetime({ offset: true }).optional() })
+  .strict();
+export type SpendRequest = z.infer<typeof SpendRequest>;
+
 export const AccountFields = z.object({
   name: z.string().trim().min(1).max(80),
   /** card and loan accounts hold what you owe; the others hold what you have */

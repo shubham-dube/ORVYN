@@ -122,6 +122,7 @@ class NotificationView {
     required this.priority,
     required this.createdAt,
     required this.readAt,
+    this.silent = false,
   });
 
   factory NotificationView.fromJson(Map<String, dynamic> j) => NotificationView(
@@ -135,6 +136,7 @@ class NotificationView {
       for (final a in (j['actions'] as List? ?? const [])) NotificationAction.fromJson(a as Map<String, dynamic>),
     ],
     priority: (j['priority'] as String?) ?? 'normal',
+    silent: j['silent'] == true,
     createdAt: DateTime.parse(j['createdAt'] as String),
     readAt: j['readAt'] == null ? null : DateTime.parse(j['readAt'] as String),
   );
@@ -149,6 +151,9 @@ class NotificationView {
   final String priority;
   final DateTime createdAt;
   final DateTime? readAt;
+
+  /// in the inbox only: nothing pops up
+  final bool silent;
 
   NotificationView markRead() => NotificationView(
     id: id,

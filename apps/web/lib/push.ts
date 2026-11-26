@@ -35,6 +35,12 @@ export async function enablePush(): Promise<'enabled' | 'denied' | 'unsupported'
   return 'enabled';
 }
 
+/** Browsers renew or drop subscriptions by themselves: one that was allowed is registered again when ORVYN opens. */
+export async function refreshPush(): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return;
+  await enablePush();
+}
+
 export function pushPermission(): NotificationPermission | 'unsupported' {
   return pushSupported() ? Notification.permission : 'unsupported';
 }

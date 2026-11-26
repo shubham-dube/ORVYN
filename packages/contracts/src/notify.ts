@@ -35,6 +35,8 @@ export type NotificationView = z.infer<typeof NotificationView>;
 /** What a device that was away hasn't shown yet (spec 0021 #5). `until` is the next `since`. */
 export interface MissedNotifications {
   items: NotificationView[];
+  /** read or dismissed elsewhere meanwhile: their toasts go */
+  cleared: string[];
   until: string;
 }
 
@@ -227,6 +229,13 @@ export const NOTIFY_CATALOG: NotifyTypeInfo[] = [
     module: 'split',
     label: 'You owe',
     when: 'Someone reminds you what you owe',
+    ways: ['push'],
+  },
+  {
+    key: 'pc.done',
+    module: 'pc',
+    label: 'Finished on my PC',
+    when: 'A terminal you asked to be told about has ended',
     ways: ['push'],
   },
   {

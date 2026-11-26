@@ -62,6 +62,21 @@ void main() {
             });
           case 'attach':
             out('PS C:> \x1b[6n'); // a question the PC has answered already
+          case 'deck':
+            say({
+              't': 'deck',
+              'sound': {'volume': 40, 'muted': false},
+            });
+          case 'files':
+            say({
+              't': 'files',
+              'path': r'C:\Users\me',
+              'parent': null,
+              'cut': false,
+              'list': [
+                {'name': 'notes.txt', 'path': r'C:\Users\me\notes.txt', 'dir': false, 'size': 5},
+              ],
+            });
           case 'in':
             typed += m['d'] as String;
         }
@@ -106,6 +121,26 @@ void main() {
     view.terminal.textInput('d');
     await wait();
     expect(typed, 'dir\x03\x04');
+    // a suggestion runs only when Run is pressed (AC7)
+    h.server.on('POST /pc/suggest', (_) => {'command': 'Get-Date', 'why': 'Shows the time', 'careful': true});
+    typed = '';
+    await tester.tap(find.text('Say it'));
+    await wait();
+    await tester.enterText(find.byType(TextField).first, 'what time is it');
+    await tester.tap(find.text('Suggest'));
+    await wait();
+    expect(find.text('Changes things: read it first.'), findsOneWidget);
+    expect(typed, '');
+    await tester.ensureVisible(find.text('Run'));
+    await tester.tap(find.text('Run'));
+    await wait();
+    expect(typed, 'Get-Date\r');
+    await tester.tap(find.text('Deck'));
+    await wait();
+    expect(find.text('Mute'), findsOneWidget);
+    await tester.tap(find.text('Files'));
+    await wait();
+    expect(find.text('notes.txt', skipOffstage: false), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await wait();

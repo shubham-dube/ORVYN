@@ -1,5 +1,5 @@
 import type { ServerMessage } from '@orvyn/contracts';
-import { chatReady, PcChannel } from '@orvyn/vault-crypto';
+import { b64, chatReady, PcChannel } from '@orvyn/vault-crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PcLink } from '../lib/pc';
 
@@ -21,6 +21,7 @@ function setup() {
       output: (...x) => out.push(x),
       opened: () => undefined,
       problem: () => undefined,
+      did: () => undefined,
     },
     'Test',
   );
@@ -128,6 +129,29 @@ describe('the terminal link to my PC', () => {
     t.hello();
     await vi.advanceTimersByTimeAsync(10);
     expect(t.link.status).toBe('idle');
+    t.link.stop();
+  });
+
+  it('puts a file together from its parts, in order, and confirms each', async () => {
+    const t = setup();
+    await t.link.connect();
+    t.pc.answer();
+    t.link.enterPin('x');
+    t.pc.say(hello);
+    t.pc.asked();
+    t.link.deck({ t: 'get', path: 'C:\\a.txt' });
+    t.pc.say({ t: 'blob', id: 1, name: 'a.txt', size: 5, part: 3 });
+    t.pc.say({ t: 'part', id: 9, n: 0, d: 'AAAA' }); // another one's
+    t.pc.say({ t: 'part', id: 1, n: 0, d: b64(new TextEncoder().encode('hel')) });
+    expect(t.link.remote.progress).toBeCloseTo(0.6);
+    t.pc.say({ t: 'part', id: 1, n: 1, d: b64(new TextEncoder().encode('lo')) });
+    expect(t.link.remote.progress).toBeNull();
+    expect(await t.link.remote.file!.blob.text()).toBe('hello');
+    expect(t.pc.asked()).toEqual([
+      { t: 'get', path: 'C:\\a.txt' },
+      { t: 'got', id: 1, n: 1 },
+      { t: 'got', id: 1, n: 2 },
+    ]);
     t.link.stop();
   });
 

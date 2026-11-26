@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,8 @@ import 'package:kterm/kterm.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../app/state.dart';
 import '../design/controls.dart';
@@ -15,6 +18,7 @@ import '../design/toast.dart';
 import '../pc/pc.dart';
 import '../pc/pc_crypto.dart';
 import 'common.dart';
+import 'sheets.dart';
 
 /// My PC (spec 0021 step 3): a real terminal on the PC, from the phone.
 class PcScreen extends ConsumerStatefulWidget {
@@ -200,6 +204,13 @@ class _ScanState extends State<_Scan> {
   }
 }
 
+const _did = {
+  'lock': 'The PC is locked',
+  'sleep': 'The PC is going to sleep',
+  'open': 'Opened on the PC',
+  'clipboard set': 'In the PC’s clipboard',
+};
+
 const _words = {
   PcStatus.finding: 'Looking for the PC…',
   PcStatus.offline: 'The PC isn’t answering. It may be off, asleep or offline, or this phone was removed there.',
@@ -247,6 +258,11 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
   String? _active;
   bool _ctrl = false;
   bool _writing = false;
+  bool _deck = false;
+  Uint8List? _shot;
+  double? _level;
+  final _url = TextEditingController();
+  final _clip = TextEditingController();
 
   @override
   void initState() {
@@ -264,6 +280,19 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
         _writing = true;
         t.write(reset ? '\x1bc$text' : text);
         _writing = false;
+      },
+      did: (what) => Toaster.of(context).show(_did[what] ?? 'Done', tone: ToastTone.success),
+      clip: (text) async {
+        await Clipboard.setData(ClipboardData(text: text));
+        if (mounted) Toaster.of(context).show('Copied from the PC', tone: ToastTone.success);
+      },
+      file: (name, bytes) async {
+        if (name == 'screen.jpg') return setState(() => _shot = bytes);
+        final dir = await getTemporaryDirectory();
+        // only its name: never a path the PC chose
+        final f = File('${dir.path}/pc-${name.replaceAll(RegExp(r'[^\w. -]'), '_')}');
+        await f.writeAsBytes(bytes, flush: true);
+        await OpenFilex.open(f.path);
       },
       opened: (id) => setState(() => _active = id),
       problem: (text) => Toaster.of(context).show(text, tone: ToastTone.danger),
@@ -307,6 +336,8 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
   void dispose() {
     _link.dispose();
     _pin.dispose();
+    _url.dispose();
+    _clip.dispose();
     _focus.dispose();
     super.dispose();
   }
@@ -354,6 +385,14 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
                 Expanded(
                   child: Text(widget.pair.name, style: OrvText.heading(l), overflow: TextOverflow.ellipsis),
                 ),
+                if (open)
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _deck = !_deck);
+                      if (_deck) _link.deck({'t': 'deck'});
+                    },
+                    child: Text(_deck ? 'Terminal' : 'Deck'),
+                  ),
                 OrvBadge(
                   _link.status == PcStatus.open ? 'Live · encrypted' : (open ? 'Reconnecting…' : 'Not connected'),
                   tone: _link.status == PcStatus.open ? l.c.success : null,
@@ -361,7 +400,12 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
                 const SizedBox(width: 12),
               ],
             ),
-            if (open) ..._terminal(l, shown) else Expanded(child: _outside(l)),
+            if (open && _deck)
+              Expanded(child: _deckView(l))
+            else if (open)
+              ..._terminal(l, shown)
+            else
+              Expanded(child: _outside(l)),
           ],
         ),
       ),
@@ -371,6 +415,7 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
   List<Widget> _terminal(OrvLook l, String? shown) {
     final night = OrvTokens.phases[OrvPhase.night]!;
     final screen = shown == null ? null : _screens[shown];
+    final current = _link.terms.where((t) => t.id == shown && t.exit == null).firstOrNull;
     return [
       SizedBox(
         height: 44,
@@ -396,6 +441,21 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
           ],
         ),
       ),
+      if (current != null)
+        Row(
+          children: [
+            TextButton.icon(
+              onPressed: () => _sayIt(current),
+              icon: const Icon(LucideIcons.wandSparkles, size: 14),
+              label: const Text('Say it'),
+            ),
+            TextButton.icon(
+              onPressed: () => _link.watch(current.id, !current.watch),
+              icon: Icon(current.watch ? LucideIcons.bellRing : LucideIcons.bell, size: 14),
+              label: Text(current.watch ? 'Will tell you' : 'Tell me when done'),
+            ),
+          ],
+        ),
       Expanded(
         child: screen == null
             ? Center(child: Text('Open a shell above.', style: OrvText.muted(l)))
@@ -456,6 +516,14 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
     ];
   }
 
+  Future<void> _sayIt(PcTerm t) async {
+    final command = await showGlassSheet<String>(context, (_) => _SayIt(shell: t.name));
+    if (command == null || !mounted) return;
+    if (!_link.type(t.id, '$command\r')) {
+      Toaster.of(context).show('Not connected: nothing was run', tone: ToastTone.danger);
+    }
+  }
+
   Widget _key(OrvLook l, String label, VoidCallback onTap, {bool on = false}) => Padding(
     padding: const EdgeInsets.only(right: 6),
     child: Material(
@@ -480,6 +548,133 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
       ),
     ),
   );
+
+  Widget _deckView(OrvLook l) {
+    final sound = _link.sound;
+    final files = _link.files;
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OrvButton(
+              label: 'Lock',
+              small: true,
+              icon: LucideIcons.lock,
+              onPressed: () => _link.deck({'t': 'do', 'what': 'lock'}),
+            ),
+            OrvButton(label: 'Sleep', small: true, icon: LucideIcons.moon, onPressed: _sleep),
+            if (sound != null)
+              OrvButton(
+                label: sound.muted ? 'Unmute' : 'Mute',
+                small: true,
+                icon: sound.muted ? LucideIcons.volumeX : LucideIcons.volume2,
+                onPressed: () => _link.deck({'t': 'do', 'what': 'mute', 'v': sound.muted ? 0 : 1}),
+              ),
+            OrvButton(
+              label: 'See the screen',
+              small: true,
+              icon: LucideIcons.monitor,
+              onPressed: () => _link.deck({'t': 'shot'}),
+            ),
+            OrvButton(
+              label: 'Files',
+              small: true,
+              icon: LucideIcons.folder,
+              onPressed: () => _link.deck({'t': 'files', 'path': files?.path}),
+            ),
+          ],
+        ),
+        if (sound != null)
+          Slider(
+            value: _level ?? sound.volume.toDouble(),
+            max: 100,
+            label: 'Volume',
+            onChanged: (v) => setState(() => _level = v),
+            onChangeEnd: (v) {
+              _link.deck({'t': 'do', 'what': 'volume', 'v': v.round()});
+              setState(() => _level = null);
+            },
+          ),
+        if (_link.progress != null) LinearProgressIndicator(value: _link.progress),
+        if (_shot != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: InteractiveViewer(
+              maxScale: 6,
+              child: Image.memory(_shot!, semanticLabel: 'The PC’s screen a moment ago', gaplessPlayback: true),
+            ),
+          ),
+        const SizedBox(height: 10),
+        OrvField(label: 'Open a link on the PC', controller: _url, keyboardType: TextInputType.url),
+        const SizedBox(height: 6),
+        OrvButton(
+          label: 'Open on the PC',
+          small: true,
+          onPressed: () {
+            final u = _url.text.trim();
+            if (u.isEmpty) return;
+            _link.deck({'t': 'open', 'url': u.startsWith(RegExp('https?://')) ? u : 'https://$u'});
+            _url.clear();
+          },
+        ),
+        const SizedBox(height: 14),
+        OrvField(label: 'Text for the PC’s clipboard', controller: _clip),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: [
+            OrvButton(
+              label: 'Send',
+              small: true,
+              onPressed: () {
+                if (_clip.text.isEmpty) return;
+                _link.deck({'t': 'clip', 'text': _clip.text});
+                _clip.clear();
+              },
+            ),
+            OrvButton(label: 'Get the PC’s', small: true, onPressed: () => _link.deck({'t': 'clip'})),
+          ],
+        ),
+        if (files != null) ...[
+          const SizedBox(height: 14),
+          Text(files.path, style: OrvText.muted(l).copyWith(fontFamily: monoFamily, fontSize: 12)),
+          if (files.parent != null)
+            ListTile(
+              dense: true,
+              leading: const Icon(LucideIcons.folderUp, size: 18),
+              title: const Text('Up'),
+              onTap: () => _link.deck({'t': 'files', 'path': files.parent}),
+            ),
+          for (final f in files.list)
+            ListTile(
+              dense: true,
+              leading: Icon(f.dir ? LucideIcons.folder : LucideIcons.file, size: 18),
+              title: Text(f.name, overflow: TextOverflow.ellipsis),
+              onTap: () => _link.deck({'t': f.dir ? 'files' : 'get', 'path': f.path}),
+            ),
+          if (files.cut) Text('Too many to show: use the terminal.', style: OrvText.muted(l)),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _sleep() async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Put the PC to sleep?'),
+        content: const Text('You can’t wake it from here unless it is set up for that.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('No')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Sleep')),
+        ],
+      ),
+    );
+    if (yes == true) _link.deck({'t': 'do', 'what': 'sleep'});
+  }
 
   Widget _outside(OrvLook l) {
     final s = _link.status;
@@ -513,5 +708,91 @@ class _PcTerminalState extends ConsumerState<PcTerminal> {
     if (_pin.text.isEmpty) return;
     _link.enterPin(_pin.text);
     _pin.clear();
+  }
+}
+
+/// Say it, run it (spec 0021 #12): the command is shown and can be changed; only Run runs it.
+class _SayIt extends ConsumerStatefulWidget {
+  const _SayIt({required this.shell});
+  final String shell;
+  @override
+  ConsumerState<_SayIt> createState() => _SayItState();
+}
+
+class _SayItState extends ConsumerState<_SayIt> {
+  final _want = TextEditingController();
+  final _command = TextEditingController();
+  Map<String, dynamic>? _got;
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _want.dispose();
+    _command.dispose();
+    super.dispose();
+  }
+
+  Future<void> _ask() async {
+    if (_busy || _want.text.trim().length < 3) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final r = await ref.read(apiProvider).post<Map<String, dynamic>>('/pc/suggest', {
+        'want': _want.text,
+        'shell': widget.shell,
+      });
+      _command.text = r['command'] as String;
+      _got = r;
+    } catch (_) {
+      _error = 'No suggestion this time. Try other words.';
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.orv;
+    final got = _got;
+    final some = got != null && (got['command'] as String).isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OrvField(
+            label: 'What do you want to do?',
+            hint: 'free port 3000',
+            controller: _want,
+            error: _error,
+            autofocus: true,
+            onSubmitted: (_) => _ask(),
+          ),
+          const SizedBox(height: 10),
+          OrvButton(label: 'Suggest', loading: _busy, onPressed: _ask),
+          if (got != null) ...[
+            const SizedBox(height: 14),
+            if (some) OrvField(label: 'Command', controller: _command),
+            const SizedBox(height: 6),
+            Text(got['why'] as String? ?? (some ? '' : 'No single command does that.'), style: OrvText.muted(l)),
+            if (some && got['careful'] == true)
+              Text('Changes things: read it first.', style: OrvText.muted(l).copyWith(color: l.c.danger)),
+            if (some) ...[
+              const SizedBox(height: 10),
+              OrvButton(
+                label: 'Run',
+                variant: ButtonVariant.primary,
+                onPressed: () {
+                  if (_command.text.trim().isNotEmpty) Navigator.of(context).pop(_command.text.trim());
+                },
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
   }
 }

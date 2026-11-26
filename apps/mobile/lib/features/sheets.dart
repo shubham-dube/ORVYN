@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,6 +15,7 @@ import '../design/glass.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 import 'common.dart';
+import 'notification_host.dart' show openNotificationUrl;
 
 /// Glass bottom sheet that inherits the current light.
 Future<T?> showGlassSheet<T>(BuildContext context, Widget Function(BuildContext) builder) {
@@ -118,7 +121,7 @@ class NotificationsSheet extends ConsumerWidget {
                                   ctl.markRead(n.id).catchError((Object _) {});
                                   if (n.url != null) {
                                     Navigator.of(context).pop();
-                                    context.go(n.url!);
+                                    unawaited(openNotificationUrl(ref, n.url!));
                                   }
                                 },
                                 child: Column(

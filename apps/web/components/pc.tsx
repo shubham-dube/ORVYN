@@ -2,13 +2,24 @@
 
 import '@xterm/xterm/css/xterm.css';
 import { type PcPairing, readPairing } from '@orvyn/vault-crypto';
+import type { PcSuggestion } from '@orvyn/contracts';
 import type { FitAddon } from '@xterm/addon-fit';
 import type { Terminal } from '@xterm/xterm';
-import { Monitor, Plus, X } from 'lucide-react';
-import { type FormEvent, type MutableRefObject, useCallback, useEffect, useRef, useState } from 'react';
-import { Badge, Empty, Glass, useToast } from '@/components/ui/bits';
+import { Bell, BellRing, Monitor, Plus, Wand2, X } from 'lucide-react';
+import {
+  type FormEvent,
+  type MutableRefObject,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { PcDeckPanel } from '@/components/pc-deck';
+import { Badge, Empty, Glass, Segmented, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { Field, Input } from '@/components/ui/field';
+import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { forgetPairing, pairings, PcLink, type PcStatus, savePairing } from '@/lib/pc';
 import { realtime } from '@/lib/realtime';
@@ -126,6 +137,13 @@ export function MyPc() {
   );
 }
 
+const DID: Record<string, string> = {
+  lock: 'The PC is locked',
+  sleep: 'The PC is going to sleep',
+  open: 'Opened on the PC',
+  'clipboard set': 'In the PC’s clipboard',
+};
+
 const WORDS: Record<PcStatus, string> = {
   finding: 'Looking for the PC…',
   offline: 'The PC isn’t answering. It may be off, asleep or offline, or this device was removed there.',
@@ -151,6 +169,7 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
   const [, redraw] = useState(0);
   const [active, setActive] = useState<string | null>(null);
   const [pin, setPin] = useState('');
+  const [tab, setTab] = useState<'terminal' | 'deck'>('terminal');
   const ctrl = useRef(false);
   const [ctrlOn, setCtrlOn] = useState(false);
   const say = useRef(toast);
@@ -165,6 +184,7 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
         changed: () => redraw((n) => n + 1),
         output: (id, text, reset) => screens.current.get(id)?.write(text, reset),
         opened: (id) => setActive(id),
+        did: (what) => say.current({ title: DID[what] ?? 'Done', tone: 'success' }),
         problem: (t) => say.current({ title: t, tone: 'danger' }),
       },
       deviceName(),
@@ -178,6 +198,7 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
   const status = l?.status ?? 'finding';
   const terms = l?.terms ?? [];
   const shown = terms.some((t) => t.id === active) ? active : (terms[0]?.id ?? null);
+  const current = terms.find((t) => t.id === shown);
   const waiting = status === 'finding' && shown !== null;
   const open = status === 'open' || waiting;
 
@@ -205,7 +226,19 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
       </div>
 
       {open ? (
-        <>
+        <Segmented
+          label="What to use"
+          value={tab}
+          onChange={(v: string) => setTab(v === 'deck' ? 'deck' : 'terminal')}
+          options={[
+            { value: 'terminal', label: 'Terminal' },
+            { value: 'deck', label: 'Deck' },
+          ]}
+        />
+      ) : null}
+      {open && tab === 'deck' && l ? <PcDeckPanel link={l} deck={l.remote} /> : null}
+      {open ? (
+        <div className={tab === 'terminal' ? 'contents' : 'hidden'}>
           <div role="tablist" aria-label="Terminals" className="flex gap-2 overflow-x-auto pb-1">
             {terms.map((t, i) => (
               <span
@@ -242,6 +275,29 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
               </Button>
             ))}
           </div>
+          {current && current.exit === null ? (
+            <SayIt
+              shell={current.name}
+              onRun={(command) => {
+                if (!l?.type(current.id, `${command}\r`)) {
+                  toast({ title: 'Not connected: nothing was run', tone: 'danger' });
+                  return false;
+                }
+                screens.current.get(current.id)?.focus();
+                return true;
+              }}
+            >
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-pressed={!!current.watch}
+                onClick={() => l?.watch(current.id, !current.watch)}
+              >
+                {current.watch ? <BellRing size={14} aria-hidden /> : <Bell size={14} aria-hidden />}
+                {current.watch ? 'Will tell you' : 'Tell me when done'}
+              </Button>
+            </SayIt>
+          ) : null}
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-orv-md border border-orv-edge bg-orv-base">
             {terms.map((t) => (
               <TermScreen
@@ -270,7 +326,7 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
               }
             />
           </div>
-        </>
+        </div>
       ) : (
         <Glass className="flex flex-col gap-3 p-5">
           <p role="status">{WORDS[status]}</p>
@@ -316,6 +372,95 @@ function PcTerminal({ pair, onLeave, onForget }: { pair: PcPairing; onLeave(): v
           ) : null}
         </Glass>
       )}
+    </div>
+  );
+}
+
+/** Say it, run it (#12): the command is shown and can be changed; only Run runs it. */
+function SayIt({
+  shell,
+  onRun,
+  children,
+}: {
+  shell: string;
+  onRun(command: string): boolean;
+  children: ReactNode;
+}) {
+  const toast = useToast();
+  const [on, setOn] = useState(false);
+  const [want, setWant] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [got, setGot] = useState<PcSuggestion | null>(null);
+  const ask = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      setGot(await api<PcSuggestion>('/pc/suggest', { method: 'POST', body: { want, shell } }));
+    } catch {
+      toast({ title: 'No suggestion this time. Try other words.', tone: 'danger' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const close = () => {
+    setOn(false);
+    setGot(null);
+    setWant('');
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="ghost" aria-expanded={on} onClick={() => (on ? close() : setOn(true))}>
+          <Wand2 size={14} aria-hidden /> Say it
+        </Button>
+        {children}
+      </div>
+      {on ? (
+        <Glass className="flex flex-col gap-2 p-3">
+          <form className="flex gap-2" onSubmit={ask}>
+            <Input
+              aria-label="What do you want to do?"
+              placeholder="free port 3000"
+              value={want}
+              onChange={(e) => setWant(e.target.value)}
+              maxLength={500}
+              autoFocus
+            />
+            <Button type="submit" loading={busy} disabled={want.trim().length < 3}>
+              Suggest
+            </Button>
+          </form>
+          {got ? (
+            got.command ? (
+              <form
+                className="flex flex-col gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (onRun(got.command)) close();
+                }}
+              >
+                <Input
+                  aria-label="Command"
+                  className="font-mono"
+                  value={got.command}
+                  onChange={(e) => setGot({ ...got, command: e.target.value })}
+                  spellCheck={false}
+                />
+                <p className="text-small text-orv-muted">
+                  {got.why} {got.careful ? <Badge tone="warning">Changes things: read it first</Badge> : null}
+                </p>
+                <Button type="submit" variant="primary" disabled={!got.command.trim()} className="self-start">
+                  Run
+                </Button>
+              </form>
+            ) : (
+              <p role="status" className="text-small text-orv-muted">
+                {got.why || 'No single command does that.'}
+              </p>
+            )
+          ) : null}
+        </Glass>
+      ) : null}
     </div>
   );
 }
@@ -430,7 +575,8 @@ function TermScreen({
       }
       link.attach(id, term.cols, term.rows);
       const watch = new ResizeObserver(() => {
-        if (visible.current) fit.fit();
+        // not while another tab hides it
+        if (visible.current && box.current?.offsetWidth) fit.fit();
       });
       watch.observe(box.current);
       undo = () => {

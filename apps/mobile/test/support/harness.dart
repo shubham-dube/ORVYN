@@ -74,6 +74,14 @@ class RecordingPusher implements Pusher {
   final tapController = StreamController<Map<String, dynamic>>.broadcast();
   @override
   Stream<Map<String, dynamic>> get taps => tapController.stream;
+  Map<String, dynamic>? launch;
+  @override
+  Map<String, dynamic>? takeLaunch() {
+    final t = launch;
+    launch = null;
+    return t;
+  }
+
   @override
   bool get ready => false;
   @override

@@ -170,6 +170,38 @@ impl Client {
         }
     }
 
+    /// A file's bytes for Drop; its id.
+    pub async fn upload(&self, bytes: Vec<u8>, mime: &str, name: &str) -> Result<String, ApiError> {
+        if self.access.read().await.is_none() {
+            self.refresh(None).await?;
+        }
+        let name: String = url::form_urlencoded::byte_serialize(name.as_bytes()).collect();
+        for attempt in 0..2 {
+            let token = self.access.read().await.clone();
+            let r = self
+                .http
+                .post(format!("{}/files", self.api_url))
+                .bearer_auth(token.as_deref().unwrap_or_default())
+                .header("content-type", mime)
+                .header("x-file-name", &name)
+                .header("x-file-purpose", "drop")
+                .body(bytes.clone())
+                .send()
+                .await
+                .map_err(|_| ApiError::Offline)?;
+            if r.status().as_u16() == 401 && attempt == 0 {
+                self.refresh(token).await?;
+                continue;
+            }
+            if !r.status().is_success() {
+                return Err(http_error(r).await);
+            }
+            let v: Value = r.json().await.map_err(|_| ApiError::Offline)?;
+            return v["id"].as_str().map(str::to_owned).ok_or(ApiError::Offline);
+        }
+        Err(ApiError::SignedOut)
+    }
+
     pub async fn sign_out(&self) {
         let _ = self
             .call::<Value>(reqwest::Method::POST, "/auth/sign-out", Some(serde_json::json!({})))

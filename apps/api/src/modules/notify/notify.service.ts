@@ -60,14 +60,25 @@ export interface NotifyAction {
   actionId: string;
   /** what the person typed, for an action that asks for a reply */
   text?: string;
-  notification: { id: string; module: string; kind: string; ref: string | null };
+  notification: {
+    id: string;
+    module: string;
+    kind: string;
+    ref: string | null;
+    alarm: boolean;
+    priority: string;
+  };
 }
 
 type Job =
-  | { kind: 'deliver'; id: string; again?: boolean }
+  /** `at`: which time it spoke; one that has spoken again since has its own job. `held`: waited for quiet hours */
+  | { kind: 'deliver'; id: string; at?: number; again?: boolean; held?: boolean }
+  | { kind: 'push'; id: string; at: number; tries: number; targets: string[] }
+  | { kind: 'copy'; id: string; way: 'email' | 'whatsapp' }
   | { kind: 'clear'; id: string; ownerId: string; type: 'dismiss' | 'read' };
 const QUEUE = 'notify';
 const MAX_FAILURES = 5;
+const PUSH_RETRY_MS = [30_000, 2 * 60_000, 10 * 60_000, 30 * 60_000];
 
 /** One notification pipeline for every module (spec 0001 §notify). */
 @Injectable()
@@ -201,7 +212,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     );
     await this.queue.add(
       'deliver',
-      { kind: 'deliver', id: view.id },
+      { kind: 'deliver', id: view.id, at: row!.updatedAt.getTime() },
       { jobId: `deliver-${view.id}-${row!.updatedAt.getTime()}` },
     );
     return view;
@@ -209,17 +220,75 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
 
   private async process(job: Job): Promise<void> {
     if (job.kind === 'clear') return this.pushClear(job.ownerId, job.id, job.type);
-    const [n] = await this.db.select().from(notifications).where(eq(notifications.id, job.id));
+    if (job.kind === 'copy') return this.sendCopy(job.id, job.way);
+    let [n] = await this.db.select().from(notifications).where(eq(notifications.id, job.id));
     if (!n || n.dismissedAt || n.readAt) return;
+    if (job.at !== undefined && n.updatedAt.getTime() !== job.at) return;
+    if (job.kind === 'push') return this.pushAndRetry(n, job.at, job.tries, job.targets);
     const settings = await this.settings(n.ownerId);
     if (settings.mutedModules.includes(n.module) && n.priority !== 'urgent') return;
     if (n.priority !== 'urgent') {
       const wait = msUntilQuietEnds(new Date(), settings.quietHours);
       if (wait > 0) {
-        await this.queue.add('deliver', job, { delay: wait, jobId: `deliver-${n.id}-quiet-${Date.now()}` });
+        await this.queue.add(
+          'deliver',
+          { ...job, held: true },
+          { delay: wait, jobId: `deliver-${n.id}-quiet-${Date.now()}` },
+        );
         return;
       }
     }
+    const push = (n.via ?? {}).push !== false;
+    if (job.again) {
+      // it speaks again: a new moment, so open devices (PC, Chrome) that showed it show it again
+      [n] = await this.db
+        .update(notifications)
+        .set({ repeatLeft: sql`greatest(${notifications.repeatLeft} - 1, 0)` })
+        .where(eq(notifications.id, n.id))
+        .returning();
+      if (!n) return;
+    }
+    const at = n.updatedAt.getTime();
+    if (push && (job.again || job.held))
+      await this.realtime.toUser(
+        n.ownerId,
+        { type: 'notify.new', notification: toView(n) },
+        n.sourceDeviceId ?? undefined,
+      );
+    if (push) await this.pushAndRetry(n, at);
+    // copies go out once, not on every repeat, each retried on its own (a failed mail doesn't ring the phone again)
+    if (!job.again) {
+      if (n.via?.email || (!n.via && settings.emailFor.includes(n.priority)))
+        await this.copy(n.id, at, 'email');
+      if (n.via?.whatsapp) await this.copy(n.id, at, 'whatsapp');
+    }
+    // a hard notification comes back until someone acts on it
+    if (n.repeatEveryMin && n.repeatLeft > 0)
+      await this.queue.add(
+        'deliver',
+        { kind: 'deliver', id: n.id, at, again: true },
+        { delay: n.repeatEveryMin * 60_000, jobId: `deliver-${n.id}-again-${at}` },
+      );
+  }
+
+  private async copy(id: string, at: number, way: 'email' | 'whatsapp') {
+    await this.queue.add('copy', { kind: 'copy', id, way }, { jobId: `copy-${id}-${way}-${at}` });
+  }
+
+  private async sendCopy(id: string, way: 'email' | 'whatsapp'): Promise<void> {
+    const [n] = await this.db.select().from(notifications).where(eq(notifications.id, id));
+    if (!n || n.dismissedAt) return;
+    if (way === 'email') await this.emailCopy(n.ownerId, n.title, n.body, n.url);
+    else await this.whatsapp.notify(n.ownerId, `${n.title}${n.body ? ` — ${n.body}` : ''}`);
+  }
+
+  /** A push service that is down for a moment is tried again, only where it failed. */
+  private async pushAndRetry(
+    n: typeof notifications.$inferSelect,
+    at: number,
+    tries = 0,
+    only?: string[],
+  ): Promise<void> {
     const payload: PushPayload = {
       type: 'notify',
       id: n.id,
@@ -230,27 +299,17 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       priority: n.priority,
       alarm: n.alarm,
       actions: n.actions,
+      ...taskOf(n.ref),
     };
-    const via = n.via ?? {};
-    if (via.push !== false) await this.pushToTargets(n.ownerId, payload, n.sourceDeviceId);
-    // copies go out once, not on every repeat
-    if (!job.again) {
-      if (via.email || (!n.via && settings.emailFor.includes(n.priority)))
-        await this.emailCopy(n.ownerId, n.title, n.body, n.url);
-      if (via.whatsapp) await this.whatsapp.notify(n.ownerId, `${n.title}${n.body ? ` — ${n.body}` : ''}`);
-    }
-    // a hard notification comes back until someone acts on it
-    if (n.repeatEveryMin && n.repeatLeft > 0) {
-      await this.db
-        .update(notifications)
-        .set({ repeatLeft: n.repeatLeft - 1 })
-        .where(eq(notifications.id, n.id));
+    const report = await this.pushToTargets(n.ownerId, payload, n.sourceDeviceId, undefined, undefined, only);
+    const failed = report.filter((r) => r.again).map((r) => r.targetId);
+    const delay = PUSH_RETRY_MS[tries];
+    if (failed.length && delay)
       await this.queue.add(
-        'deliver',
-        { kind: 'deliver', id: n.id, again: true },
-        { delay: n.repeatEveryMin * 60_000, jobId: `deliver-${n.id}-again-${n.repeatLeft}` },
+        'push',
+        { kind: 'push', id: n.id, at, tries: tries + 1, targets: failed },
+        { delay, jobId: `push-${n.id}-${at}-${tries + 1}` },
       );
-    }
   }
 
   private async pushToTargets(
@@ -259,7 +318,8 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
     exceptDeviceId: string | null,
     channel?: 'fcm' | 'webpush',
     onlyDeviceId?: string,
-  ): Promise<{ targetId: string; deviceId: string; channel: string; outcome: string; detail: string }[]> {
+    onlyTargets?: string[],
+  ): Promise<PushReport[]> {
     const rows = await this.db
       .select({ t: pushTargets })
       .from(pushTargets)
@@ -267,13 +327,13 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       .where(
         and(eq(pushTargets.ownerId, ownerId), isNull(pushTargets.disabledAt), isNull(devices.revokedAt)),
       );
-    const report: { targetId: string; deviceId: string; channel: string; outcome: string; detail: string }[] =
-      [];
+    const report: PushReport[] = [];
     for (const { t } of rows) {
       if (exceptDeviceId && t.deviceId === exceptDeviceId) continue;
       if (onlyDeviceId && t.deviceId !== onlyDeviceId) continue;
       if (channel && t.channel !== channel) continue;
-      let r: { outcome: string; detail: string };
+      if (onlyTargets && !onlyTargets.includes(t.id)) continue;
+      let r: { outcome: string; detail: string; again?: boolean };
       try {
         r = outcomeOf(
           await this.sender.send(
@@ -282,7 +342,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
           ),
         );
       } catch (e) {
-        r = { outcome: 'failed', detail: (e as Error).message.slice(0, 200) };
+        r = { outcome: 'failed', detail: (e as Error).message.slice(0, 200), again: true };
       }
       report.push({ targetId: t.id, deviceId: t.deviceId, channel: t.channel, ...r });
       const last = { lastResult: r.outcome, lastError: r.detail || null, lastAt: new Date() };
@@ -296,8 +356,13 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
           .update(pushTargets)
           .set({
             ...last,
-            failures: sql`${pushTargets.failures} + 1`,
-            disabledAt: t.failures + 1 >= MAX_FAILURES ? new Date() : null,
+            // the service being down says nothing about this device
+            ...(r.again
+              ? {}
+              : {
+                  failures: sql`${pushTargets.failures} + 1`,
+                  disabledAt: t.failures + 1 >= MAX_FAILURES ? new Date() : null,
+                }),
           })
           .where(eq(pushTargets.id, t.id));
       else
@@ -380,12 +445,16 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       deviceId,
     );
     const live = this.realtime.connectedDevices(ownerId).filter((d) => !deviceId || d === deviceId);
-    return { id: n.id, live, push };
+    return { id: n.id, live, push: push.map(({ again: _, ...p }) => p) };
   }
 
   /** Android renders pushes itself, so it can also remove them; browsers get this via the socket when open. */
   private async pushClear(ownerId: string, id: string, type: 'dismiss' | 'read'): Promise<void> {
-    await this.pushToTargets(ownerId, { type, id }, null, 'fcm');
+    const [n] = await this.db
+      .select({ ref: notifications.ref })
+      .from(notifications)
+      .where(eq(notifications.id, id));
+    await this.pushToTargets(ownerId, { type, id, ...taskOf(n?.ref ?? null) }, null, 'fcm');
   }
 
   private async emailCopy(ownerId: string, title: string, body: string, url: string | null): Promise<void> {
@@ -460,7 +529,14 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       deviceId,
       actionId,
       ...(action.reply ? { text: typed } : {}),
-      notification: { id: n.id, module: n.module, kind: n.kind, ref: n.ref },
+      notification: {
+        id: n.id,
+        module: n.module,
+        kind: n.kind,
+        ref: n.ref,
+        alarm: n.alarm,
+        priority: n.priority,
+      },
     } satisfies NotifyAction);
     // the module may have asked again under the same key (e.g. "didn't catch that"): keep that one
     const [now] = await this.db
@@ -489,7 +565,7 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
    */
   async missed(ownerId: string, deviceId: string, since?: Date): Promise<MissedNotifications> {
     const now = new Date();
-    if (!since) return { items: [], until: now.toISOString() };
+    if (!since) return { items: [], cleared: [], until: now.toISOString() };
     const settings = await this.settings(ownerId);
     const quiet = msUntilQuietEnds(now, settings.quietHours) > 0;
     const rows = await this.db
@@ -506,7 +582,19 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       )
       .orderBy(asc(notifications.updatedAt))
       .limit(200);
+    const from = new Date(since.getTime() - MISSED_OVERLAP_MS);
+    const cleared = await this.db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.ownerId, ownerId),
+          or(gt(notifications.readAt, from), gt(notifications.dismissedAt, from)),
+        ),
+      )
+      .limit(500);
     return {
+      cleared: cleared.map((c) => c.id),
       items: rows.filter((r) => !isSilent(r, settings, quiet)).map((r) => toView(r)),
       until: quiet
         ? since.toISOString()
@@ -668,10 +756,10 @@ export class NotifyService implements OnModuleInit, OnModuleDestroy {
       type: 'security.new_device',
       title: 'New sign-in',
       body: `${p.deviceName} (${p.platform}) just signed in. Not you? Sign it out in Devices.`,
-      url: '/settings/devices',
+      url: '/settings#security',
       priority: 'high',
       sourceDeviceId: p.deviceId,
-      actions: [{ id: 'review', label: 'Review', open: '/settings/devices' }],
+      actions: [{ id: 'review', label: 'Review', open: '/settings#security' }],
     });
   }
 }
@@ -689,6 +777,20 @@ function cleanRules(rules: NotifySettings['rules'] | undefined): NotifySettings[
   }
   return out;
 }
+
+interface PushReport {
+  targetId: string;
+  deviceId: string;
+  channel: string;
+  outcome: string;
+  detail: string;
+  /** worth trying again */
+  again?: boolean;
+}
+
+/** The task a reminder is about, so a phone that rings by itself for it doesn't ring twice. */
+const taskOf = (ref: string | null) =>
+  ref?.startsWith('today.task:') ? { task: ref.slice('today.task:'.length) } : {};
 
 const MISSED_OVERLAP_MS = 2 * 60_000;
 
