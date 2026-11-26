@@ -123,14 +123,24 @@ describe('sessions', () => {
     });
     expect(r1.status).toBe(200);
     expect(r1.body.refreshToken).not.toBe(s.refreshToken);
-    // the old token is presented again → the device is revoked, even the newest token stops working
+    // the answer was lost on the way: asked again with the old token, once, while the new one is unused
+    const again = await call<SessionResponse>(h, 'POST', '/auth/refresh', {
+      body: { refreshToken: s.refreshToken },
+    });
+    expect(again.status).toBe(200);
+    // (the lost one never reached the device, so it is never presented)
+    const t2 = await call<SessionResponse>(h, 'POST', '/auth/refresh', {
+      body: { refreshToken: again.body.refreshToken },
+    });
+    expect(t2.status).toBe(200);
+    // that was the only time: the old token presented again after the new one was used → the device is revoked
     const reuse = await call(h, 'POST', '/auth/refresh', { body: { refreshToken: s.refreshToken } });
     expect(reuse.status).toBe(401);
     expect(reuse.body.error.code).toBe('session_revoked');
     expect(
-      (await call(h, 'POST', '/auth/refresh', { body: { refreshToken: r1.body.refreshToken } })).status,
+      (await call(h, 'POST', '/auth/refresh', { body: { refreshToken: t2.body.refreshToken } })).status,
     ).toBe(401);
-    expect((await call(h, 'GET', '/me', { token: r1.body.accessToken })).status).toBe(401);
+    expect((await call(h, 'GET', '/me', { token: t2.body.accessToken })).status).toBe(401);
     const audit = await call<any[]>(h, 'GET', '/admin/audit', { token: owner.accessToken });
     expect(audit.body.some((a) => a.action === 'auth.refresh_reuse')).toBe(true);
   });

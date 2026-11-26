@@ -36,6 +36,7 @@ const launcherModules = <LauncherModule>[
   LauncherModule('split', 'Split', LucideIcons.receipt, '/split', entitlement: 'split'),
   LauncherModule('ipo', 'IPO', LucideIcons.trendingUp, '/ipo', entitlement: 'ipo'),
   LauncherModule('mail', 'Mail', LucideIcons.mail, '/mail', entitlement: 'today'),
+  LauncherModule('day', 'My Day', LucideIcons.activity, '/day', entitlement: 'activity'),
   LauncherModule('pc', 'My PC', LucideIcons.squareTerminal, '/pc', entitlement: 'pc'),
   LauncherModule('people', 'People', LucideIcons.users, '/people', entitlement: 'owner'),
   LauncherModule('settings', 'Settings', LucideIcons.settings, '/settings'),
@@ -92,6 +93,8 @@ class ModuleLauncher extends ConsumerWidget {
           final important = boxes.fold<int>(0, (a, b) => a + ((b['important'] as num?)?.toInt() ?? 0));
           final n = boxes.fold<int>(0, (a, b) => a + ((b['unread'] as num?)?.toInt() ?? 0));
           return important > 0 ? '$important need you' : (n == 0 ? 'All read' : '$n unread');
+        case 'day':
+          return 'Every device';
         case 'pc':
           return 'Terminal';
         case 'people':
@@ -140,7 +143,7 @@ class ModuleLauncher extends ConsumerWidget {
                   onTap: () {
                     HapticFeedback.selectionClick();
                     Navigator.of(context).pop();
-                    const {'mail', 'people', 'pc'}.contains(m.key) ? context.push(m.route) : context.go(m.route);
+                    const {'mail', 'people', 'pc', 'day'}.contains(m.key) ? context.push(m.route) : context.go(m.route);
                   },
                 ),
             ],

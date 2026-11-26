@@ -28,12 +28,12 @@ const count = z.number().int().min(0).max(1_000_000).default(0);
 export const ActivitySpan = z
   .object({
     id: z.string().uuid(),
-    source: z.enum(['web', 'pc']),
+    source: z.enum(['web', 'pc', 'phone']),
     start: z.string().datetime({ offset: true }),
     end: z.string().datetime({ offset: true }),
     /** active = in front and used; media = watching or listening; away / locked = nobody there */
     kind: z.enum(['active', 'media', 'away', 'locked']).default('active'),
-    /** the program ("chrome.exe", "Code.exe"); for the browser, its name */
+    /** the program ("chrome.exe", "Code.exe"); for the browser, its name; on a phone, the app's package */
     app: z.string().max(120).default(''),
     host: z.string().max(253).default(''),
     /** path only: query strings are never sent, except `q` of a search */
@@ -70,6 +70,21 @@ export interface DayBlock {
   keys: number;
   clicks: number;
   scrolls: number;
+  /** which device (its name) */
+  device: string;
+}
+
+/** One device's own day, beside the others (spec 0024). */
+export interface DayDevice {
+  id: string;
+  name: string;
+  /** pc, web, phone; a browser on a PC goes with that PC */
+  kind: 'pc' | 'web' | 'phone';
+  /** browsers that were found to run on this PC */
+  with: string[];
+  activeMs: number;
+  blocks: DayBlock[];
+  places: DayPlace[];
 }
 export interface DayPlace {
   place: string;
@@ -83,8 +98,11 @@ export interface ActivityDay {
   date: string;
   firstAt: string | null;
   lastAt: string | null;
+  /** time with any device in use, counted once however many were */
   activeMs: number;
   awayMs: number;
+  /** each device on its own; `blocks` is where the attention was, moment by moment */
+  devices: DayDevice[];
   byCategory: { category: ActivityCategory; ms: number }[];
   places: DayPlace[];
   blocks: DayBlock[];

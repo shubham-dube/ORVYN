@@ -1,0 +1,1 @@
+ALTER TABLE "refresh_tokens" ADD COLUMN "replaced" boolean DEFAULT false NOT NULL;

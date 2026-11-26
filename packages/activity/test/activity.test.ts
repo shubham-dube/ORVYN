@@ -1,11 +1,20 @@
 import type { ActivitySpan } from '@orvyn/contracts';
 import { describe as group, expect, it } from 'vitest';
-import { buildDay, categorize, dayLines, describe, duration, inside, place } from '../src/index';
+import {
+  buildDay,
+  type DeviceSpan,
+  categorize,
+  dayLines,
+  describe,
+  duration,
+  inside,
+  place,
+} from '../src/index';
 
 const T0 = Date.parse('2026-11-25T03:30:00Z'); // 9:00 in India
 const at = (min: number) => new Date(T0 + min * 60_000).toISOString();
 let n = 0;
-const span = ({ m, ...o }: Partial<ActivitySpan> & { m: [number, number] }): ActivitySpan => ({
+const span = ({ m, ...o }: Partial<DeviceSpan> & { m: [number, number] }): DeviceSpan => ({
   id: `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`,
   source: 'web',
   kind: 'active',
@@ -21,8 +30,14 @@ const span = ({ m, ...o }: Partial<ActivitySpan> & { m: [number, number] }): Act
   start: at(m[0]),
   end: at(m[1]),
 });
-const day = (spans: ActivitySpan[]) =>
+const day = (spans: DeviceSpan[]) =>
   buildDay('2026-11-25', spans, {
+    devices: [
+      { id: 'pc1', name: 'Study PC' },
+      { id: 'pc2', name: 'Laptop' },
+      { id: 'chrome1', name: 'Chrome' },
+      { id: 'phone', name: 'Pixel' },
+    ],
     from: T0 - 9 * 3_600_000,
     to: T0 + 15 * 3_600_000,
     hourOf: (ms) => new Date(ms + 5.5 * 3_600_000).getUTCHours(),
@@ -115,6 +130,49 @@ group('a day', () => {
     expect(day([span({ host: 'a.test', m: [0, 30] }), span({ host: 'b.test', m: [10, 20] })]).activeMs).toBe(
       30 * 60_000,
     );
+  });
+  it('two PCs, their browsers and a phone at once: each its own, the day counted once (spec 0024)', () => {
+    const d = day([
+      span({ device: 'pc1', source: 'pc', app: 'chrome.exe', m: [0, 60] }),
+      span({ device: 'chrome1', host: 'github.com', path: '/a/b', m: [0, 60], keys: 30 }),
+      span({
+        device: 'pc2',
+        source: 'pc',
+        app: 'Code.exe',
+        title: 'a.ts - orvyn - Visual Studio Code',
+        m: [30, 90],
+      }),
+      span({ device: 'phone', source: 'phone', app: 'com.whatsapp', title: 'WhatsApp', m: [40, 50] }),
+      span({ device: 'phone', source: 'phone', app: 'com.example.unknown', title: 'Some App', m: [95, 100] }),
+      span({ device: 'phone', source: 'phone', kind: 'locked', app: '', m: [100, 120] }),
+    ]);
+    expect(d.devices.map((v) => [v.name, v.kind, v.with, v.activeMs / 60_000])).toEqual([
+      ['Study PC', 'pc', ['Chrome'], 60],
+      ['Laptop', 'pc', [], 60],
+      ['Pixel', 'phone', [], 15],
+    ]);
+    expect(d.devices[0]!.places.map((p) => p.place)).toEqual(['GitHub']); // the browser explains its PC
+    expect(d.activeMs).toBe(95 * 60_000); // 0–90 and 95–100, once
+    // where the attention was: the phone in hand wins, otherwise the newest in use
+    const at = (min: number) =>
+      d.blocks.find((b) => Date.parse(b.start) <= T0 + min * 60_000 && T0 + min * 60_000 < Date.parse(b.end));
+    expect([at(10)?.place, at(45)?.place, at(45)?.device, at(70)?.place, at(97)?.place]).toEqual([
+      'GitHub',
+      'WhatsApp',
+      'Pixel',
+      'VS Code',
+      'Some App',
+    ]);
+    expect(d.byCategory.find((c) => c.category === 'messages')?.ms).toBe(10 * 60_000);
+    expect(dayLines(d, () => '9:00')).toContain('Phone "Pixel": 15 min');
+  });
+  it('a browser on no PC of mine stands on its own', () => {
+    const d = day([
+      span({ device: 'pc1', source: 'pc', app: 'Code.exe', m: [0, 30] }),
+      span({ device: 'chrome1', host: 'github.com', m: [0, 30] }),
+    ]);
+    expect(d.devices.map((v) => v.name)).toEqual(['Study PC', 'Chrome']);
+    expect(d.activeMs).toBe(30 * 60_000);
   });
   it('reads as lines without paths', () => {
     const d = day([span({ host: 'x.test', path: '/secret/path', title: 'Hello', m: [0, 10] })]);

@@ -73,6 +73,8 @@ export const refreshTokens = pgTable(
     expiresAt: ts('expires_at').notNull(),
     /** Set when this token was exchanged for a new one; presenting it again = theft signal. */
     rotatedAt: ts('rotated_at'),
+    /** given to replace one whose answer never arrived: a second such loss is treated as theft */
+    replaced: boolean('replaced').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

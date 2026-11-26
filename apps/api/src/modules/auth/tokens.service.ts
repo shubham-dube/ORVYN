@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne } from 'drizzle-orm';
 import { jwtVerify, SignJWT } from 'jose';
 import { hashSecret, randomToken } from '../../common/crypto';
 import { ENV, type Env } from '../../config/env';
@@ -17,6 +17,9 @@ export type RefreshOutcome =
   | { kind: 'invalid' }
   /** An already-rotated token was presented: someone else may hold this device's tokens. */
   | { kind: 'reuse'; userId: string; deviceId: string };
+
+/** How long after a refresh a lost answer may be asked for again. */
+const LOST_ANSWER_MS = 10 * 60_000;
 
 @Injectable()
 export class TokensService {
@@ -53,7 +56,7 @@ export class TokensService {
     }
   }
 
-  async issueRefresh(userId: string, deviceId: string, db: Db = this.db): Promise<string> {
+  async issueRefresh(userId: string, deviceId: string, db: Db = this.db, replaced = false): Promise<string> {
     const token = randomToken();
     await db.insert(refreshTokens).values({
       id: newId(),
@@ -61,11 +64,16 @@ export class TokensService {
       deviceId,
       tokenHash: hashSecret(this.env.TOKEN_PEPPER, token),
       expiresAt: new Date(Date.now() + this.env.REFRESH_TOKEN_TTL_DAYS * 86_400_000),
+      replaced,
     });
     return token;
   }
 
-  /** Exchange a refresh token for a new one (rotation). Reuse of a rotated token revokes the whole device. */
+  /**
+   * Exchange a refresh token for a new one (rotation). Reuse of a rotated token revokes the whole device, with one
+   * exception (spec 0023): the answer to a refresh got lost on the way, so the device asks again with the token it
+   * still has. That is allowed once, within minutes, and only while the token it was given has never been used.
+   */
   async rotate(token: string): Promise<RefreshOutcome> {
     const hash = hashSecret(this.env.TOKEN_PEPPER, token);
     return this.db.transaction(async (tx) => {
@@ -79,6 +87,29 @@ export class TokensService {
       const { rt } = row;
       if (row.revokedAt) return { kind: 'invalid' } as const;
       if (rt.rotatedAt) {
+        const after = await tx
+          .select()
+          .from(refreshTokens)
+          .where(
+            and(
+              eq(refreshTokens.deviceId, rt.deviceId),
+              ne(refreshTokens.id, rt.id), // its own time, read back, has lost its microseconds
+              gt(refreshTokens.createdAt, rt.createdAt),
+            ),
+          )
+          .for('update');
+        const lost = after.length === 1 ? after[0]! : null;
+        if (
+          lost &&
+          !lost.rotatedAt &&
+          !lost.replaced &&
+          Date.now() - rt.rotatedAt.getTime() < LOST_ANSWER_MS &&
+          rt.expiresAt.getTime() > Date.now()
+        ) {
+          await tx.update(refreshTokens).set({ rotatedAt: new Date() }).where(eq(refreshTokens.id, lost.id));
+          const next = await this.issueRefresh(rt.ownerId, rt.deviceId, tx as unknown as Db, true);
+          return { kind: 'ok', userId: rt.ownerId, deviceId: rt.deviceId, refreshToken: next } as const;
+        }
         await tx
           .update(devices)
           .set({ revokedAt: new Date(), revokedReason: 'refresh_reuse' })

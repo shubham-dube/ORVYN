@@ -324,6 +324,14 @@ export class AuthService {
     this.events.emit('auth.device_revoked', { userId, deviceId, reason });
   }
 
+  /** Every device I ever signed in on, signed out ones too: My Day names them (spec 0024). */
+  async deviceNames(userId: string): Promise<{ id: string; name: string }[]> {
+    return this.db
+      .select({ id: devices.id, name: devices.name })
+      .from(devices)
+      .where(eq(devices.ownerId, userId));
+  }
+
   async listDevices(userId: string, currentDeviceId: string) {
     const rows = await this.db
       .select()

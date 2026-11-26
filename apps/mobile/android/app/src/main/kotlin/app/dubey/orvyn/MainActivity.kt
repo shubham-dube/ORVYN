@@ -20,6 +20,8 @@ class MainActivity : FlutterFragmentActivity() {
         // Money capture: while ORVYN is open, new payment notifications are read straight away
         val ch = MoneyListener.bind(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         MoneyListener.onArrived = { ch.invokeMethod("arrived", null) }
+        // My Day on this phone (spec 0024)
+        UsageWatch.bind(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         // Drop: the share sheet
         share = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orvyn/share").also {
             it.setMethodCallHandler { call, result ->

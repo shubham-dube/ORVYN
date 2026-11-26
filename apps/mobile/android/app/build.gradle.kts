@@ -70,6 +70,8 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // My Day on this phone: the hourly look, with ORVYN closed
+    implementation("androidx.work:work-runtime-ktx:2.10.5")
 }
 
 // Firebase (push) is configured by dropping google-services.json into android/app at release time.

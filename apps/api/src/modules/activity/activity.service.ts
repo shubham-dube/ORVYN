@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { buildDay, dayLines } from '@orvyn/activity';
+import { buildDay, dayLines, type DeviceName, type DeviceSpan } from '@orvyn/activity';
 import {
   type ActivityDay,
   type ActivityDaySummary,
@@ -13,6 +13,7 @@ import { badRequest } from '../../common/errors';
 import { Seal } from '../../common/seal';
 import { DB, type Db } from '../../db/db.module';
 import { AiService } from '../ai/ai.service';
+import { AuthService } from '../auth/auth.service';
 import { plainAi } from '../ai/plain';
 import { activityRules, activitySpans } from './activity.schema';
 
@@ -35,6 +36,7 @@ export class ActivityService {
     @Inject(DB) private readonly db: Db,
     private readonly seal: Seal,
     private readonly ai: AiService,
+    private readonly auth: AuthService,
   ) {}
 
   /**
@@ -71,7 +73,7 @@ export class ActivityService {
     return { saved: saved.length };
   }
 
-  private async spans(ownerId: string, from: number, to: number): Promise<ActivitySpan[]> {
+  private async spans(ownerId: string, from: number, to: number): Promise<DeviceSpan[]> {
     const rows = await this.db
       .select()
       .from(activitySpans)
@@ -88,6 +90,7 @@ export class ActivityService {
     return rows.map((r) => ({
       ...box.open<Inner>(r.sealed),
       id: r.id,
+      device: r.deviceId,
       start: r.startAt.toISOString(),
       end: r.endAt.toISOString(),
     }));
@@ -104,18 +107,31 @@ export class ActivityService {
     };
   }
 
-  private build(date: string, tz: string, spans: ActivitySpan[], rules: ActivityRules): ActivityDay {
+  private build(
+    date: string,
+    tz: string,
+    spans: DeviceSpan[],
+    rules: ActivityRules,
+    devices: DeviceName[],
+  ): ActivityDay {
     const hour = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' });
     return buildDay(date, spans, {
       ...this.bounds(date, tz),
       rules,
+      devices,
       hourOf: (ms) => Number(hour.format(ms)),
     });
   }
 
   async day(ownerId: string, date: string, tz: string): Promise<ActivityDay> {
     const { from, to } = this.bounds(date, tz);
-    return this.build(date, tz, await this.spans(ownerId, from, to), await this.rules(ownerId));
+    return this.build(
+      date,
+      tz,
+      await this.spans(ownerId, from, to),
+      await this.rules(ownerId),
+      await this.auth.deviceNames(ownerId),
+    );
   }
 
   async range(ownerId: string, from: string, to: string, tz: string): Promise<ActivityDaySummary[]> {
@@ -127,9 +143,10 @@ export class ActivityService {
       throw badRequest('invalid_request', `Choose up to ${MAX_DAYS} days.`);
     const rules = await this.rules(ownerId);
     const spans = await this.spans(ownerId, start, end);
+    const devices = await this.auth.deviceNames(ownerId);
     const out: ActivityDaySummary[] = [];
     for (let t = a; t <= b; t += DAY) {
-      const d = this.build(new Date(t).toISOString().slice(0, 10), tz, spans, rules);
+      const d = this.build(new Date(t).toISOString().slice(0, 10), tz, spans, rules, devices);
       out.push({
         date: d.date,
         activeMs: d.activeMs,

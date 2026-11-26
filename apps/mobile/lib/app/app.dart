@@ -1,3 +1,4 @@
+import '../activity/phone_day.dart';
 import '../features/notification_host.dart';
 import '../money/capture.dart';
 import 'home_widget.dart';
@@ -48,7 +49,10 @@ class _OrvynAppState extends ConsumerState<OrvynApp> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     ref.watch(homeWidgetSyncProvider); // keeps the home-screen widget current (and blank when signed out)
     ref.watch(alarmSyncProvider); // alarms ring on this phone even offline
-    ref.watch(captureSyncProvider); // payment messages read on this phone become transactions (ADR-0012)
+    ref.watch(captureSyncProvider);
+    ref.watch(
+      phoneDaySyncProvider,
+    ); // My Day on this phone (spec 0024) // payment messages read on this phone become transactions (ADR-0012)
     final look = OrvLook(phase: ref.watch(phaseProvider), module: 'core');
     final locked = ref.watch(lockProvider).locked && ref.watch(sessionProvider) is SignedIn;
     return OrvTheme(

@@ -232,6 +232,13 @@
       "when": 1795553419782,
       "tag": "0032_activity_fill",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1795670653018,
+      "tag": "0033_pink_paibok",
+      "breakpoints": true
     }
   ]
 }

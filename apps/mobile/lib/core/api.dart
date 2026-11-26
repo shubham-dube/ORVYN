@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'dart:typed_data';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'models.dart';
 import 'session_store.dart';
@@ -68,7 +71,30 @@ class Api {
   /// One refresh at a time. Returns null (and clears the session) when the refresh token is gone or refused.
   Future<SessionResponse?> refresh() => _refreshing ??= _doRefresh().whenComplete(() => _refreshing = null);
 
+  /// The app, its notification buttons and SMS capture each run apart and share one refresh token. Only one may use it
+  /// at a time, or the server sees the same token twice and signs the phone out.
   Future<SessionResponse?> _doRefresh() async {
+    RandomAccessFile? lock;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      lock = await File('${dir.path}/refresh.lock').open(mode: FileMode.append);
+      await lock.lock(FileLock.blockingExclusive);
+    } catch (_) {
+      lock = null; // tests, or no storage: one isolate anyway
+    }
+    try {
+      return await _refreshNow();
+    } finally {
+      try {
+        await lock?.unlock();
+        await lock?.close();
+      } catch (_) {
+        // closing frees it anyway
+      }
+    }
+  }
+
+  Future<SessionResponse?> _refreshNow() async {
     final token = await store.readRefreshToken();
     if (token == null) {
       await setSession(null);

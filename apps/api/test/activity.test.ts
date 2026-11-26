@@ -134,6 +134,57 @@ describe('the activity record', () => {
     expect(empty.body.story).toContain('not enough');
   });
 
+  it('every device of mine, by name: a PC, its Chrome, a second PC and a phone at once (spec 0024)', async () => {
+    const study = (await signIn(h, OWNER, { platform: 'windows' })).body;
+    const laptop = (await signIn(h, OWNER, { platform: 'windows' })).body;
+    const pixel = (await signIn(h, OWNER, { platform: 'android' })).body;
+    const on = '2026-11-22';
+    const t = (h0: number, m: number) =>
+      `${on}T${String(h0).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`;
+    expect(
+      (await push([span({ source: 'pc', app: 'chrome.exe', host: '', start: t(4, 0), end: t(5, 0) })], study))
+        .status,
+    ).toBe(200);
+    expect((await push([span({ start: t(4, 0), end: t(5, 0) })], me)).status).toBe(200);
+    await push(
+      [
+        span({
+          source: 'pc',
+          app: 'Code.exe',
+          host: '',
+          path: '',
+          title: 'a.ts - orvyn - Visual Studio Code',
+          start: t(4, 30),
+          end: t(5, 30),
+        }),
+      ],
+      laptop,
+    );
+    const phone = span({
+      source: 'phone',
+      app: 'com.whatsapp',
+      host: '',
+      path: '',
+      title: 'WhatsApp',
+      start: t(4, 40),
+      end: t(4, 50),
+      keys: 0,
+      clicks: 0,
+      scrolls: 0,
+    });
+    expect((await push([phone], pixel)).status).toBe(200);
+    const d = (await day(on)).body;
+    expect(d.activeMs).toBe(90 * 60_000);
+    expect(d.devices.map((v: any) => [v.kind, v.activeMs / 60_000])).toEqual([
+      ['pc', 60],
+      ['pc', 60],
+      ['phone', 10],
+    ]);
+    expect(d.devices.map((v: any) => v.name)).toEqual(expect.arrayContaining(['Test phone']));
+    expect(d.devices[0].with).toHaveLength(1); // the Chrome went with the PC it ran on
+    expect(d.blocks.find((b: any) => b.place === 'WhatsApp')?.device).toBe('Test phone');
+  });
+
   it('deletes a window, only mine', async () => {
     const r = await call(h, 'DELETE', '/activity?from=2026-11-20T00:00:00Z&to=2026-11-21T00:00:00Z', {
       token: me.accessToken,

@@ -9,7 +9,7 @@ import {
   type ActivityRules,
   type ActivityStory,
 } from '@orvyn/contracts';
-import { ChevronLeft, ChevronRight, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Globe, Monitor, Smartphone, Sparkles, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Glass, Label, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
@@ -155,14 +155,15 @@ export function MyDay() {
       ) : day.activeMs + day.awayMs === 0 ? (
         <Glass className="p-6 text-orv-muted">
           <p>
-            Nothing was recorded on this day. ORVYN for Chrome records the sites; ORVYN for Windows will add
-            the programs and when you were away.
+            Nothing was recorded on this day. ORVYN for Chrome records the sites, ORVYN for Windows the
+            programs and when you were away, and ORVYN for Android the apps.
           </p>
         </Glass>
       ) : (
         <>
           <Tiles d={day} />
           <Strip d={day} />
+          {day.devices.length > 1 ? <Devices d={day} /> : null}
           <div className="grid gap-4 lg:grid-cols-2">
             <Hours d={day} />
             <Week days={week} date={date} onPick={setDate} />
@@ -248,6 +249,56 @@ function Tiles({ d }: { d: ActivityDay }) {
   );
 }
 
+const DEVICE_ICON = { pc: Monitor, web: Globe, phone: Smartphone } as const;
+
+/** Each device on its own line, on the same clock (spec 0024): what was open where, also at the same time. */
+function Devices({ d }: { d: ActivityDay }) {
+  const all = d.devices.flatMap((v) => v.blocks);
+  const from = Math.min(...all.map((b) => Date.parse(b.start)));
+  const to = Math.max(...all.map((b) => Date.parse(b.end)));
+  const span = Math.max(1, to - from);
+  return (
+    <Glass className="flex flex-col gap-4 p-5" as="section" aria-label="Each device">
+      <Label>Each device</Label>
+      {d.devices.map((v) => {
+        const Icon = DEVICE_ICON[v.kind];
+        return (
+          <div key={v.id} className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2 text-[14px]">
+              <Icon size={15} aria-hidden className="text-orv-muted" />
+              <span className="font-semibold">{v.name}</span>
+              {v.with.length ? <span className="text-orv-muted">with {v.with.join(', ')}</span> : null}
+              <span className="ml-auto tabular-nums text-orv-muted">{duration(v.activeMs)}</span>
+            </div>
+            <div className="relative h-4 overflow-hidden rounded-orv-xs bg-orv-track" aria-hidden>
+              {v.blocks.map((x) =>
+                x.kind === 'away' || x.kind === 'locked' ? null : (
+                  <span
+                    key={x.start}
+                    title={`${clock(x.start)}–${clock(x.end)} · ${x.place}${x.what ? `: ${x.what}` : ''}`}
+                    className="absolute inset-y-0"
+                    style={{
+                      left: `${((Date.parse(x.start) - from) / span) * 100}%`,
+                      width: `max(1px, ${(ms(x) / span) * 100}%)`,
+                      background: color(x.category),
+                    }}
+                  />
+                ),
+              )}
+            </div>
+            <p className="text-[13px] text-orv-muted">
+              {v.places
+                .slice(0, 6)
+                .map((p) => `${p.place} ${duration(p.ms)}`)
+                .join(' · ') || 'Nothing in use'}
+            </p>
+          </div>
+        );
+      })}
+    </Glass>
+  );
+}
+
 /** The day as one strip, first to last minute. */
 function Strip({ d }: { d: ActivityDay }) {
   const [at, setAt] = useState<number | null>(null);
@@ -296,7 +347,9 @@ function Strip({ d }: { d: ActivityDay }) {
       <div className="mt-1 flex justify-between text-[12px] tabular-nums text-orv-muted">
         <span>{clock(d.blocks[0]!.start)}</span>
         <span className="truncate px-2 text-orv-text">
-          {b ? `${clock(b.start)}–${clock(b.end)} · ${b.place}${b.what ? `: ${b.what}` : ''}` : ''}
+          {b
+            ? `${clock(b.start)}–${clock(b.end)} · ${b.place}${b.what ? `: ${b.what}` : ''}${d.devices.length > 1 ? ` · ${b.device}` : ''}`
+            : ''}
         </span>
         <span>{clock(d.blocks.at(-1)!.end)}</span>
       </div>
