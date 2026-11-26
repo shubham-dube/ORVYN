@@ -1,6 +1,6 @@
 [package]
 name = "orvyn-desktop"
-version = "0.2.0"
+version = "0.2.1"
 description = "ORVYN for Windows: tray companion with live notifications"
 edition = "2021"
 publish = false
