@@ -182,7 +182,7 @@ class MoneyListener : NotificationListenerService() {
             // a run that never says done (no network, a stuck call) must not stop every payment after it
             Handler(Looper.getMainLooper()).postDelayed({ end(ctx, e) }, RUN_MAX_MS)
             e.dartExecutor.executeDartEntrypoint(
-                DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "moneyCaptureMain"),
+                DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "package:orvyn/money/capture.dart", "moneyCaptureMain"),
             )
         }
 

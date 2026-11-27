@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:meta/meta.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/api.dart';
@@ -114,7 +114,12 @@ class SyncClient {
       _again = true;
       return _running!;
     }
-    return _running = _loop().whenComplete(() => _running = null);
+    return _running = _loop()
+        .catchError((Object e) {
+          debugPrint('orvyn: sync failed: $e');
+          throw e;
+        })
+        .whenComplete(() => _running = null);
   }
 
   Future<void> _loop() async {
@@ -146,6 +151,7 @@ class SyncClient {
             },
         ],
       });
+      if (res['ms'] != null) debugPrint('orvyn: sync push took ${res['ms']} on the server');
       hlc.receive(res['hlc'] as String);
       final done = <String>{for (final a in res['applied'] as List) (a as Map)['mutationId'] as String};
       final byId = {for (final m in batch) m.mutationId: m};
@@ -159,6 +165,10 @@ class SyncClient {
       if (done.length < batch.length) return; // server kept some back; try again next sync
     }
   }
+
+  /// Send what is waiting, nothing more: a background job that only has news (a payment read with ORVYN closed)
+  /// doesn't wait for everything else to come down too.
+  Future<void> pushOnly() => _push();
 
   /// Pull only — what a `sync.changed` nudge needs when nothing is pending; exposed for tests.
   @visibleForTesting

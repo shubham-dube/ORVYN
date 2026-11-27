@@ -22,6 +22,8 @@ export const PushResult = z.object({
   rejected: z.array(z.object({ mutationId: z.string(), reason: z.string() })),
   /** Server HLC after merging, so clients can keep their clocks moving forward. */
   hlc: z.string(),
+  /** how long the server took, in ms: writing, then what each write set off (a payment's question…) */
+  ms: z.object({ apply: z.number(), after: z.number(), total: z.number() }).optional(),
 });
 export type PushResult = z.infer<typeof PushResult>;
 

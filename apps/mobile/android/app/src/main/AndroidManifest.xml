@@ -79,6 +79,8 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts"/>
             <meta-data android:name="flutter_deeplinking_enabled" android:value="true"/>
         </activity>
+        <!-- the buttons and the reply box in the shade (Done, a category, "bill"…): without it Android drops them -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"/>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>

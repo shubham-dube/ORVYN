@@ -102,10 +102,10 @@ class AndroidCaptureChannel implements CaptureChannel {
 }
 
 /// Read, save, then remove from the queue (a failure in between leaves it for next time).
-Future<int> drainCaptured(SyncClient sync, CaptureChannel ch) async {
+Future<int> drainCaptured(SyncClient sync, CaptureChannel ch, {bool syncAfter = true}) async {
   final items = await ch.pending();
   if (items.isEmpty) return 0;
-  final added = await processCaptured(sync, items);
+  final added = await processCaptured(sync, items, syncAfter: syncAfter);
   await ch.ack(items.length);
   return added;
 }
@@ -115,7 +115,7 @@ final captureChannelProvider = Provider<CaptureChannel>((_) => AndroidCaptureCha
 /// Turns captured notifications into transactions: parse on the phone, skip what isn't a payment, merge a second
 /// sighting of the same payment (bank SMS + app), file it under the account it names (made on first sight) and the
 /// starting category, mark it "new" (D20). Returns how many transactions were added.
-Future<int> processCaptured(SyncClient sync, List<Captured> items) async {
+Future<int> processCaptured(SyncClient sync, List<Captured> items, {bool syncAfter = true}) async {
   if (items.isEmpty) return 0;
   final txs = [for (final r in await sync.watch(moneyTransaction).first) TxItem(r.id, r.data)];
   final accounts = [for (final r in await sync.watch(moneyAccount).first) AccountItem(r.id, r.data)];
@@ -174,7 +174,7 @@ Future<int> processCaptured(SyncClient sync, List<Captured> items) async {
     );
     added++;
   }
-  unawaited(sync.sync().catchError((Object _) {}));
+  if (syncAfter) unawaited(sync.sync().catchError((Object _) {}));
   return added;
 }
 
@@ -238,8 +238,9 @@ Future<void> moneyCaptureMain() async {
     final db = LocalDb(NativeDatabase(File(p.join(dir.path, 'orvyn.sqlite'))));
     final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
     final sync = SyncClient(db: db, api: api, node: 'b${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}');
-    final added = await drainCaptured(sync, AndroidCaptureChannel());
-    await sync.sync().timeout(const Duration(seconds: 20), onTimeout: () {}).catchError((Object _) {});
+    final added = await drainCaptured(sync, AndroidCaptureChannel(), syncAfter: false);
+    // only what is new goes up: the server asks "what was it?" as soon as it has it
+    await sync.pushOnly().timeout(const Duration(seconds: 20), onTimeout: () {}).catchError((Object _) {});
     // no connection: the server can't ask "what was it?" yet, so the phone says it has it, at once
     if (added > 0 && await sync.pendingCount() > 0) {
       await initShade();

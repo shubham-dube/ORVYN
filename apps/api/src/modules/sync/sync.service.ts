@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { compareHlc, Hlc, type Mutation, type PullResponse, type PushResult } from '@orvyn/contracts';
 import { and, asc, eq, gt, inArray } from 'drizzle-orm';
 import { DB, type Db } from '../../db/db.module';
@@ -29,6 +29,7 @@ export interface SyncApplied {
 
 @Injectable()
 export class SyncService {
+  private readonly log = new Logger('sync');
   private readonly clock = new Hlc('server');
 
   constructor(
@@ -59,17 +60,23 @@ export class SyncService {
     opts: { notifyAll?: boolean } = {},
   ): Promise<PushResult> {
     const result: PushResult = { applied: [], rejected: [], hlc: '' };
+    const started = performance.now();
+    const ms = { apply: 0, after: 0, total: 0 };
     let last: bigint | null = null;
     for (const m of mutations) {
       try {
+        let t = performance.now();
         const seq = await this.apply(auth, m);
+        ms.apply += performance.now() - t;
         result.applied.push({ mutationId: m.mutationId, seq: seq.toString() });
+        t = performance.now();
         await this.events.emitAsync('sync.applied', {
           ownerId: auth.userId,
           entity: m.entity,
           entityId: m.entityId,
           op: m.op,
         } satisfies SyncApplied);
+        ms.after += performance.now() - t;
         if (last === null || seq > last) last = seq;
       } catch (e) {
         if (!(e instanceof Rejected)) throw e;
@@ -83,6 +90,10 @@ export class SyncService {
         { type: 'sync.changed', seq: last.toString() },
         opts.notifyAll ? undefined : auth.deviceId,
       );
+    ms.total = performance.now() - started;
+    result.ms = { apply: Math.round(ms.apply), after: Math.round(ms.after), total: Math.round(ms.total) };
+    if (ms.total > 2000)
+      this.log.warn(`slow push: ${mutations.length} changes, ${JSON.stringify(result.ms)}`);
     return result;
   }
 

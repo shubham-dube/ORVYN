@@ -168,6 +168,7 @@ Future<void> initShade() async {
   await _plugin.initialize(
     settings: const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_stat_orvyn')),
     onDidReceiveNotificationResponse: (r) {
+      debugPrint('orvyn: shade action ${r.actionId} arrived in the open app (reply: ${r.input != null})');
       final p = r.payload == null ? <String, dynamic>{} : jsonDecode(r.payload!) as Map<String, dynamic>;
       notificationTaps.add({...p, 'action': r.actionId, if (r.input != null) 'input': r.input});
     },
@@ -264,6 +265,7 @@ class AndroidAlarmScheduler implements AlarmScheduler {
 @pragma('vm:entry-point')
 Future<void> backgroundAction(NotificationResponse r) async {
   final action = r.actionId;
+  debugPrint('orvyn: shade action $action arrived in the background (reply: ${r.input != null})');
   if (action == null || r.payload == null) return;
   final payload = jsonDecode(r.payload!) as Map<String, dynamic>;
   if (payload['kind'] == 'local-alarm') return localAlarmAction(payload, action);
@@ -273,6 +275,7 @@ Future<void> backgroundAction(NotificationResponse r) async {
   final typed = r.input?.trim();
   final text = typed == null || typed.isEmpty ? null : typed;
   final ok = await runNotificationAction(api, id, action, text: text);
+  debugPrint('orvyn: shade action $action in the background: ${ok ? 'done' : 'failed'}');
   await initShade();
   await settleShade(id, ok: ok, title: payload['title'] as String?, url: payload['url'] as String?, text: text);
 }

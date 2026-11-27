@@ -143,7 +143,7 @@ object UsageWatch {
                         if (call.method == "done") done.countDown()
                     }
                     e.dartExecutor.executeDartEntrypoint(
-                        DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "phoneDayMain"),
+                        DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "package:orvyn/activity/phone_day.dart", "phoneDayMain"),
                     )
                 }
             }

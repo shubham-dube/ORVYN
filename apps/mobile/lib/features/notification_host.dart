@@ -96,6 +96,7 @@ class _NotificationHostState extends ConsumerState<NotificationHost> {
     if (action != null && action.isNotEmpty) {
       final text = (t['input'] as String?)?.trim();
       final ok = await ctl.act(id, action, text: text);
+      debugPrint('orvyn: shade action $action from the open app: ${ok ? 'done' : 'failed'}');
       // the shade copy changes either way, so a reply there never spins on
       if (!ok && ref.read(pusherProvider).ready) {
         await settleShade(
