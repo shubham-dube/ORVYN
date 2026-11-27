@@ -236,6 +236,8 @@ export type DataRequest =
   | { type: 'saveProfile'; profile: FillProfile }
   | { type: 'structure'; text: string }
   | { type: 'vault' }
+  /** is the page in front a sign-in? (the popup opens on Vault then) */
+  | { type: 'here' }
   | { type: 'unlock'; passphrase: string }
   | { type: 'lock' }
   | { type: 'fillLogin'; id: string }

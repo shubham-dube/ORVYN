@@ -14,25 +14,25 @@ passwords are filled only after a click in ORVYN's own window, page text is data
 
 ## Features
 
-| #   | Feature                  | How it works                                                                                                                                                     |
-| --- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Fixed id                 | Unpacked production builds have a pinned id; the store build takes the store's                                                                                   |
-| 2   | Right-click → ORVYN      | Selection, link, image, page: Drop, Today, note on this page                                                                                                     |
-| 3   | Shortcuts                | Alt+Shift+O open, Alt+Shift+D drop this page, Alt+Shift+F fill this page                                                                                         |
-| 4   | Address bar              | `o call mom 6pm` → Today · `o spent 240 lunch` → Money · `o ?passport` → Library · `o !react hooks` → Recall                                                     |
-| 5   | Offline queue            | Kept on this device, sent once                                                                                                                                   |
-| 6   | Screenshot, read later   | The visible area → Drop; the article's text → Drop                                                                                                               |
-| 7   | Side panel               | The same app, beside the page                                                                                                                                    |
-| 8   | **Magic fill**           | Fills any form from my profile: rules first, then what I taught it, then AI. AI sees the labels, **never my values**. Longer answers are drafted only when I ask |
-| 9   | Learns                   | "Learn from this page" keeps my answers for next time                                                                                                            |
-| 10  | **Vault: fill and save** | Pick a login in the popup; one click fills. After a sign-up or sign-in it offers to save or update. Generates passwords. One-time codes                          |
-| 11  | **My Day**               | Every site and what I did there (the PR, the video, the search), with times, typing and clicking activity, away time. Merged with the Windows app (0021)         |
-| 12  | **Recall**               | "That page about… I read on Tuesday": pages I really read are searchable. Kept on this device only                                                               |
-| 13  | Page brain               | Summary, key facts, the catch, things to do (added on my click), ask anything; compare open tabs                                                                 |
-| 14  | Page memory              | On a page I've been to: last visit, total time, my notes, **price history**                                                                                      |
-| 15  | Tab stash                | Put a window away with a name; bring it back later, or on a day                                                                                                  |
-| 16  | Focus shield             | During focus, chosen sites show what I meant to do instead; every bypass is counted                                                                              |
-| 17  | Job page → JobOS         | Opens JobOS on this PC with the link copied                                                                                                                      |
+| #   | Feature                  | How it works                                                                                                                                                                                                         |
+| --- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Fixed id                 | Unpacked production builds have a pinned id; the store build takes the store's                                                                                                                                       |
+| 2   | Right-click → ORVYN      | Selection, link, image, page: Drop, Today, note on this page                                                                                                                                                         |
+| 3   | Shortcuts                | Alt+Shift+O open, Alt+Shift+D drop this page, Alt+Shift+F fill this page                                                                                                                                             |
+| 4   | Address bar              | `o call mom 6pm` → Today · `o spent 240 lunch` → Money · `o ?passport` → Library · `o !react hooks` → Recall                                                                                                         |
+| 5   | Offline queue            | Kept on this device, sent once                                                                                                                                                                                       |
+| 6   | Screenshot, read later   | The visible area → Drop; the article's text → Drop                                                                                                                                                                   |
+| 7   | Side panel               | The same app, beside the page                                                                                                                                                                                        |
+| 8   | **Magic fill**           | Fills any form from my profile: rules first, then what I taught it, then AI. AI sees the labels, **never my values**. Longer answers are drafted only when I ask                                                     |
+| 9   | Learns                   | "Learn from this page" keeps my answers for next time                                                                                                                                                                |
+| 10  | **Vault: fill and save** | Pick a login in the popup; one click fills. After a sign-up or sign-in it offers to save or update. Generates passwords. One-time codes                                                                              |
+| 11  | **My Day**               | Every site and what I did there (the PR, the video, the search), with times, typing and clicking activity, away time. Merged with the Windows app (0021)                                                             |
+| 12  | **Recall**               | "That page about… I read on Tuesday": pages I really read are searchable. Kept on this device only                                                                                                                   |
+| 13  | Page brain               | Summary, key facts, the catch, things to do (added on my click), ask anything; compare open tabs. An answer that runs long is trimmed, not refused; one that still doesn't fit is retried once on the stronger model |
+| 14  | Page memory              | On a page I've been to: last visit, total time, my notes, **price history**                                                                                                                                          |
+| 15  | Tab stash                | Put a window away with a name; bring it back later, or on a day                                                                                                                                                      |
+| 16  | Focus shield             | During focus, chosen sites show what I meant to do instead; every bypass is counted                                                                                                                                  |
+| 17  | Job page → JobOS         | Opens JobOS on this PC with the link copied                                                                                                                                                                          |
 
 **Left out:** reading the characters I type (only counts), submitting forms, filling payment cards, incognito windows.
 
@@ -46,6 +46,8 @@ passwords are filled only after a click in ORVYN's own window, page text is data
   are not kept (they carry tokens), except the words of a search.
 - Recall skips banks, payment pages, local addresses and any page with a password field.
 - Every new API route needs its module (`activity`, `fill`, `assistant`) and is owner-scoped.
+- **The popup opens where it is needed:** on the Vault when the page in front is a sign-in (a password box) or a
+  sign-in waits to be saved; otherwise on Today. The Inbox tab carries its unread count.
 
 ## API
 

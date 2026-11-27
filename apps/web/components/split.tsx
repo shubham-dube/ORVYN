@@ -56,6 +56,14 @@ interface GroupSummary {
   myBalance: number;
   lastAt: string;
   archived: boolean;
+  /** I made it, so I may delete it */
+  admin: boolean;
+}
+interface GroupPage {
+  items: GroupSummary[];
+  next: string | null;
+  getMinor: number;
+  oweMinor: number;
 }
 export interface Group {
   id: string;
@@ -98,26 +106,56 @@ function Owe({ v, big }: { v: number; big?: boolean }) {
 // ------------------------------------------------------------------ groups
 
 /** the last list this tab saw, shown at once on the way back */
-let lastGroups: GroupSummary[] | null = null;
+let lastGroups: GroupPage | null = null;
 
 export function SplitHome() {
-  const [groups, setGroups] = useState<GroupSummary[] | null>(lastGroups);
+  const toast = useToast();
+  const [page, setPage] = useState<GroupPage | null>(lastGroups);
   const [failed, setFailed] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [more, setMore] = useState(false);
   const router = useRouter();
+  const groups = page?.items ?? null;
   const load = useCallback(() => {
     setFailed(false);
-    return api<GroupSummary[]>('/split/groups').then(
+    return api<GroupPage>('/split/groups').then(
       (g) => {
         lastGroups = g;
-        setGroups(g);
+        setPage(g);
       },
       () => setFailed(true),
     );
   }, []);
   useEffect(() => void load(), [load]);
-  const owe = (groups ?? []).filter((g) => g.myBalance < 0).reduce((s, g) => s - g.myBalance, 0);
-  const get = (groups ?? []).filter((g) => g.myBalance > 0).reduce((s, g) => s + g.myBalance, 0);
+  const loadMore = async () => {
+    if (!page?.next) return;
+    setMore(true);
+    try {
+      const n = await api<GroupPage>(`/split/groups?cursor=${encodeURIComponent(page.next)}`);
+      const seen = new Set(page.items.map((g) => g.id));
+      setPage({ ...n, items: [...page.items, ...n.items.filter((g) => !seen.has(g.id))] });
+    } catch {
+      toast({ title: 'Couldn’t load more groups', tone: 'danger' });
+    } finally {
+      setMore(false);
+    }
+  };
+  const remove = async (g: GroupSummary) => {
+    const open = g.myBalance !== 0 ? ' Balances aren’t settled: they go too.' : '';
+    if (
+      !window.confirm(`Delete “${g.name}” for everyone in it? Its expenses and payments go with it.${open}`)
+    )
+      return;
+    try {
+      await api(`/split/groups/${g.id}`, { method: 'DELETE' });
+      toast({ title: `“${g.name}” deleted`, tone: 'success' });
+      void load();
+    } catch {
+      toast({ title: 'Couldn’t delete it', tone: 'danger' });
+    }
+  };
+  const owe = page?.oweMinor ?? 0;
+  const get = page?.getMinor ?? 0;
   return (
     <div className="flex flex-col gap-5">
       <header className="flex flex-wrap items-end justify-between gap-3 px-1 pt-2">
@@ -176,11 +214,31 @@ export function SplitHome() {
                   </p>
                 </div>
                 <Owe v={g.myBalance} />
+                {g.admin ? (
+                  <button
+                    type="button"
+                    aria-label={`Delete ${g.name}`}
+                    title="Delete the group for everyone"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      void remove(g);
+                    }}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-orv-sm text-orv-muted hover:bg-orv-track hover:text-orv-danger"
+                  >
+                    <Trash2 size={15} aria-hidden />
+                  </button>
+                ) : null}
               </Glass>
             </Link>
           ))}
         </div>
       )}
+      {page?.next ? (
+        <Button className="self-center" size="sm" disabled={more} onClick={() => void loadMore()}>
+          {more ? 'Loading…' : 'Show more groups'}
+        </Button>
+      ) : null}
       {creating ? (
         <NewGroupSheet onClose={() => setCreating(false)} onMade={(id) => router.push(`/split/${id}`)} />
       ) : null}

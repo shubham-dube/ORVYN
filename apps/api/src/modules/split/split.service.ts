@@ -10,7 +10,7 @@ import {
   type SplitMemberView,
 } from '@orvyn/contracts';
 import { balances, settleUp, shares, SplitError } from '@orvyn/money';
-import { and, desc, eq, gt, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { badRequest, forbidden, notFound } from '../../common/errors';
 import { ENV, type Env } from '../../config/env';
 import { DB, type Db } from '../../db/db.module';
@@ -30,6 +30,10 @@ import {
 
 const P = (rupees: number) => Math.round(rupees * 100);
 const LINK_DAYS = 120;
+const PAGE = 20;
+const PAGE_MAX = 50;
+/** the rows of a raw query, as postgres-js gives them */
+const rowsOf = <T>(r: unknown): T[] => [...(r as Iterable<T>)];
 const hash = (t: string) => createHash('sha256').update(t).digest('hex');
 
 /**
@@ -153,12 +157,75 @@ export class SplitService {
     return this.view(userId, g!.id);
   }
 
-  async list(userId: string) {
-    const mine = await this.db
-      .select({ groupId: splitMembers.groupId })
-      .from(splitMembers)
-      .where(and(eq(splitMembers.userId, userId), isNull(splitMembers.removedAt)));
-    const ids = mine.map((m) => m.groupId);
+  /**
+   * Your groups, newest activity first, a page at a time: only the page's groups are read in full. The two totals
+   * (what you get back, what you owe) cover every group and are summed in the database.
+   */
+  async list(userId: string, opts: { cursor?: string; limit?: number } = {}) {
+    const limit = Math.min(PAGE_MAX, Math.max(1, opts.limit ?? PAGE));
+    const [atRaw, idRaw] = (opts.cursor ?? '').split('|');
+    const after =
+      atRaw && idRaw && /^[0-9a-f-]{36}$/.test(idRaw) && !Number.isNaN(Date.parse(atRaw))
+        ? { at: atRaw, id: idRaw }
+        : null;
+    // each group with when it last changed (its newest expense, or when it was made), to the microsecond
+    const rows = rowsOf<{ id: string; last_at: string }>(
+      await this.db.execute(sql`
+        with mine as (
+          select g.id, coalesce(
+            (select max(e.created_at) from split_expenses e where e.group_id = g.id and e.deleted_at is null),
+            g.created_at) as last_at
+          from split_groups g
+          join split_members m on m.group_id = g.id and m.user_id = ${userId} and m.removed_at is null
+        )
+        select id, to_char(last_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as last_at from mine
+        ${after ? sql`where (last_at, id) < (${after.at}::timestamptz, ${after.id}::uuid)` : sql``}
+        order by last_at desc, id desc
+        limit ${limit + 1}
+      `),
+    );
+    const shown = rows.slice(0, limit);
+    const [items, totals] = await Promise.all([
+      this.summaries(
+        userId,
+        shown.map((x) => x.id),
+      ),
+      this.totals(userId),
+    ]);
+    const order = new Map(shown.map((x, i) => [x.id, i]));
+    items.sort((x, y) => order.get(x.id)! - order.get(y.id)!);
+    const last = shown.at(-1);
+    return { items, next: rows.length > limit && last ? `${last.last_at}|${last.id}` : null, ...totals };
+  }
+
+  /** What you get back and what you owe, across all your groups. */
+  private async totals(userId: string) {
+    const [row] = rowsOf<{ get: string; owe: string }>(
+      await this.db.execute(sql`
+        with mine as (
+          select m.id::text as member, m.group_id from split_members m
+          where m.user_id = ${userId} and m.removed_at is null
+        ), net as (
+          select
+            coalesce((select sum((p->>'amount')::bigint) from split_expenses e, jsonb_array_elements(e.paid) p
+              where e.group_id = mine.group_id and e.deleted_at is null and p->>'memberId' = mine.member), 0)
+            - coalesce((select sum((o->>'amount')::bigint) from split_expenses e, jsonb_array_elements(e.shares) o
+              where e.group_id = mine.group_id and e.deleted_at is null and o->>'memberId' = mine.member), 0)
+            + coalesce((select sum(s.amount_minor) from split_settlements s
+              where s.from_id::text = mine.member and s.deleted_at is null), 0)
+            - coalesce((select sum(s.amount_minor) from split_settlements s
+              where s.to_id::text = mine.member and s.deleted_at is null), 0) as v
+          from mine
+        )
+        select coalesce(sum(v) filter (where v > 0), 0)::text as get,
+               coalesce(-sum(v) filter (where v < 0), 0)::text as owe
+        from net
+      `),
+    );
+    return { getMinor: Number(row?.get ?? 0), oweMinor: Number(row?.owe ?? 0) };
+  }
+
+  private async summaries(userId: string, ids: string[]) {
     if (!ids.length) return [];
     const [groups, members, expenses, settlements] = await Promise.all([
       this.db.select().from(splitGroups).where(inArray(splitGroups.id, ids)),
@@ -178,27 +245,26 @@ export class SplitService {
         .where(and(inArray(splitSettlements.groupId, ids), isNull(splitSettlements.deletedAt)))
         .orderBy(desc(splitSettlements.date), desc(splitSettlements.createdAt)),
     ]);
-    return groups
-      .map((g) => {
-        const v = this.computeFrom(
-          g,
-          members.filter((m) => m.groupId === g.id),
-          expenses.filter((e) => e.groupId === g.id),
-          settlements.filter((x) => x.groupId === g.id),
-        );
-        const me = v.members.find((m) => m.userId === userId);
-        return {
-          id: v.id,
-          name: v.name,
-          kind: v.kind,
-          members: v.members.length,
-          totalMinor: v.totalMinor,
-          myBalance: me?.balance ?? 0,
-          lastAt: v.expenses[0]?.createdAt ?? v.createdAt,
-          archived: v.archived,
-        };
-      })
-      .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+    return groups.map((g) => {
+      const v = this.computeFrom(
+        g,
+        members.filter((m) => m.groupId === g.id),
+        expenses.filter((e) => e.groupId === g.id),
+        settlements.filter((x) => x.groupId === g.id),
+      );
+      const me = v.members.find((m) => m.userId === userId);
+      return {
+        id: v.id,
+        name: v.name,
+        kind: v.kind,
+        members: v.members.length,
+        totalMinor: v.totalMinor,
+        myBalance: me?.balance ?? 0,
+        lastAt: v.expenses[0]?.createdAt ?? v.createdAt,
+        archived: v.archived,
+        admin: g.ownerId === userId,
+      };
+    });
   }
 
   /** Everything about a group, computed from its expenses and payments. */
@@ -328,6 +394,42 @@ export class SplitService {
       .update(splitGroups)
       .set({ archivedAt: archived ? new Date() : null })
       .where(eq(splitGroups.id, groupId));
+    return { ok: true };
+  }
+
+  /**
+   * The whole group, gone for everyone: only who made it, after the person confirmed in the app. Its expenses,
+   * payments, links and activity go with it; receipts stay in the uploader's files.
+   */
+  async remove(userId: string, groupId: string) {
+    const { group } = await this.me(userId, groupId);
+    if (group.ownerId !== userId) throw forbidden('not_admin', 'Only who made the group can delete it.');
+    const people = (await this.members(groupId)).flatMap((m) =>
+      m.userId && m.userId !== userId ? [m.userId] : [],
+    );
+    const who = await this.nameOf(userId);
+    await this.db.transaction(async (tx) => {
+      await tx.delete(splitLinks).where(eq(splitLinks.groupId, groupId));
+      await tx.delete(splitActivity).where(eq(splitActivity.groupId, groupId));
+      await tx.delete(splitSettlements).where(eq(splitSettlements.groupId, groupId));
+      await tx.delete(splitExpenses).where(eq(splitExpenses.groupId, groupId));
+      await tx.delete(splitMembers).where(eq(splitMembers.groupId, groupId));
+      await tx.delete(splitGroups).where(eq(splitGroups.id, groupId));
+    });
+    for (const u of people) {
+      await this.realtime.toUser(u, { type: 'split.changed', groupId });
+      await this.notify
+        .send({
+          userId: u,
+          module: 'split',
+          kind: 'split',
+          type: 'split.deleted',
+          title: `${who} deleted “${group.name}”`,
+          body: 'The group and its expenses are gone.',
+          url: '/split',
+        })
+        .catch(() => undefined);
+    }
     return { ok: true };
   }
 

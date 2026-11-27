@@ -74,7 +74,8 @@ class _MailScreenState extends ConsumerState<MailScreen> {
                 ),
               ),
               if (open)
-                for (final m in items) SmartMailRow(m: m, accounts: accounts),
+                for (final m in items)
+                  if (!ref.watch(sweptMailProvider).contains(m['id'])) SmartMailRow(m: m, accounts: accounts),
             ],
           ),
         ),

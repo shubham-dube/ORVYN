@@ -57,6 +57,7 @@ const DEFAULT_ROUTES: Record<string, string> = {
   'today.parse': CHEAP,
   'library.read': CHEAP,
   'escalate.library.read': STRONG,
+  'escalate.page.read': STRONG, // the extension's page answers: when the cheap one doesn't fit
   'money.reply': CHEAP, // one word in, one number out (spec 0007 C1)
 };
 

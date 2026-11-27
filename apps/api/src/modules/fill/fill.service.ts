@@ -15,6 +15,49 @@ import { AiService } from '../ai/ai.service';
 import { plainAi } from '../ai/plain';
 import { fillProfiles } from './fill.schema';
 
+const cut = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+const said = (v: unknown): string =>
+  typeof v === 'string'
+    ? v
+    : v && typeof v === 'object'
+      ? String(
+          (v as Record<string, unknown>).text ??
+            (v as Record<string, unknown>).point ??
+            (v as Record<string, unknown>).title ??
+            '',
+        )
+      : '';
+/**
+ * A page answer as the model gives it, tidied rather than refused (most "no usable answer"s were one point too many
+ * or too long): long text is cut, points given as objects are read, bad actions are dropped. Empty is still refused.
+ */
+export const PageReadLoose = z.preprocess(
+  (raw) => {
+    if (!raw || typeof raw !== 'object') return raw;
+    const o = raw as Record<string, unknown>;
+    const list = (v: unknown) => (Array.isArray(v) ? v : typeof v === 'string' && v ? [v] : []);
+    return {
+      text: cut(
+        Array.isArray(o.text) ? o.text.map(said).join(' ') : said(o.text ?? o.answer ?? o.summary),
+        6000,
+      ),
+      points: list(o.points)
+        .map((x) => cut(said(x), 400))
+        .filter(Boolean)
+        .slice(0, 12),
+      actions: list(o.actions)
+        .flatMap((x) => {
+          const a = (x ?? {}) as Record<string, unknown>;
+          const kind = a.kind === 'expense' ? 'expense' : a.kind === 'task' ? 'task' : null;
+          const text = cut(said(a), 300);
+          return kind && text ? [{ kind, text }] : [];
+        })
+        .slice(0, 8),
+    };
+  },
+  PageReadReply.refine((r) => r.text || r.points.length || r.actions.length, 'empty answer'),
+) as unknown as typeof PageReadReply;
+
 const Structured = z.object({ facts: z.array(z.unknown()).max(400) });
 const Draft = z.object({
   answer: z.string().max(6000).default(''),
@@ -141,14 +184,15 @@ Answer {"answer": string, "missing": string}.`,
         ownerId,
         task: 'page.read',
         system: `You read web pages for a person. Today is ${new Date().toISOString().slice(0, 10)}. ${ASKS[req.mode]}
-Use only what the pages say. Answer {"text","points","actions"}; leave out what does not apply.`,
+Use only what the pages say. Answer {"text","points","actions"}; leave out what does not apply.
+Keep it short: "text" under 120 words, at most 8 "points" of one sentence each, plain words (no markdown).`,
         ...(req.mode === 'ask' ? { user: `The person asks: ${req.question}` } : {}),
         data: req.pages.map((p, i) => ({
           type: 'text' as const,
           text: `PAGE ${i + 1}: ${p.title}\n${p.url.split(/[?#]/)[0]}\n${p.text}`,
         })),
-        schema: PageReadReply,
-        maxTokens: 1500,
+        schema: PageReadLoose,
+        maxTokens: 3000,
         cache: false,
       }),
     );

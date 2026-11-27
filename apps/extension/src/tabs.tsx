@@ -149,7 +149,7 @@ export function PageTab({ canDrop, canThink }: { canDrop: boolean; canThink: boo
       {m?.price ? <p className="text-[12px] font-semibold text-orv-accent">{m.price}</p> : null}
 
       {canDrop ? (
-        <div className="mt-2 grid grid-cols-3 gap-1.5">
+        <div className="mt-2 flex flex-wrap gap-1.5 [&>*]:flex-auto [&>*]:whitespace-nowrap">
           <Btn busy={busy === 'drop'} onClick={() => run('drop', () => get<string>({ type: 'dropPage' }))}>
             <Download size={13} aria-hidden /> Drop
           </Btn>
@@ -163,7 +163,7 @@ export function PageTab({ canDrop, canThink }: { canDrop: boolean; canThink: boo
       ) : null}
       {canThink ? (
         <>
-          <div className="mt-2 grid grid-cols-4 gap-1.5">
+          <div className="mt-2 flex flex-wrap gap-1.5 [&>*]:flex-auto [&>*]:whitespace-nowrap">
             {(
               [
                 ['brief', 'Brief'],

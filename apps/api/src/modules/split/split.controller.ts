@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { ExpenseInput, NewSplitGroup, SettlementInput, SplitMemberInput } from '@orvyn/contracts';
 import { z } from 'zod';
 import { notFound, tooMany } from '../../common/errors';
@@ -16,9 +27,20 @@ const id = new ParseUUIDPipe();
 export class SplitController {
   constructor(private readonly split: SplitService) {}
 
+  /** A page of your groups (?cursor=&limit=), with your totals over all of them. */
   @Get()
-  list(@Auth() a: AuthContext) {
-    return this.split.list(a.userId);
+  list(@Auth() a: AuthContext, @Query('cursor') cursor?: string, @Query('limit') limit?: string) {
+    const n = Number(limit);
+    return this.split.list(a.userId, {
+      cursor: cursor?.slice(0, 100),
+      limit: Number.isInteger(n) && n > 0 ? n : undefined,
+    });
+  }
+
+  /** The group, for everyone: who made it only. */
+  @Delete(':id')
+  remove(@Auth() a: AuthContext, @Param('id', id) gid: string) {
+    return this.split.remove(a.userId, gid);
   }
 
   @Get('people')

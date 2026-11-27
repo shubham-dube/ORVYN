@@ -275,18 +275,24 @@ void main() {
     };
     h.server.on(
       'GET /split/groups',
-      (_) => [
-        {
-          'id': gid,
-          'name': 'Goa',
-          'kind': 'trip',
-          'members': 3,
-          'totalMinor': 300000,
-          'myBalance': 200000,
-          'lastAt': '2026-11-20T10:00:00Z',
-          'archived': false,
-        },
-      ],
+      (_) => {
+        'items': [
+          {
+            'id': gid,
+            'name': 'Goa',
+            'kind': 'trip',
+            'members': 3,
+            'totalMinor': 300000,
+            'myBalance': 200000,
+            'lastAt': '2026-11-20T10:00:00Z',
+            'archived': false,
+            'admin': true,
+          },
+        ],
+        'next': null,
+        'getMinor': 200000,
+        'oweMinor': 0,
+      },
     );
     h.server.on('GET /split/groups/$gid', (_) => group);
     h.server.on('POST /split/groups/$gid/expenses', (r) {
@@ -301,6 +307,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('Open Split'));
     await settle(tester, 20);
     expect(find.text('gets ₹2,000'), findsOneWidget);
+    expect(find.byTooltip('Delete Goa'), findsOneWidget); // I made it
     await tester.tap(find.text('Goa'));
     await settle(tester, 20);
     expect(find.text('Mia → Asha'), findsOneWidget);

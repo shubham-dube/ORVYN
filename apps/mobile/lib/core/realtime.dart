@@ -67,6 +67,9 @@ class Realtime {
     final uri = Uri.parse('${api.baseUrl.replaceFirst(RegExp('^http'), 'ws')}/ws');
     final ch = _connect(uri);
     _ch = ch;
+    // a refused upgrade (server restarting, captive wifi) also ends the stream, which retries; seen here
+    // too, it is not an unhandled error
+    ch.ready.then<void>((_) {}, onError: (Object _) {});
     ch.sink.add(jsonEncode({'type': 'auth', 'token': token}));
     _sub = ch.stream.listen(
       (data) {

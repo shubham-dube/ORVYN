@@ -9,7 +9,7 @@ import type {
 } from '@orvyn/contracts';
 import { AlarmClock, Bell, ChevronDown, Mail, MessageCircle, Siren, Send } from 'lucide-react';
 import Link from 'next/link';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Switch, useToast } from '@/components/ui/bits';
 import { Button } from '@/components/ui/button';
 import { api, ApiError } from '@/lib/api';
@@ -48,6 +48,32 @@ export function NotifyRules({
   const set = (t: NotifyTypeInfo, r: NotifyRule) =>
     void onSave({ ...settings, rules: { ...rules, [t.key]: r } });
   const waOk = !!channels?.whatsapp.verified;
+  // "Send one of each": a sample of every kind that is on, a few seconds apart, each its own ways
+  const all = groups(can).flatMap((g) => g.types.filter((t) => ruleOf(t, rules).on));
+  const [sweep, setSweep] = useState<{ at: number; label: string } | null>(null);
+  const stop = useRef(false);
+  const sendAll = async () => {
+    stop.current = false;
+    let sent = 0;
+    const missed: string[] = [];
+    for (const [i, t] of all.entries()) {
+      if (stop.current) break;
+      setSweep({ at: i, label: t.label });
+      try {
+        await api('/notifications/sample', { method: 'POST', body: { type: t.key } });
+        sent++;
+      } catch (e) {
+        missed.push(`${t.label}: ${e instanceof ApiError ? e.message : 'failed'}`);
+      }
+      if (i < all.length - 1) await new Promise((ok) => setTimeout(ok, 6000));
+    }
+    setSweep(null);
+    toast({
+      title: `${sent} of ${all.length} samples sent`,
+      body: missed.length ? missed.slice(0, 3).join(' · ') : 'Each came the ways set for it.',
+      tone: missed.length ? 'danger' : 'success',
+    });
+  };
   return (
     <div className="flex flex-col gap-2 border-t border-orv-hairline pt-4">
       <div>
@@ -56,6 +82,28 @@ export function NotifyRules({
           Everything lands in the bell. Choose more for each kind — or switch it off.
         </p>
       </div>
+      {sweep ? (
+        <div className="flex items-center gap-3" role="status">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px]">
+              Sending {sweep.at + 1} of {all.length}: {sweep.label}
+            </p>
+            <div className="mt-1 h-1 overflow-hidden rounded-full bg-orv-track">
+              <div
+                className="h-full bg-orv-accent transition-[width]"
+                style={{ width: `${((sweep.at + 1) / all.length) * 100}%` }}
+              />
+            </div>
+          </div>
+          <Button size="sm" onClick={() => (stop.current = true)}>
+            Stop
+          </Button>
+        </div>
+      ) : (
+        <Button size="sm" className="self-start" disabled={!all.length} onClick={() => void sendAll()}>
+          <Send size={13} aria-hidden /> Send one of each ({all.length})
+        </Button>
+      )}
       {groups(can).map((g) => (
         <div key={g.module} className="overflow-hidden rounded-orv-md border border-orv-edge">
           <button

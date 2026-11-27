@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/state.dart';
 import '../core/api.dart';
+import '../design/controls.dart';
 import '../design/theme.dart';
 import '../design/toast.dart';
 
@@ -58,6 +59,42 @@ class _NotifyRulesState extends ConsumerState<NotifyRules> {
     _rules = Map<String, dynamic>.from((widget.settings['rules'] as Map?) ?? const {});
   }
 
+  /// "Send one of each": where the run is, and what it is sending
+  int? _at;
+  String _now = '';
+  bool _stop = false;
+
+  /// Every kind this person has, a sample each, a few seconds apart so each can be seen (and an alarm answered),
+  /// each through the ways set for it — the whole set up, end to end.
+  Future<void> _sweep(List<NotifyJson> types) async {
+    final toaster = Toaster.of(context);
+    final api = ref.read(apiProvider);
+    var sent = 0;
+    final missed = <String>[];
+    _stop = false;
+    for (final (i, t) in types.indexed) {
+      if (_stop || !mounted) break;
+      setState(() {
+        _at = i;
+        _now = t['label'] as String? ?? t['key'] as String;
+      });
+      try {
+        await api.post<dynamic>('/notifications/sample', {'type': t['key']});
+        sent++;
+      } on ApiError catch (e) {
+        missed.add('${t['label']}: ${e.message}');
+      }
+      if (i < types.length - 1) await Future<void>.delayed(const Duration(seconds: 6));
+    }
+    if (!mounted) return;
+    setState(() => _at = null);
+    toaster.show(
+      '$sent of ${types.length} samples sent',
+      body: missed.isEmpty ? 'Each came the ways set for it. Off kinds were skipped.' : missed.take(3).join('\n'),
+      tone: missed.isEmpty ? ToastTone.success : ToastTone.danger,
+    );
+  }
+
   Future<void> _set(String key, NotifyJson? rule) async {
     setState(() => rule == null ? _rules.remove(key) : _rules[key] = rule);
     await widget.onSave({...widget.settings, 'rules': _rules});
@@ -93,6 +130,44 @@ class _NotifyRulesState extends ConsumerState<NotifyRules> {
           style: OrvText.muted(l).copyWith(fontSize: 12.5),
         ),
         const SizedBox(height: 8),
+        Builder(
+          builder: (context) {
+            final all = [
+              for (final t in types)
+                if (can(t['module'] as String) && (_rules[t['key']] as Map?)?['on'] != false) t,
+            ];
+            return _at == null
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: OrvButton(
+                      label: 'Send one of each (${all.length})',
+                      small: true,
+                      icon: LucideIcons.send,
+                      onPressed: all.isEmpty ? null : () => _sweep(all),
+                    ),
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              'Sending ${_at! + 1} of ${all.length}: $_now',
+                              style: OrvText.body(l).copyWith(fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            LinearProgressIndicator(value: (_at! + 1) / all.length, minHeight: 3),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      OrvButton(label: 'Stop', small: true, onPressed: () => _stop = true),
+                    ],
+                  );
+          },
+        ),
+        const SizedBox(height: 4),
         for (final m in modules) ...[
           GestureDetector(
             behavior: HitTestBehavior.opaque,

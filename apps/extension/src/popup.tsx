@@ -37,6 +37,15 @@ function Popup() {
   const [glance, setGlance] = useState<Glance | null>(null);
   const [tick, setTick] = useState(0);
   const [pending, setPending] = useState(false);
+  const [login, setLogin] = useState(false);
+  useEffect(() => {
+    if (!s?.connected) return;
+    // a sign-in page in front: open on the Vault
+    get<{ login: boolean }>({ type: 'here' }).then(
+      (h) => setLogin(h.login),
+      () => undefined,
+    );
+  }, [s?.connected]);
   useEffect(() => {
     if (!s?.connected) return;
     // a sign-in waiting to be saved is what the popup opened for
@@ -109,8 +118,10 @@ function Popup() {
     { id: 'inbox', label: 'Inbox' },
     ...(can('library') ? [{ id: 'find' as Tab, label: 'Find' }] : []),
   ];
-  // new notifications first; otherwise the day
-  const tab: Tab = tabChoice ?? (pending ? 'vault' : unread ? 'inbox' : (tabs[0]?.id ?? 'inbox'));
+  // a sign-in to save, or a sign-in page: the Vault; otherwise the day (the Inbox shows its count)
+  const first =
+    (pending || login) && can('vault') ? 'vault' : can('today') ? 'today' : (tabs[0]?.id ?? 'inbox');
+  const tab: Tab = tabChoice ?? first;
   return (
     <Shell>
       <header className="flex items-center gap-3 px-4 pt-4">
@@ -168,13 +179,22 @@ function Popup() {
             onClick={() => setTab(t.id)}
             className={
               tab === t.id
-                ? 'flex h-8 items-center justify-center gap-1 rounded-full text-[12px] font-semibold text-white [background:var(--orv-accent-grad)]'
-                : 'flex h-8 items-center justify-center gap-1 rounded-full text-[12px] font-medium text-orv-muted hover:text-orv-text'
+                ? 'relative flex h-8 min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 text-[12px] font-semibold text-white [background:var(--orv-accent-grad)]'
+                : 'relative flex h-8 min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 text-[12px] font-medium text-orv-muted hover:text-orv-text'
             }
           >
             {t.label}
             {t.id === 'inbox' && unread ? (
-              <span className="rounded-full bg-white/25 px-1.5 text-[10px] font-bold">{unread}</span>
+              <span
+                aria-label={`${unread} new`}
+                className={
+                  tab === t.id
+                    ? 'absolute -right-1 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-orv-danger px-1 text-white text-[9.5px] font-bold leading-none'
+                    : 'absolute -right-1 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[9.5px] font-bold leading-none text-white [background:var(--orv-accent-grad)]'
+                }
+              >
+                {unread > 99 ? '99+' : unread}
+              </span>
             ) : null}
           </button>
         ))}
@@ -201,7 +221,13 @@ function Popup() {
                 </span>
               ) : null}
             </div>
-            <ul className="flex max-h-[260px] flex-col gap-2 overflow-y-auto">
+            <ul
+              className={
+                document.documentElement.dataset.surface === 'panel'
+                  ? 'flex max-h-[calc(100vh-290px)] flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1 [scrollbar-width:thin]'
+                  : 'flex max-h-[400px] flex-col gap-2 overflow-y-auto overflow-x-hidden pr-1 [scrollbar-width:thin]'
+              }
+            >
               <AnimatePresence initial={false}>
                 {s.notifications.map((n) => (
                   <motion.li

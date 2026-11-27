@@ -225,6 +225,13 @@ export const NOTIFY_CATALOG: NotifyTypeInfo[] = [
     ways: ['push'],
   },
   {
+    key: 'split.deleted',
+    module: 'split',
+    label: 'Group deleted',
+    when: 'Who made a group you’re in deletes it',
+    ways: ['push'],
+  },
+  {
     key: 'split.reminder',
     module: 'split',
     label: 'You owe',

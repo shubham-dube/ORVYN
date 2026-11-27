@@ -18,9 +18,8 @@ import 'sheets.dart';
 
 typedef J = Map<String, dynamic>;
 
-final splitGroupsProvider = FutureProvider.autoDispose<List<J>>(
-  (ref) async => [for (final x in await ref.read(apiProvider).get<List<dynamic>>('/split/groups')) x as J],
-);
+/// The first page of your groups, with your totals over all of them; more come with "Show more".
+final splitGroupsProvider = FutureProvider.autoDispose<J>((ref) => ref.read(apiProvider).get<J>('/split/groups'));
 final splitGroupProvider = FutureProvider.autoDispose.family<J, String>((ref, id) {
   final sub = ref.watch(realtimeProvider).messages.listen((m) {
     if (m['type'] == 'split.changed' && m['groupId'] == id) ref.invalidateSelf();
@@ -61,23 +60,83 @@ Widget _owe(OrvLook l, num v, {double size = 14}) => Text(
 );
 
 /// Split (spec 0011 part B): trips and parties — who paid, who owes, and the fewest transfers to settle.
-class SplitListScreen extends ConsumerWidget {
+class SplitListScreen extends ConsumerStatefulWidget {
   const SplitListScreen({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SplitListScreen> createState() => _SplitListScreenState();
+}
+
+class _SplitListScreenState extends ConsumerState<SplitListScreen> {
+  /// the first page these follow, so a refresh starts over
+  J? _of;
+  final _more = <J>[];
+  String? _next;
+  bool _loading = false;
+
+  Future<void> _loadMore() async {
+    if (_next == null || _loading) return;
+    setState(() => _loading = true);
+    try {
+      final p = await ref.read(apiProvider).get<J>('/split/groups?cursor=${Uri.encodeQueryComponent(_next!)}');
+      setState(() {
+        _more.addAll([for (final x in p['items'] as List) x as J]);
+        _next = p['next'] as String?;
+      });
+    } catch (_) {
+      if (mounted) Toaster.of(context).show('Couldn’t load more groups', tone: ToastTone.danger);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _delete(J g) async {
+    final unsettled = (g['myBalance'] as num) != 0;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Delete “${g['name']}”?'),
+        content: Text(
+          'For everyone in it, with its expenses and payments.'
+          '${unsettled ? ' Balances aren’t settled: they go too.' : ''}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Keep')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    final toaster = Toaster.of(context);
+    try {
+      await ref.read(apiProvider).delete<dynamic>('/split/groups/${g['id']}');
+      toaster.show('“${g['name']}” deleted', tone: ToastTone.success);
+      ref.invalidate(splitGroupsProvider);
+    } catch (_) {
+      toaster.show('Couldn’t delete it', tone: ToastTone.danger);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final groups = ref.watch(splitGroupsProvider);
+    final first = groups.value;
+    if (first != null && !identical(first, _of)) {
+      _of = first;
+      _more.clear();
+      _next = first['next'] as String?;
+    }
     return OrvModule(
       module: 'split',
       child: Builder(
         builder: (context) {
           final l = context.orv;
-          final list = groups.value ?? const [];
-          final owe = list
-              .where((g) => (g['myBalance'] as num) < 0)
-              .fold<num>(0, (s, g) => s - (g['myBalance'] as num));
-          final get = list
-              .where((g) => (g['myBalance'] as num) > 0)
-              .fold<num>(0, (s, g) => s + (g['myBalance'] as num));
+          final seen = <String>{};
+          final list = [
+            for (final g in [...?(first?['items'] as List?)?.cast<J>(), ..._more])
+              if (seen.add(g['id'] as String)) g,
+          ];
+          final owe = (first?['oweMinor'] as num?) ?? 0;
+          final get = (first?['getMinor'] as num?) ?? 0;
           return RefreshIndicator(
             color: l.accent,
             onRefresh: () async => ref.invalidate(splitGroupsProvider),
@@ -145,6 +204,7 @@ class SplitListScreen extends ConsumerWidget {
                     padding: const EdgeInsets.only(bottom: 8),
                     child: GestureDetector(
                       onTap: () => context.push('/split/${g['id']}'),
+                      onLongPress: g['admin'] == true ? () => _delete(g) : null,
                       child: Glass(
                         blur: false,
                         padding: const EdgeInsets.all(14),
@@ -168,9 +228,24 @@ class SplitListScreen extends ConsumerWidget {
                               ),
                             ),
                             _owe(l, g['myBalance'] as num),
+                            if (g['admin'] == true)
+                              IconButton(
+                                tooltip: 'Delete ${g['name']}',
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(LucideIcons.trash2, size: 18, color: l.c.muted),
+                                onPressed: () => _delete(g),
+                              ),
                           ],
                         ),
                       ),
+                    ),
+                  ),
+                if (_next != null)
+                  Center(
+                    child: OrvButton(
+                      label: _loading ? 'Loading…' : 'Show more groups',
+                      small: true,
+                      onPressed: _loading ? null : _loadMore,
                     ),
                   ),
               ],

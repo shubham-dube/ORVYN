@@ -142,7 +142,12 @@ describe('Split (spec 0011 B)', () => {
     const hotel = g.expenses.find((e: any) => e.title === 'Hotel');
     expect((await api(ravi, 'DELETE', `/split/groups/${g.id}/expenses/${hotel.id}`)).status).toBe(403);
     expect((await api(outsider, 'GET', `/split/groups/${g.id}`)).status).toBe(404);
-    expect((await api(outsider, 'GET', '/split/groups')).body).toEqual([]);
+    expect((await api(outsider, 'GET', '/split/groups')).body).toEqual({
+      items: [],
+      next: null,
+      getMinor: 0,
+      oweMinor: 0,
+    });
     expect((await api(noSplit, 'GET', '/split/groups')).status).toBe(403);
     expect((await api(asha, 'DELETE', `/split/groups/${g.id}/members/${m('Dev')}`)).body.error).toMatchObject(
       {
@@ -185,6 +190,46 @@ describe('Split (spec 0011 B)', () => {
     expect(t).toContain('Goa — total ₹10,400');
     expect(t).toContain('• Dev → owner: ₹1,400');
     const mine = (await api(ravi, 'GET', '/split/groups')).body;
-    expect(mine).toMatchObject([{ name: 'Goa', myBalance: 100_000, members: 4 }]);
+    expect(mine).toMatchObject({
+      items: [{ name: 'Goa', myBalance: 100_000, members: 4, admin: false }],
+      next: null,
+      getMinor: 100_000,
+      oweMinor: 0,
+    });
+    // the totals are the sums of each group's balance
+    const all = (await api(asha, 'GET', '/split/groups')).body;
+    const sum = (sign: number) =>
+      all.items
+        .filter((x: any) => x.myBalance * sign > 0)
+        .reduce((t: number, x: any) => t + Math.abs(x.myBalance), 0);
+    expect([all.getMinor, all.oweMinor]).toEqual([sum(1), sum(-1)]);
+  });
+
+  it('a page at a time, newest first, with every group once', async () => {
+    for (const n of ['P1', 'P2', 'P3', 'P4', 'P5'])
+      await api(outsider, 'POST', '/split/groups', { name: n, kind: 'party' });
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const q: string = cursor ? `?limit=2&cursor=${encodeURIComponent(cursor)}` : '?limit=2';
+      const p = (await api(outsider, 'GET', `/split/groups${q}`)).body;
+      expect(p.items.length).toBeLessThanOrEqual(2);
+      seen.push(...p.items.map((x: any) => x.name));
+      cursor = p.next;
+      pages++;
+    } while (cursor && pages < 10);
+    expect(seen).toEqual(['P5', 'P4', 'P3', 'P2', 'P1']);
+    expect(pages).toBe(3);
+  });
+
+  it('only who made a group deletes it, for everyone; it is gone from every list', async () => {
+    expect((await api(ravi, 'DELETE', `/split/groups/${g.id}`)).status).toBe(403);
+    expect((await api(outsider, 'DELETE', `/split/groups/${g.id}`)).status).toBe(404);
+    expect((await api(asha, 'DELETE', `/split/groups/${g.id}`)).status).toBe(200);
+    expect((await api(asha, 'GET', `/split/groups/${g.id}`)).status).toBe(404);
+    const left = (await api(ravi, 'GET', '/split/groups')).body;
+    expect(left.items.map((x: any) => x.id)).not.toContain(g.id);
+    expect([left.getMinor, left.oweMinor]).toEqual([0, 0]);
   });
 });

@@ -46,6 +46,10 @@ ORVYN people (with Split) or **guests** (just a name and a phone number). A grou
 - **Settle up** shows the **fewest transfers** that clear everyone ("Ravi → Asha ₹1,250; Mia → Asha ₹300"), with UPI
   IDs where known. Recording a payment ("Ravi paid Asha ₹1,250 by UPI") moves the balances.
 - Totals: the group's spend, what each person consumed, by category.
+- **The list of groups** comes a page at a time (20, newest activity first, "Show more"); what I get back and what I
+  owe are summed over all my groups on the server. **Who made a group can delete it** for everyone, after a
+  confirmation that says when balances aren't settled; its expenses, payments, links and activity go with it, and
+  the others get a "group deleted" notification. Others can archive it for themselves.
 
 **Reaching people:** ORVYN members get a notification for each expense that involves them ("Asha added Dinner
 ₹2,400 · your share ₹600") and can be **reminded** with one tap. Guests get a private read-only link (like the IPO Pool,
@@ -61,7 +65,7 @@ Chat: `/chat/devices` (register keys), `/chat/keys` (members' device keys), `/ch
 members, rename, leave, mute, read, typing), `/chat/conversations/:id/messages` (send with per-device sealed keys,
 page; each device gets only its own sealed key), `DELETE /chat/messages/:id`, `/chat/files` (encrypted upload,
 download for members).
-Split: `/split/groups` (+ members, guests, links), `/split/groups/:id/expenses`, `/split/groups/:id/settlements`,
+Split: `/split/groups` (`?cursor=&limit=`, `{items, next, getMinor, oweMinor}`; `DELETE /split/groups/:id` for the admin) (+ members, guests, links), `/split/groups/:id/expenses`, `/split/groups/:id/settlements`,
 `/split/groups/:id/balances` (balances, settle-up plan, totals), `/split/groups/:id/remind`, public `/split-links/:token`.
 
 ## Acceptance criteria

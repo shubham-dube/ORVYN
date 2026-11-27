@@ -157,6 +157,18 @@ void main() {
     });
     await tapIt(tester, find.text('Sample').first);
     expect(samples.single, {'type': 'ipo.last_day'});
+    // one of each: every kind I have (not Chat), a few seconds apart
+    samples.clear();
+    await tapIt(tester, find.text('Send one of each (3)'));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(seconds: 7));
+    }
+    expect(samples, [
+      {'type': 'security.new_device'},
+      {'type': 'ipo.last_day'},
+      {'type': 'ipo.closed'},
+    ]);
+    expect(find.text('Send one of each (3)'), findsOneWidget); // done, ready again
     await finish(tester);
   });
 }

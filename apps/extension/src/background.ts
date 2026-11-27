@@ -978,6 +978,12 @@ async function answer(req: DataRequest): Promise<unknown> {
     }
     case 'structure':
       return client.call('POST', '/fill/structure', { text: req.text });
+    case 'here': {
+      const t = await activeTab().catch(() => null);
+      if (!t?.id || !t.url || !/^https?:/.test(t.url)) return { login: false };
+      const frames = await inPage(t.id, 'text', []).catch(() => []);
+      return { login: frames.some((f) => f.result?.hasPassword) };
+    }
     case 'vault': {
       const url = await activeTab().then(
         (t) => t.url,

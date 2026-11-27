@@ -35,7 +35,9 @@ day: ring my phone", "Split: in-app only" or "card bill due: also email me".
 - **Something I set on the item itself wins:** a task's own reminder ways, a document's expiry ways. These types
   say "set on each task / document" and their defaults live where they always did (Today → Reminders, Library).
 - **Quiet hours and module mute still apply to everything except Urgent and Alarm.**
-- **Each type has "Send me a sample",** to hear what an alarm sounds like or to check that email arrives.
+- **Each type has "Send me a sample",** to hear what an alarm sounds like or to check that email arrives. On
+  Android, **"Send one of each"** sends a sample of every kind that is on, six seconds apart, each through its own
+  ways, with progress and Stop: the whole set-up tested end to end.
 
 ## The catalog (D-0019-3) — what, when, and the default
 

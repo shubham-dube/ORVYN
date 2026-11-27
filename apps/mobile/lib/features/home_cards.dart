@@ -464,6 +464,16 @@ String dueWords(String d) {
   return 'due ${w[DateTime.parse(d).weekday - 1]} ${DateTime.parse(d).day}';
 }
 
+/// Mail swiped away: gone from every list at once, before the server's answer, so a swiped row never stays.
+class SweptMail extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+  void add(String id) => state = {...state, id};
+  void remove(String id) => state = {...state}..remove(id);
+}
+
+final sweptMailProvider = NotifierProvider<SweptMail, Set<String>>(SweptMail.new);
+
 /// One mail as the smart inbox shows it: who, what's in it for me, its kind, money and date — and actions.
 class SmartMailRow extends ConsumerWidget {
   const SmartMailRow({super.key, required this.m, required this.accounts, this.compact = false});
@@ -577,7 +587,12 @@ class SmartMailRow extends ConsumerWidget {
           ],
         ),
       ),
-      onDismissed: (_) => _act(ref, context, 'done'),
+      onDismissed: (_) {
+        final id = m['id'] as String;
+        final swept = ref.read(sweptMailProvider.notifier)..add(id);
+        // on failure it comes back
+        _act(ref, context, 'done').catchError((Object _) => swept.remove(id));
+      },
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: m['url'] == null
@@ -715,7 +730,11 @@ class InboxPreview extends ConsumerWidget {
     final l = context.orv;
     final ib = ref.watch(homeProvider).value?['inbox'] as Map?;
     if (ib == null) return const SizedBox.shrink();
-    final top = [for (final x in (ib['top'] as List)) Map<String, dynamic>.from(x as Map)];
+    final swept = ref.watch(sweptMailProvider);
+    final top = [
+      for (final x in (ib['top'] as List))
+        if (!swept.contains((x as Map)['id'])) Map<String, dynamic>.from(x),
+    ];
     final accounts = {for (final m in top) m['account'] as String}.toList();
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
