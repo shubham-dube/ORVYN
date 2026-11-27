@@ -124,7 +124,8 @@ async fn session(
     out: &Outgoing,
     attempt: &mut u32,
 ) -> Option<u16> {
-    let Ok((ws, _)) = tokio_tungstenite::connect_async(ws_url(&client.api_url)).await else {
+    let connect = tokio_tungstenite::connect_async(ws_url(&client.api_url));
+    let Ok(Ok((ws, _))) = tokio::time::timeout(Duration::from_secs(20), connect).await else {
         return None;
     };
     let (mut write, mut read) = ws.split();
@@ -142,7 +143,12 @@ async fn session(
     let mut live = false;
     loop {
         let msg = tokio::select! {
-            msg = read.next() => match msg { Some(m) => m, None => return None },
+            // the server pings every 25 s: silence this long means the line died quietly (sleep, Wi-Fi change)
+            // while it still looked open, so start again instead of waiting for the 15-minute catch-up
+            msg = tokio::time::timeout(QUIET_MAX, read.next()) => match msg {
+                Ok(Some(m)) => m,
+                Ok(None) | Err(_) => return None,
+            },
             Some(f) = out.recv(), if live => {
                 let Ok(text) = serde_json::to_string(&f) else { continue };
                 if write.send(Message::Text(text.into())).await.is_err() {
@@ -171,6 +177,9 @@ async fn session(
         }
     }
 }
+
+/// two and a half of the server's pings
+const QUIET_MAX: Duration = Duration::from_secs(65);
 
 async fn backoff(attempt: &mut u32) {
     let base = 1000u64.saturating_mul(1 << (*attempt).min(5)).min(30_000);

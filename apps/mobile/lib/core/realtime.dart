@@ -2,17 +2,26 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'api.dart';
 
 typedef SocketConnector = WebSocketChannel Function(Uri uri);
 
+/// Pings of its own: a line that died quietly (Wi-Fi to mobile data, the phone asleep) is found in under a minute,
+/// not when the next message fails to arrive.
+WebSocketChannel _openSocket(Uri uri) => IOWebSocketChannel.connect(
+  uri,
+  pingInterval: const Duration(seconds: 25),
+  connectTimeout: const Duration(seconds: 20),
+);
+
 /// The live socket: one per app. Authenticates with its first message, reconnects with jittered backoff,
 /// refreshes the session once when the server closes with 4401 (expired token).
 class Realtime {
   Realtime(this.api, {SocketConnector? connect, Random? random})
-    : _connect = connect ?? WebSocketChannel.connect,
+    : _connect = connect ?? _openSocket,
       _random = random ?? Random();
 
   final Api api;

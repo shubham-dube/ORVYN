@@ -6,9 +6,13 @@
     <uses-permission android:name="android.permission.VIBRATE"/>
     <!-- Alarms (D22): ring on time, full-screen over the lock screen, and again after a restart -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <!-- the one "Alarms & reminders" lists: without it ORVYN is not there to turn on on phones that need it -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- asks once to leave battery optimisation, so pushes and payment capture aren't held back -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- Drop: speech is turned into words by Android's recogniser; only the words reach ORVYN -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- My Day on this phone (spec 0024): which app is in front, granted by the person under Settings → Usage access;

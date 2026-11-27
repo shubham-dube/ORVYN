@@ -11,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import '../app/state.dart';
 import '../core/api.dart';
 import '../core/config.dart';
+import '../core/push.dart';
+import '../core/push_android.dart';
 import '../core/session_store.dart';
 import '../sync/db.dart';
 import '../sync/sync_client.dart';
@@ -236,8 +238,23 @@ Future<void> moneyCaptureMain() async {
     final db = LocalDb(NativeDatabase(File(p.join(dir.path, 'orvyn.sqlite'))));
     final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
     final sync = SyncClient(db: db, api: api, node: 'b${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}');
-    await drainCaptured(sync, AndroidCaptureChannel());
-    await sync.sync().timeout(const Duration(seconds: 20), onTimeout: () {});
+    final added = await drainCaptured(sync, AndroidCaptureChannel());
+    await sync.sync().timeout(const Duration(seconds: 20), onTimeout: () {}).catchError((Object _) {});
+    // no connection: the server can't ask "what was it?" yet, so the phone says it has it, at once
+    if (added > 0 && await sync.pendingCount() > 0) {
+      await initShade();
+      await AndroidShade().show(
+        ShowPush(
+          id: 'money-offline',
+          title: added == 1 ? 'A payment is saved on this phone' : '$added payments are saved on this phone',
+          body: 'No internet just now. ORVYN asks what ${added == 1 ? 'it was' : 'they were'} once you’re online.',
+          url: '/money',
+          module: 'money',
+          priority: 'normal',
+          actions: const [],
+        ),
+      );
+    }
     await db.close();
   } catch (_) {
     // the queue is kept: whatever wasn't saved is read again next time

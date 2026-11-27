@@ -23,26 +23,43 @@ import java.io.File
  * removed once saved. Nothing else is read or kept.
  */
 class MoneyListener : NotificationListenerService() {
+    /**
+     * Connected (again): Android drops the listener when it kills the app or after an update, and connects it again
+     * later. What arrived meanwhile is still in the shade, so it is read now instead of being missed.
+     */
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        runCatching { activeNotifications?.forEach { keep(it) } }
+        if (pending(this).isNotEmpty()) wake(applicationContext)
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val app = PAY_APPS[sbn.packageName]
-        if (app == null && sbn.packageName !in SMS_APPS) return
-        val n = sbn.notification ?: return
-        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        if (keep(sbn)) wake(applicationContext)
+    }
+
+    /** true when it is new money news, now in the queue */
+    private fun keep(sbn: StatusBarNotification): Boolean {
+        val pkg = sbn.packageName
+        if (pkg == packageName || pkg in NEVER) return false
+        val app = PAY_APPS[pkg]
+        val known = app != null || pkg in SMS_APPS
+        val n = sbn.notification ?: return false
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return false
         val ex = n.extras
         val title = ex.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = (ex.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: ex.getCharSequence(Notification.EXTRA_TEXT))
-            ?.toString() ?: return
-        // personal messages are never kept: only text that looks like money moving
-        if (!MONEYISH.containsMatchIn(text)) return
+            ?.toString() ?: return false
+        // personal messages are never kept: only text that looks like money moving; from an app ORVYN doesn't know
+        // (Truecaller, a bank's own app, SMS Organizer…) it must also say what happened to the money
+        if (!MONEYISH.containsMatchIn(text)) return false
+        if (!known && !MOVED.containsMatchIn(text)) return false
         val item = JSONObject()
             .put("source", if (app == null) "sms" else "notification")
             .put("app", app ?: JSONObject.NULL)
             .put("title", title ?: JSONObject.NULL)
             .put("text", text)
             .put("at", sbn.postTime)
-        if (!append(this, item)) return
-        val open = onArrived
-        if (open != null) Handler(Looper.getMainLooper()).post { open() } else runInBackground(applicationContext)
+        return append(this, item)
     }
 
     companion object {
@@ -60,7 +77,16 @@ class MoneyListener : NotificationListenerService() {
             "com.phonepe.app" to "phonepe",
             "net.one97.paytm" to "paytm",
         )
+        /** chats and mail: people write amounts there, banks don't (mail has its own place in ORVYN) */
+        private val NEVER = setOf(
+            "com.whatsapp", "com.whatsapp.w4b", "org.telegram.messenger", "com.instagram.android",
+            "com.facebook.orca", "org.thoughtcrime.securesms", "com.google.android.gm", "com.microsoft.office.outlook",
+            "com.discord", "com.slack", "com.google.android.apps.dynamite",
+        )
         private val MONEYISH = Regex("(?i)(rs\\.?|inr|₹)\\s*[\\d,]+|debited by|credited by")
+        private val MOVED = Regex(
+            "(?i)\\b(debited|credited|spent|paid|sent|received|withdrawn|deposited|txn|transaction|upi|a/c|acct)\\b",
+        )
 
         /** set by MainActivity while ORVYN is open: it parses right away */
         @Volatile var onArrived: (() -> Unit)? = null
@@ -70,6 +96,12 @@ class MoneyListener : NotificationListenerService() {
         private fun queue(ctx: Context) = File(ctx.noBackupFilesDir, "money_queue.jsonl")
 
         /** false when it's a repeat (SMS apps re-post the same notification when updating it) */
+        /** Read the queue now: in the open app, or with the background reader. */
+        fun wake(ctx: Context) {
+            val open = onArrived
+            if (open != null) Handler(Looper.getMainLooper()).post { open() } else runInBackground(ctx)
+        }
+
         @Synchronized fun append(ctx: Context, item: JSONObject): Boolean {
             val key = item.optString("text")
             if (key in recent) return false
@@ -132,7 +164,11 @@ class MoneyListener : NotificationListenerService() {
 
         /** ORVYN isn't open: run the Dart reader once (lib/money/capture.dart moneyCaptureMain), then stop. */
         @Synchronized fun runInBackground(ctx: Context) {
-            if (engine != null) return
+            if (engine != null) {
+                again = true // read once more when this run ends: it may have read the queue before this arrived
+                return
+            }
+            again = false
             val loader = FlutterInjector.instance().flutterLoader()
             loader.startInitialization(ctx)
             loader.ensureInitializationComplete(ctx, null)
@@ -141,18 +177,28 @@ class MoneyListener : NotificationListenerService() {
             bind(e.dartExecutor.binaryMessenger, ctx)
             MethodChannel(e.dartExecutor.binaryMessenger, "orvyn/money_capture_bg").setMethodCallHandler { call, result ->
                 result.success(null)
-                if (call.method == "done") {
-                    Handler(Looper.getMainLooper()).post {
-                        synchronized(this) {
-                            engine?.destroy()
-                            engine = null
-                        }
-                    }
-                }
+                if (call.method == "done") end(ctx, e)
             }
+            // a run that never says done (no network, a stuck call) must not stop every payment after it
+            Handler(Looper.getMainLooper()).postDelayed({ end(ctx, e) }, RUN_MAX_MS)
             e.dartExecutor.executeDartEntrypoint(
                 DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "moneyCaptureMain"),
             )
+        }
+
+        private const val RUN_MAX_MS = 60_000L
+        @Volatile private var again = false
+
+        private fun end(ctx: Context, e: FlutterEngine) {
+            Handler(Looper.getMainLooper()).post {
+                val more = synchronized(this) {
+                    if (engine !== e) return@post
+                    e.destroy()
+                    engine = null
+                    again && pending(ctx).isNotEmpty()
+                }
+                if (more) runInBackground(ctx)
+            }
         }
     }
 }

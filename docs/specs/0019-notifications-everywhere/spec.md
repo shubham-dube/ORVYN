@@ -148,3 +148,18 @@ The Vault sends nothing about what it holds. It is zero-knowledge (ADR-0004), so
 - [x] AC3 Security can't be turned off; a sample goes out through the type's ways (API test).
 - [x] AC4 The web and Android settings list every type by module, with its default, its ways and a sample
       (tests).
+
+## Reliability notes (2026-11-27)
+
+- **Windows app and Android in-app socket** drop a line that has gone quiet for 65 s (the server pings every 25 s)
+  and reconnect, so a connection that died during sleep or a network change no longer waits for the 15-minute
+  catch-up. Connecting gives up after 20 s and retries.
+- **Web push** goes with urgency `high` for everything shown (only clears and low ones are `normal`), so a phone
+  browser in doze doesn't hold it.
+- **Android "This phone" checks** add "Runs in the background" (battery optimisation off, one tap to allow). The
+  "Alarms & reminders" page lists ORVYN (`SCHEDULE_EXACT_ALARM` declared beside `USE_EXACT_ALARM`).
+- **Payment capture while ORVYN is closed:** the listener reads what is still in the shade when Android connects it
+  again (after a kill or an update), the app asks Android to rebind it on start, a background read that never ends
+  is stopped after 60 s and another runs if more arrived, and money news from apps beyond the known SMS and UPI ones
+  (Truecaller, bank apps, SMS Organizer) is read when it says what happened to the money; chats and mail never are.
+  With no internet the phone says at once that it saved the payment and will ask when online.

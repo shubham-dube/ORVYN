@@ -113,6 +113,8 @@ class FakePhoneChecks implements PhoneChecks {
 
   @override
   Future<void> allowFullScreen() async => asked.add('fullscreen');
+  @override
+  Future<void> allowBackground() async => asked.add('background');
 }
 
 /// The whole app over a fake API + socket, a memory store and an in-memory database.

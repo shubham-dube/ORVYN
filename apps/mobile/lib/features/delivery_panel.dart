@@ -118,6 +118,17 @@ class _DeliveryPanelState extends ConsumerState<DeliveryPanel> {
         ),
         _check(
           l,
+          'Runs in the background',
+          phone?.batteryFree,
+          fix: 'Allow',
+          help: 'Out of battery saving, so pushes come at once and payments are read while ORVYN is closed.',
+          onFix: () async {
+            await checks.allowBackground();
+            ref.invalidate(_phoneProvider);
+          },
+        ),
+        _check(
+          l,
           'Push when the app is closed',
           phone?.push,
           help: server?['fcm'] == false
@@ -125,7 +136,8 @@ class _DeliveryPanelState extends ConsumerState<DeliveryPanel> {
               : 'This build has no Firebase config. Notifications arrive while ORVYN is open.',
         ),
         Text(
-          'Also take ORVYN out of battery saving (Apps → ORVYN → Battery → Unrestricted) so alarms are never delayed.',
+          'On Xiaomi, Oppo, Vivo and Realme phones also turn on Autostart for ORVYN (Settings → Apps → ORVYN), or '
+          'the phone stops it when you swipe it away.',
           style: OrvText.muted(l).copyWith(fontSize: 12),
         ),
         const SizedBox(height: 14),

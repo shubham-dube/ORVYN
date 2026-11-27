@@ -20,6 +20,25 @@ class MainActivity : FlutterFragmentActivity() {
         // Money capture: while ORVYN is open, new payment notifications are read straight away
         val ch = MoneyListener.bind(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         MoneyListener.onArrived = { ch.invokeMethod("arrived", null) }
+        // what the phone allows: battery optimisation holds back pushes and payment capture
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "orvyn/phone").setMethodCallHandler { call, result ->
+            val power = getSystemService(POWER_SERVICE) as android.os.PowerManager
+            when (call.method) {
+                "batteryFree" -> result.success(power.isIgnoringBatteryOptimizations(packageName))
+                "allowBackground" -> {
+                    runCatching {
+                        startActivity(
+                            Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                                .setData(Uri.parse("package:$packageName")),
+                        )
+                    }.onFailure {
+                        startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    }
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
         // My Day on this phone (spec 0024)
         UsageWatch.bind(flutterEngine.dartExecutor.binaryMessenger, applicationContext)
         // Drop: the share sheet
@@ -35,6 +54,17 @@ class MainActivity : FlutterFragmentActivity() {
         }
         receive(intent)
         lightUpForAlarm(intent)
+        rebindCapture()
+    }
+
+    /** After an update or a kill Android may leave the payment listener unbound until a restart: ask for it now. */
+    private fun rebindCapture() {
+        if (!MoneyListener.enabled(this)) return
+        runCatching {
+            android.service.notification.NotificationListenerService.requestRebind(
+                android.content.ComponentName(this, MoneyListener::class.java),
+            )
+        }
     }
 
     /** Opened by a ringing alarm: show over the lock screen and wake the screen, only then (the app lock still applies). */

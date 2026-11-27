@@ -104,7 +104,8 @@ export class LivePushSender implements PushSender {
       await webpush.sendNotification({ endpoint: t.address, keys: t.keys }, JSON.stringify(payload), {
         TTL: 24 * 3600,
         timeout: 15_000,
-        urgency: payload.priority === 'urgent' || payload.priority === 'high' ? 'high' : 'normal',
+        // what is shown goes at once (a phone browser holds 'normal' while it dozes); clears and quiet ones can wait
+        urgency: payload.type === 'notify' && payload.priority !== 'low' ? 'high' : 'normal',
         topic: payload.id.replace(/-/g, '').slice(0, 32), // a later push for the same notification replaces it
       });
       return 'sent';
