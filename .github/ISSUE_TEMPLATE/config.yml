@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/shubham-dube/ORVYN/security/advisories/new
+    about: Please report security problems privately, not as an issue.
+  - name: Run ORVYN on your own PC
+    url: https://github.com/shubham-dube/ORVYN/blob/main/docs/guides/run-locally.md
+    about: The setup guide, with a troubleshooting table at the end.

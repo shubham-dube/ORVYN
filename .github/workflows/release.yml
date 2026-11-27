@@ -1,6 +1,7 @@
 # Builds what people download and attaches it to a GitHub Release under fixed names, so the website's
 # Download page always points at the newest (spec 0007 C4):
 #   orvyn-android.apk · orvyn-chrome-extension.zip · orvyn-windows-setup.exe
+# plus orvyn-chrome-store.zip: the same extension without the pinned `key`, the one to upload to the Chrome Web Store.
 #
 # Run it: push a tag `v1.2.3`, or Actions → Release → Run workflow.
 # Repository variables (Settings → Secrets and variables → Actions → Variables):
@@ -74,8 +75,11 @@ jobs:
       - run: pnpm --filter @orvyn/extension... build
         env: { VITE_API_URL: '${{ env.API_URL }}', VITE_WEB_URL: '${{ env.WEB_URL }}' }
       - run: cd apps/extension/dist/production && zip -r ../../../../orvyn-chrome-extension.zip .
+      - run: pnpm --filter @orvyn/extension build:store
+        env: { VITE_API_URL: '${{ env.API_URL }}', VITE_WEB_URL: '${{ env.WEB_URL }}' }
+      - run: cd apps/extension/dist/store && zip -r ../../../../orvyn-chrome-store.zip .
       - uses: actions/upload-artifact@v4
-        with: { name: extension, path: orvyn-chrome-extension.zip }
+        with: { name: extension, path: 'orvyn-chrome-*.zip' }
 
   windows:
     runs-on: windows-latest
@@ -109,4 +113,5 @@ jobs:
           files: |
             orvyn-android.apk
             orvyn-chrome-extension.zip
+            orvyn-chrome-store.zip
             orvyn-windows-setup.exe

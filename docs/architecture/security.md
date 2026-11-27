@@ -56,10 +56,12 @@
 - Encrypted at rest: database volume encrypted; every uploaded object encrypted with its own data key
   (envelope encryption, master key from the server's env/KMS, not stored in the DB). AI-readable by decision D4.
 
-## Chat — end-to-end
+## Chat
 
-- Established double-ratchet / group protocol implementation only (choice in the Chat spec; licences differ).
-  Server stores ciphertext and delivery state only. Keys per device; safety numbers to verify contacts.
+- Encrypted at rest on the server, not end-to-end (ADR-0016, which supersedes the end-to-end plan of ADR-0014).
+  The key lives in the server's environment, never in the database, so a copied database alone reveals nothing. The
+  running server can read messages (for previews, replies from a notification and search); chat is never sent to
+  the AI.
 
 ## Operational
 

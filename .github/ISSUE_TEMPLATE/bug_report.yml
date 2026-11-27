@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Security problem?** Please don't file it here; use [SECURITY.md](https://github.com/shubham-dube/ORVYN/security/policy).
+        Never paste real passwords, tokens, bank messages or other personal data.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options: [Web / PWA, Android, Chrome extension, Windows app, API / server, Self-hosting / deploy, Docs]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open …
+        2. Tap …
+        3. See …
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release (e.g. v0.2.7) or the commit, and your OS / browser / Android version.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove anything personal first.
+      render: shell

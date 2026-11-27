@@ -4,10 +4,17 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
 
-/** Where each build talks to. Production is the default; `development` = your PC; `e2e` = the test stack. */
+/**
+ * Where each build talks to. Production is the default; `development` = your PC; `e2e` = the test stack.
+ * A self-hosted server: set VITE_API_URL and VITE_WEB_URL when building (the release workflow does).
+ */
+const live = {
+  api: process.env.VITE_API_URL || 'https://api.orvyn.dubey.app',
+  web: process.env.VITE_WEB_URL || 'https://orvyn.dubey.app',
+};
 const TARGETS: Record<string, { api: string; web: string }> = {
-  production: { api: 'https://api.orvyn.dubey.app', web: 'https://orvyn.dubey.app' },
-  store: { api: 'https://api.orvyn.dubey.app', web: 'https://orvyn.dubey.app' },
+  production: live,
+  store: live,
   development: { api: 'http://localhost:4000', web: 'http://localhost:3000' },
   e2e: { api: 'http://localhost:4100', web: 'http://localhost:3100' },
 };

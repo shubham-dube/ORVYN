@@ -1,0 +1,43 @@
+name: Feature idea
+description: Suggest something ORVYN should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The everyday situation, not the solution. "Every month I copy my rent into three apps…"
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+    validations: { required: true }
+  - type: dropdown
+    id: module
+    attributes:
+      label: Which part
+      multiple: true
+      options:
+        [
+          Today,
+          Drop,
+          Money,
+          Vault,
+          Library,
+          Assistant,
+          Chat / Split,
+          Brief,
+          IPO desk,
+          My Day / Recall,
+          Chrome extension,
+          Windows app,
+          Self-hosting,
+          Something new,
+        ]
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to build this myself (see CONTRIBUTING.md)
