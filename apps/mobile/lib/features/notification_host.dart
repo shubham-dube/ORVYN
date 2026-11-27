@@ -10,7 +10,7 @@ import '../app/router.dart';
 import '../app/state.dart';
 import '../app/today.dart';
 import '../core/config.dart';
-import '../core/push_android.dart' show AndroidAlarmScheduler;
+import '../core/push_android.dart' show AndroidAlarmScheduler, settleShade;
 import '../design/toast.dart';
 import 'settings_screen.dart' show SettingsSectionScreen;
 
@@ -94,7 +94,18 @@ class _NotificationHostState extends ConsumerState<NotificationHost> {
       return openNotificationUrl(ref, opens);
     }
     if (action != null && action.isNotEmpty) {
-      final ok = await ctl.act(id, action, text: (t['input'] as String?)?.trim());
+      final text = (t['input'] as String?)?.trim();
+      final ok = await ctl.act(id, action, text: text);
+      // the shade copy changes either way, so a reply there never spins on
+      if (!ok && ref.read(pusherProvider).ready) {
+        await settleShade(
+          id,
+          ok: false,
+          title: t['title'] as String?,
+          url: t['url'] as String?,
+          text: text,
+        ).catchError((Object _) {});
+      }
       if (mounted && !ok) Toaster.of(context).show('That didn’t work', tone: ToastTone.danger);
       return;
     }

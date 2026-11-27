@@ -272,15 +272,22 @@ Future<void> backgroundAction(NotificationResponse r) async {
   final api = Api(baseUrl: Config.apiUrl, store: SecureSessionStore());
   final typed = r.input?.trim();
   final text = typed == null || typed.isEmpty ? null : typed;
-  if (await runNotificationAction(api, id, action, text: text)) return;
-  // the shade has already removed it: say so, with what was typed, instead of losing it
+  final ok = await runNotificationAction(api, id, action, text: text);
   await initShade();
-  await AndroidShade().show(
+  await settleShade(id, ok: ok, title: payload['title'] as String?, url: payload['url'] as String?, text: text);
+}
+
+/// After a button or a reply in the shade: Android keeps a reply spinning until the app changes that notification,
+/// so it is always changed — gone when it worked, a "not sent" note with what was typed when it didn't.
+Future<void> settleShade(String id, {required bool ok, String? title, String? url, String? text}) async {
+  final shade = AndroidShade();
+  if (ok) return shade.cancel(id);
+  await shade.show(
     ShowPush(
       id: id,
-      title: 'Not done yet: ${payload['title'] ?? 'a notification'}',
+      title: 'Not done yet: ${title ?? 'a notification'}',
       body: text == null ? 'ORVYN couldn’t be reached. Open it to try again.' : 'Not sent. You wrote: $text',
-      url: payload['url'] as String?,
+      url: url,
       module: 'core',
       priority: 'normal',
       actions: const [],

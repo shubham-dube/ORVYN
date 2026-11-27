@@ -5,16 +5,21 @@ import 'api.dart';
 /// offline or signed out — the notification then stays, so nothing is lost.
 Future<bool> runNotificationAction(Api api, String notificationId, String actionId, {String? text}) async {
   try {
-    if (api.accessToken == null && await api.refresh() == null) return false;
-    await api.post<dynamic>(
-      '/notifications/$notificationId/actions/${Uri.encodeComponent(actionId)}',
-      text == null ? null : {'text': text},
-    );
+    if (api.accessToken == null && await api.refresh().timeout(_actionMax) == null) return false;
+    await api
+        .post<dynamic>(
+          '/notifications/$notificationId/actions/${Uri.encodeComponent(actionId)}',
+          text == null ? null : {'text': text},
+        )
+        .timeout(_actionMax);
     return true;
-  } on ApiError {
+  } catch (_) {
+    // no network, a timeout, the phone's storage: never a silent end that leaves the shade spinning
     return false;
   }
 }
+
+const _actionMax = Duration(seconds: 20);
 
 /// Android shows at most three buttons in the shade; the app shows all of them.
 const maxShadeActions = 3;

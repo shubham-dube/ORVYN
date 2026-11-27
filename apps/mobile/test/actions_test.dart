@@ -28,6 +28,22 @@ void main() {
       expect(store.values['refresh'], 'r1', reason: 'the rotated token is saved for the app');
     });
 
+    test('a reply that breaks in an unexpected way says so (the shade must not spin on)', () async {
+      final server = FakeServer()
+        ..on('POST /notifications/n1/actions/reply', (_) => throw const FormatException('the phone’s storage'));
+      final store = MemorySessionStore()..values['refresh'] = 'r0';
+      server.on('POST /auth/refresh', (_) => sessionJson(userJson(), access: 'fresh', refresh: 'r1'));
+      expect(
+        await runNotificationAction(
+          Api(baseUrl: 'http://api.test', store: store, adapter: server),
+          'n1',
+          'reply',
+          text: 'bill',
+        ),
+        isFalse,
+      );
+    });
+
     test('offline or signed out: nothing happens and nothing is lost', () async {
       final server = FakeServer()..on('POST /auth/refresh', (_) => const Reply(401));
       final store = MemorySessionStore()..values['refresh'] = 'gone';
